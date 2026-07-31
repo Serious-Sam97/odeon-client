@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- O Compose desenha tudo; o tema nativo só evita o flash branco no boot. -->
+    <style name="Theme.Odeon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0A0A0C</item>
+        <item name="android:statusBarColor">#0A0A0C</item>
+        <item name="android:navigationBarColor">#0A0A0C</item>
+    </style>
+</resources>

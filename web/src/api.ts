@@ -10,12 +10,24 @@ const API_KEY_STORAGE = "odeon.server";
  * `<video src>`). Então o esquema da API acompanha o da página, e a porta muda
  * junto: 8443 sob HTTPS, 8080 sob HTTP.
  */
+// Porta da API em HTTP. O padrão do projeto é 8080, mas nesta máquina ela já
+// está ocupada por outro serviço (ver API_PORT no .env), então o Odeon subiu na
+// 8085. Deduzir 8080 daqui mandaria a web falar com o container errado.
+//
+// Continua sendo dedução e não URL fixa: o hostname sai da própria página, então
+// funciona por localhost, por IP da LAN ou por qualquer nome de VPN, sem
+// reconfigurar nada.
+const HTTP_PORT = 8085;
+const HTTPS_PORT = 8443;
+
 function deriveFromPage(): string {
   const { protocol, hostname, port } = window.location;
   // Servido pela própria API (mesma origem): usa a origem inteira.
-  if (port === "8080" || port === "8443") return window.location.origin;
+  if (port === String(HTTP_PORT) || port === String(HTTPS_PORT)) {
+    return window.location.origin;
+  }
   const secure = protocol === "https:";
-  return `${secure ? "https" : "http"}://${hostname}:${secure ? 8443 : 8080}`;
+  return `${secure ? "https" : "http"}://${hostname}:${secure ? HTTPS_PORT : HTTP_PORT}`;
 }
 
 function resolveApi(): string {
@@ -486,6 +498,92 @@ export interface GuessView {
   looks_like_anime: boolean;
 }
 
+export interface ScopeRecord {
+  id: string;
+  provider: string;
+  provider_id: string;
+  provider_kind: string;
+  season_number: number | null;
+  numbering: string;
+  absolute_offset: number;
+  note: string | null;
+  decided_at: string;
+}
+
+export interface SiblingMatch {
+  provider: string;
+  provider_id: string;
+  titulo: string;
+  obras: number;
+}
+
+export interface ScopeRow {
+  dir_path: string;
+  library_id: string;
+  library_name: string;
+  pendentes: number;
+  unmatched: number;
+  needs_review: number;
+  ja_identificados: number;
+  exemplos: string[];
+  titulo_sugerido: string;
+  sibling_match: SiblingMatch | null;
+  escopo: ScopeRecord | null;
+}
+
+export interface ScopePage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: ScopeRow[];
+}
+
+export interface ScopeIdentifyBody {
+  library_id: string;
+  dir_path: string;
+  recursive?: boolean;
+  provider: string;
+  provider_id: string;
+  provider_kind: string;
+  season_number?: number | null;
+  numbering?: string;
+  absolute_offset?: number;
+  note?: string | null;
+  dry_run?: boolean;
+}
+
+export interface ScopePreviewRow {
+  work_id: string;
+  arquivo: string;
+  temporada: number | null;
+  episodio: number | null;
+  titulo_resolvido: string | null;
+  estado: string;
+  motivos: string[];
+}
+
+export interface ScopePreview {
+  dry_run: boolean;
+  pasta: string;
+  afetados?: number;
+  confirmariam?: number;
+  ficariam_em_revisao?: number;
+  chamadas_de_temporada: number;
+  preview?: ScopePreviewRow[];
+  aplicados?: number;
+  falhas?: { arquivo: string; erro: string }[];
+}
+
+export interface ReviewPage {
+  total: number;
+  limit: number;
+  offset: number;
+  /// Contagem por `match_state`, vinda do BANCO — não do status em memória,
+  /// que zerava a cada restart do processo.
+  counts: Record<string, number>;
+  items: ReviewItem[];
+}
+
 export interface ReviewItem {
   work: {
     id: string;
@@ -496,6 +594,11 @@ export interface ReviewItem {
     episode_number: number | null;
     match_state: string;
     match_confidence: number | null;
+    /// Por que a obra está na fila, quando o motivo não veio de um candidato:
+    /// propagação de escopo por pasta, ou identificação desfeita por
+    /// contradizer o provider. Mesma regra de auditabilidade dos `reasons` do
+    /// score, estendida às decisões que não passam por candidato.
+    match_reasons: string[];
     filename: string;
   };
   guess: GuessView;
@@ -577,7 +680,32 @@ export const api = {
 
   matchStatus: () => json<MatchStatus>("/api/match/status"),
 
-  review: () => json<ReviewItem[]>("/api/review"),
+  review: (
+    params: {
+      state?: string;
+      library?: string;
+      dir?: string;
+      /// `true` = o matcher achou opções e não sabe qual;
+      /// `false` = não achou nada, e o problema é o nome do arquivo.
+      hasCandidates?: boolean;
+      q?: string;
+      sort?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const p = new URLSearchParams();
+    if (params.state) p.set("state", params.state);
+    if (params.library) p.set("library", params.library);
+    if (params.dir) p.set("dir", params.dir);
+    if (params.hasCandidates !== undefined)
+      p.set("has_candidates", String(params.hasCandidates));
+    if (params.q?.trim()) p.set("q", params.q.trim());
+    if (params.sort) p.set("sort", params.sort);
+    p.set("limit", String(params.limit ?? 50));
+    p.set("offset", String(params.offset ?? 0));
+    return json<ReviewPage>(`/api/review?${p}`);
+  },
 
   searchCandidates: (workId: string, query: string, year?: number) =>
     json<MatchCandidate[]>(`/api/works/${workId}/search`, {
@@ -589,6 +717,72 @@ export const api = {
     json<{ ok: boolean; title: string }>(`/api/works/${workId}/match`, {
       method: "POST",
       body: JSON.stringify({ candidate_id: candidateId }),
+    }),
+
+  /// Desfaz a identificação. Simétrico: tira TUDO que veio do provider e
+  /// preserva o que é humano — tag manual, playlist, e o override de parse.
+  resetMatch: (workId: string) =>
+    json<{ ok: boolean; guess: GuessView }>(`/api/works/${workId}/reset`, {
+      method: "POST",
+    }),
+
+  /// Corrige o que o parser entendeu, e GUARDA. Só os campos enviados mudam.
+  /// Sobrevive a confirm, re-scan e re-match — é decisão humana, não resultado.
+  setParse: (
+    workId: string,
+    parse: {
+      title?: string;
+      year?: number | null;
+      season?: number | null;
+      episode?: number | null;
+      absolute_episode?: number | null;
+    },
+  ) =>
+    json<{ ok: boolean; guess: GuessView }>(`/api/works/${workId}/parse`, {
+      method: "POST",
+      body: JSON.stringify(parse),
+    }),
+
+  clearParse: (workId: string) =>
+    json<{ ok: boolean; guess: GuessView }>(`/api/works/${workId}/parse`, {
+      method: "DELETE",
+    }),
+
+  // --- identificação por PASTA ---
+  //
+  // A unidade de decisão não é o arquivo. Medido no acervo real: 7.568 arquivos
+  // por identificar em apenas 578 pastas, e a pasta acerta a série em 97% dos
+  // casos. Uma escolha resolve centenas de arquivos.
+
+  reviewScopes: (params: {
+    q?: string;
+    library?: string;
+    sort?: string;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
+    const p = new URLSearchParams();
+    if (params.q?.trim()) p.set("q", params.q.trim());
+    if (params.library) p.set("library", params.library);
+    if (params.sort) p.set("sort", params.sort);
+    p.set("limit", String(params.limit ?? 50));
+    p.set("offset", String(params.offset ?? 0));
+    return json<ScopePage>(`/api/review/scopes?${p}`);
+  },
+
+  scopeSearch: (dirPath: string, query?: string, provider?: string) =>
+    json<{ consultado: string; candidatos: MatchCandidate[] }>("/api/scopes/search", {
+      method: "POST",
+      body: JSON.stringify({ dir_path: dirPath, query, provider }),
+    }),
+
+  /// `dryRun` é o padrão do servidor e a UI nunca oferece aplicar sem antes
+  /// mostrar o preview — escrever 500 obras sem ver o que vai acontecer é o
+  /// oposto do que o projeto defende.
+  scopeIdentify: (body: ScopeIdentifyBody) =>
+    json<ScopePreview>("/api/scopes/identify", {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   // --- M2: o grafo ---
@@ -660,9 +854,28 @@ export const api = {
   scrubStatus: () => json<ScrubStatus>("/api/scrub/status"),
 
   /// 404 quando o sprite ainda não foi gerado — o player degrada sem preview.
+  ///
+  /// Esta rota EXIGE credencial, e não está entre as que aceitam `?token=` na
+  /// query (ver `accepts_query_token` no backend: só mídia buscada por elemento
+  /// HTML entra lá; esta é JSON buscada por JS, que tem header disponível).
+  /// Sem o header ela devolvia 401, `res.ok` era falso, e o player concluía
+  /// "não há sprite" — silenciosamente, para TODO arquivo. Os sprites que já
+  /// existiam no banco nunca chegaram a aparecer.
+  ///
+  /// Só o 404 vira `null`. O 401 continua sendo erro de verdade: mascará-lo foi
+  /// exatamente o que escondeu este bug.
   spriteInfo: async (mediaFileId: string): Promise<SpriteInfo | null> => {
-    const res = await fetch(`${API}/api/media/${mediaFileId}/scrub`);
-    return res.ok ? ((await res.json()) as SpriteInfo) : null;
+    const token = auth.token();
+    const res = await fetch(`${API}/api/media/${mediaFileId}/scrub`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.status === 404) return null;
+    if (res.status === 401) {
+      auth.clear();
+      throw new Unauthorized();
+    }
+    if (!res.ok) throw new Error(`${res.status} scrub: ${await res.text()}`);
+    return (await res.json()) as SpriteInfo;
   },
 
   spriteUrl: (path: string) => withToken(`${API}/scrub/${path}`),

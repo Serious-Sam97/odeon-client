@@ -7,6 +7,7 @@ import Login from "./Login";
 import FilterBar from "./FilterBar";
 import Player from "./Player";
 import Review from "./Review";
+import Scopes from "./Scopes";
 import {
   api,
   API,
@@ -269,7 +270,9 @@ export default function App() {
 
         {tab === "foryou" && <ForYou onPlay={setPlaying} />}
 
-        {tab === "review" && <Review onChanged={() => refresh(filters)} />}
+        {tab === "review" && (
+          <RevisaoTabs onChanged={() => refresh(filters)} />
+        )}
 
         {tab === "collections" && <Collections onPlay={setPlaying} />}
 
@@ -434,6 +437,39 @@ function Card({
       >
         ⋯
       </button>
+    </div>
+  );
+}
+
+/// A revisão tem duas entradas, e a ordem delas é a recomendação.
+///
+/// **Pastas** primeiro porque é onde uma decisão vale centenas de arquivos —
+/// medido: 7.568 arquivos pendentes em 578 pastas. **Arquivos** é o caso que
+/// sobra: o que a pasta não resolve, porque é exceção de verdade.
+function RevisaoTabs({ onChanged }: { onChanged: () => void }) {
+  const [modo, setModo] = useState<"pastas" | "arquivos">("pastas");
+
+  return (
+    <div className="revisao">
+      <div className="revisao-tabs">
+        <button
+          className={modo === "pastas" ? "on" : ""}
+          onClick={() => setModo("pastas")}
+        >
+          pastas
+        </button>
+        <button
+          className={modo === "arquivos" ? "on" : ""}
+          onClick={() => setModo("arquivos")}
+        >
+          arquivos
+        </button>
+      </div>
+      {modo === "pastas" ? (
+        <Scopes onChanged={onChanged} />
+      ) : (
+        <Review onChanged={onChanged} />
+      )}
     </div>
   );
 }

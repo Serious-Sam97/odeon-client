@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import {
   api,
+  auth,
   DEVICE_ID,
   type PlaybackPlan,
   type SpriteInfo,
@@ -111,7 +112,23 @@ export default function Player({
       return;
     }
 
-    const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+    // O `?token=` da URL da playlist NÃO chega nos segmentos: o ffmpeg escreve
+    // os nomes de forma relativa (`seg00000.ts`), e resolução relativa descarta
+    // a query string. O segmento saía sem credencial, o servidor devolvia 401 e
+    // o hls.js reportava `fragLoadError` — sem dizer que era autenticação.
+    //
+    // O `xhrSetup` vale pra TODO pedido do hls.js (playlist e segmentos), então
+    // o header resolve os dois de uma vez. Header e não query: `?token=` existe
+    // porque `<video src>` não manda header — aqui quem busca é XHR, que manda.
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+        xhr.open("GET", url, true);
+        const token = auth.token();
+        if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      },
+    });
     hlsRef.current = hls;
     hls.loadSource(url);
     hls.attachMedia(video);

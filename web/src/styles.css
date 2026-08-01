@@ -1597,3 +1597,225 @@ label.stacked input {
   font-size: 13px;
   outline: none;
 }
+
+/* ---------------------------------------------- identificação por pasta ---
+   A tela onde uma decisão vale centenas de arquivos. A hierarquia visual
+   segue a economia da coisa: a CONTAGEM de pendências vem primeiro, porque é
+   ela que diz quais pastas resolver antes. */
+
+.revisao-tabs {
+  display: flex;
+  gap: var(--s1);
+  margin-bottom: var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.revisao-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  padding: var(--s2) var(--s3);
+  cursor: pointer;
+  transition: color var(--snap), border-color var(--snap);
+}
+.revisao-tabs button.on {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+.scopes-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+  flex-wrap: wrap;
+}
+.scopes-filtro {
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  padding: var(--s2) var(--s3);
+  min-width: 220px;
+}
+
+.pasta-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  margin-bottom: var(--s2);
+  overflow: hidden;
+}
+.pasta-card.aberta { border-color: var(--accent); }
+
+.pasta-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3);
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.pasta-head:hover { background: rgba(255, 255, 255, 0.03); }
+
+/* O número é o argumento da tela: 500 arquivos numa decisão. */
+.pasta-contagem {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  min-width: 3.2ch;
+  text-align: right;
+}
+.pasta-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.pasta-titulo { font-weight: 600; }
+.pasta-caminho,
+.pasta-detalhe { font-size: 0.82rem; }
+.pasta-caminho {
+  color: var(--fg-muted);
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pasta-dica {
+  font-size: 0.8rem;
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--s2);
+  white-space: nowrap;
+}
+
+.pasta-corpo {
+  padding: var(--s3);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.pasta-exemplos { display: flex; flex-direction: column; gap: 2px; }
+.pasta-exemplos code {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  background: var(--bg-sunken);
+  padding: 2px var(--s2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pasta-busca { display: flex; gap: var(--s2); }
+.pasta-busca input { flex: 1; }
+.pasta-sibling { font-size: 0.85rem; }
+
+.pasta-candidatos { display: flex; flex-direction: column; gap: var(--s1); }
+.pasta-candidatos .cand {
+  display: flex;
+  gap: var(--s3);
+  align-items: center;
+  padding: var(--s2);
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--snap);
+}
+.pasta-candidatos .cand.escolhido { border-color: var(--accent); }
+.pasta-candidatos .cand img { width: 34px; border-radius: 4px; }
+
+.pasta-opcoes {
+  display: flex;
+  gap: var(--s3);
+  align-items: end;
+  flex-wrap: wrap;
+}
+.pasta-opcoes label { display: flex; flex-direction: column; gap: var(--s1); font-size: 0.85rem; }
+.pasta-opcoes label.check { flex-direction: row; align-items: center; }
+
+/* O preview é o passo que não se pula. Fundo afundado pra separar do que é
+   escolha (acima) do que é consequência (aqui). */
+.pasta-preview {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+  padding: var(--s3);
+}
+.pasta-preview table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+.pasta-preview td { padding: 3px var(--s2); border-bottom: 1px solid var(--line); }
+.pasta-preview td.arq {
+  font-family: ui-monospace, monospace;
+  color: var(--fg-muted);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pasta-preview td.ep { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pasta-preview tr.confirmed td.ep { color: var(--ok); }
+.pasta-preview tr.needs_review td.ep { color: var(--accent); }
+.pasta-preview .aplicar {
+  margin-top: var(--s3);
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--s2) var(--s4);
+  cursor: pointer;
+  font-weight: 600;
+}
+.erro { color: var(--danger); font-size: 0.85rem; }
+
+/* --------------------------------------------------- fila de revisão --- */
+.fila-filtros {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--s4);
+}
+.fila-filtros input { flex: 1; min-width: 160px; }
+.fila-total { margin-left: auto; white-space: nowrap; }
+
+.fila-paginacao {
+  display: flex;
+  gap: var(--s3);
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--s4);
+}
+
+/* O "por que estou aqui" das obras que não têm candidato — mesma regra de
+   auditabilidade dos `reasons` do score, para decisões que não passam por um. */
+.review-motivos {
+  list-style: none;
+  margin: 0 0 var(--s2);
+  padding: var(--s2) var(--s3);
+  background: var(--bg-sunken);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+
+/* Corrigir o parse é uma ação diferente de escolher candidato — o formulário
+   fica visualmente separado da lista, não misturado nela. */
+.parse-form {
+  display: flex;
+  gap: var(--s2);
+  align-items: end;
+  flex-wrap: wrap;
+  padding: var(--s3);
+  margin-bottom: var(--s2);
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+}
+.parse-form label { display: flex; flex-direction: column; gap: var(--s1); font-size: 0.8rem; }
+.parse-form label:first-child { flex: 1; min-width: 140px; }
+.parse-form input[type="number"] { width: 6ch; }

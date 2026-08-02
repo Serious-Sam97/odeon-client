@@ -314,11 +314,15 @@ function ReviewCard({
         {candidates.length === 0 && (
           <p className="muted small">Nenhum candidato. Tente outro nome acima.</p>
         )}
-        {candidates.map((c) => (
+        {candidates.map((c, i) => (
           <CandidateRow
             key={c.id}
             candidate={c}
             busy={busy}
+            /* Só o primeiro leva o amarelo sólido. Seis botões iguais
+               empilhados diziam que as seis opções pesam o mesmo — e a lista
+               vem ordenada por confiança justamente porque não pesam. */
+            destaque={i === 0}
             onPick={() => onConfirm(item.work.id, c.id)}
           />
         ))}
@@ -330,13 +334,19 @@ function ReviewCard({
 function CandidateRow({
   candidate,
   busy,
+  destaque,
   onPick,
 }: {
   candidate: MatchCandidate;
   busy: boolean;
+  /// O candidato do topo. Ver o comentário em quem renderiza.
+  destaque: boolean;
   onPick: () => void;
 }) {
   const percent = Math.round(candidate.score * 100);
+  // Verde/âmbar/vermelho é a TERCEIRA cor do sistema, e fica de propósito: aqui
+  // ela significa alguma coisa (85% é confiável, 40% não), exatamente como o
+  // selo de modo do player. Exceção consciente à regra da R1, não descuido.
   const tone = percent >= 85 ? "good" : percent >= 55 ? "maybe" : "weak";
 
   return (
@@ -369,7 +379,11 @@ function CandidateRow({
 
       <div className="candidate-action">
         <span className={`score ${tone}`}>{percent}%</span>
-        <button className="primary small-btn" onClick={onPick} disabled={busy}>
+        <button
+          className={destaque ? "primary small-btn" : "ghost small-btn"}
+          onClick={onPick}
+          disabled={busy}
+        >
           é esse
         </button>
       </div>

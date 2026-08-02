@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Hls from "hls.js";
 import {
   api,
-  auth,
   DEVICE_ID,
   type PlaybackPlan,
   type SpriteInfo,
   type TranscodeSession,
   type WorkListItem,
 } from "./api";
+import { ligarHls } from "./hls";
 
 
 const MODE_LABEL: Record<string, string> = {
@@ -18,7 +17,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 const HEARTBEAT_MS = 10_000;
-const CONTROLS_HIDE_MS = 2600;
+const CONTROLS_HIDE_MS = 3000;
 const SKIP_SECONDS = 10;
 
 function clock(seconds: number): string {
@@ -31,6 +30,20 @@ function clock(seconds: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/// A sala escura.
+///
+/// **Tempo do arquivo × tempo da sessão.** Quando há transcode/remux, o ffmpeg
+/// recebe `-ss` e produz a partir dali: o `<video>` acha que o filme começa no
+/// ponto onde a sessão começou. Medido nesta máquina — sessão com `start=600`
+/// num arquivo de 1355s entrega um stream de 755s, com `currentTime` em zero.
+///
+/// Confiar no `<video>` fazia três coisas errarem de uma vez: a duração total
+/// (mostrava o que já tinha sido produzido), o "continuar de onde parou"
+/// (`currentTime = resumeFrom` sobre um stream JÁ deslocado pulava o dobro) e o
+/// progresso reportado ao servidor (deslocado pelo offset).
+///
+/// Por isso tudo aqui trabalha em **tempo do arquivo**: `offset + currentTime`,
+/// com o total vindo do ffprobe, que é quem sabe o tamanho real.
 export default function Player({
   work,
   onClose,
@@ -49,18 +62,35 @@ export default function Player({
   const [subtitle, setSubtitle] = useState<number | null>(null);
   const [burn, setBurn] = useState<number | null>(null);
   const [showWhy, setShowWhy] = useState(false);
-  const hlsRef = useRef<Hls | null>(null);
+  const [showSubs, setShowSubs] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [streamDuration, setStreamDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
   const [chrome, setChrome] = useState(true);
   const [hover, setHover] = useState<{ x: number; time: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const resumeFrom = work.position_seconds ?? 0;
   const accent = work.dominant_color ?? "#e0b062";
+
+  // Onde esta sessão começou, em tempo de arquivo. Direct Play é sempre 0.
+  const offset = session?.start_seconds ?? 0;
+  // O ffprobe é a fonte da verdade do tamanho do arquivo. O `<video>` só
+  // conhece o pedaço que a sessão produziu — e ele cresce enquanto o ffmpeg
+  // escreve, porque a playlist é EXT-X-PLAYLIST-TYPE:EVENT.
+  const total =
+    work.duration_seconds && work.duration_seconds > 0
+      ? work.duration_seconds
+      : offset + streamDuration;
+  const fileTime = offset + time;
+  // O fim do que ESTA sessão pode entregar. Além disso é preciso outra sessão.
+  const produzido = offset + streamDuration;
+
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
 
   // A folha de sprites pode não existir ainda — o player só perde o preview.
   useEffect(() => {
@@ -92,54 +122,17 @@ export default function Player({
     // `burn` recria a sessão porque queimar legenda muda o plano inteiro.
   }, [work.media_file_id, burn]);
 
-  // Anexa o hls.js quando há sessão. Safari toca HLS nativo e dispensa a lib.
+  // Anexa o hls.js quando há sessão. Toda a sutileza (ordem de detecção,
+  // token por header) mora em `hls.ts`, compartilhada com o player ao vivo.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !session) return;
-
-    const url = api.hlsUrl(session.playlist_url);
-
-    // ORDEM IMPORTA. O Chromium responde "maybe" pra
-    // canPlayType('application/vnd.apple.mpegurl') e não toca nada — testar o
-    // nativo primeiro faz o player carregar a playlist como se fosse mídia e
-    // travar em silêncio. hls.js primeiro; nativo só onde ele não existe (Safari/iOS).
-    if (!Hls.isSupported()) {
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = url;
-        return;
-      }
-      setError("este navegador não toca HLS e o arquivo precisa de transcode");
+    const r = ligarHls(video, session.playlist_url, (d) => setError(`HLS: ${d}`));
+    if (typeof r === "string") {
+      setError(`${r} e o arquivo precisa de transcode`);
       return;
     }
-
-    // O `?token=` da URL da playlist NÃO chega nos segmentos: o ffmpeg escreve
-    // os nomes de forma relativa (`seg00000.ts`), e resolução relativa descarta
-    // a query string. O segmento saía sem credencial, o servidor devolvia 401 e
-    // o hls.js reportava `fragLoadError` — sem dizer que era autenticação.
-    //
-    // O `xhrSetup` vale pra TODO pedido do hls.js (playlist e segmentos), então
-    // o header resolve os dois de uma vez. Header e não query: `?token=` existe
-    // porque `<video src>` não manda header — aqui quem busca é XHR, que manda.
-    const hls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: false,
-      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
-        xhr.open("GET", url, true);
-        const token = auth.token();
-        if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      },
-    });
-    hlsRef.current = hls;
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.ERROR, (_e, data) => {
-      if (data.fatal) setError(`HLS: ${data.details}`);
-    });
-
-    return () => {
-      hls.destroy();
-      hlsRef.current = null;
-    };
+    return r;
   }, [session]);
 
   // Encerra a sessão ao sair: sem isto o ffmpeg fica vivo até o reaper passar.
@@ -155,14 +148,17 @@ export default function Player({
       if (!video || !work.media_file_id || !video.duration || !isFinite(video.duration)) return;
       api
         .progress(work.id, {
-          position_seconds: video.currentTime,
-          duration_seconds: video.duration,
+          // Tempo de ARQUIVO. Mandar o `currentTime` cru gravava a posição
+          // deslocada pelo offset da sessão, e o "continuar assistindo" voltava
+          // pro lugar errado na próxima vez.
+          position_seconds: offsetRef.current + video.currentTime,
+          duration_seconds: work.duration_seconds ?? video.duration,
           media_file_id: work.media_file_id,
           event_type,
         })
         .catch(() => {});
     },
-    [work.id, work.media_file_id],
+    [work.id, work.media_file_id, work.duration_seconds],
   );
 
   useEffect(() => {
@@ -187,9 +183,10 @@ export default function Player({
         if (event.work_id !== work.id) return;
         const video = videoRef.current;
         if (!video) return;
-        if (Math.abs(video.currentTime - event.position_seconds) > 5) {
-          video.currentTime = event.position_seconds;
-        }
+        // O evento vem em tempo de arquivo; o `<video>` vive em tempo de sessão.
+        const alvo = event.position_seconds - offsetRef.current;
+        if (alvo < 0 || (video.duration && alvo > video.duration)) return;
+        if (Math.abs(video.currentTime - alvo) > 5) video.currentTime = alvo;
       } catch {
         /* mensagem malformada não derruba o player */
       }
@@ -200,9 +197,10 @@ export default function Player({
   const wake = useCallback(() => {
     setChrome(true);
     window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      if (!videoRef.current?.paused) setChrome(false);
-    }, CONTROLS_HIDE_MS);
+    // Esconde mesmo pausado. A condição `!paused` que havia aqui fazia o cromo
+    // ficar pra sempre na tela de quem pausou — e o botão grande de tocar
+    // continua visível no palco, então não se perde o caminho de volta.
+    hideTimer.current = window.setTimeout(() => setChrome(false), CONTROLS_HIDE_MS);
   }, []);
 
   const toggle = useCallback(() => {
@@ -211,11 +209,48 @@ export default function Player({
     video.paused ? video.play() : video.pause();
   }, []);
 
-  const seekBy = useCallback((delta: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
-  }, []);
+  /// Pula pra um instante do ARQUIVO.
+  ///
+  /// Fora do que a sessão produziu não dá: o ffmpeg escreve do início ao fim, e
+  /// alcançar outro ponto exige outra sessão (é por isso que `start_seconds` é
+  /// parte da identidade da sessão — ver transcode/session.rs). Em vez de falhar
+  /// em silêncio, avisa.
+  const seekToFile = useCallback(
+    (alvo: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      const local = alvo - offsetRef.current;
+      const limite = video.duration || 0;
+      if (local < 0 || local > limite) {
+        setAviso(
+          "esse trecho não está nesta sessão de transcode — feche e abra de novo a partir dali",
+        );
+        window.setTimeout(() => setAviso(null), 4000);
+        return;
+      }
+      video.currentTime = local;
+    },
+    [],
+  );
+
+  const seekBy = useCallback(
+    (delta: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      seekToFile(offsetRef.current + video.currentTime + delta);
+    },
+    [seekToFile],
+  );
+
+  /// Começa a contar assim que o player monta.
+  ///
+  /// Sem isto o cronômetro só nascia na primeira interação — quem abrisse um
+  /// vídeo e não mexesse em nada ficava com a barra na tela para sempre, que é
+  /// exatamente o caso de quem só quer assistir.
+  useEffect(() => {
+    wake();
+    return () => window.clearTimeout(hideTimer.current);
+  }, [wake]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -248,225 +283,294 @@ export default function Player({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, toggle, seekBy, wake]);
 
-  /// Converte a posição do cursor na timeline em instante do vídeo.
+  /// Converte a posição do cursor na timeline em instante do ARQUIVO.
   const timeAt = (clientX: number): number => {
     const rect = timelineRef.current?.getBoundingClientRect();
-    if (!rect || !duration) return 0;
+    if (!rect || !total) return 0;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return ratio * duration;
+    return ratio * total;
   };
 
   if (!work.media_file_id) return null;
 
-  const progress = duration > 0 ? (time / duration) * 100 : 0;
-  const bufferedPercent = duration > 0 ? (buffered / duration) * 100 : 0;
+  const pct = (value: number) => (total > 0 ? Math.max(0, Math.min(100, (value / total) * 100)) : 0);
+  const pctPlayed = pct(fileTime);
+  const pctInicio = pct(offset);
+  const pctProduzido = pct(produzido);
+  const pctBuffered = pct(offset + buffered);
 
   return (
     <div
-      className="player"
+      ref={shellRef}
+      className={chrome ? "player" : "player idle"}
       style={{ "--accent-work": accent } as React.CSSProperties}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onMouseMove={wake}
     >
-      <div
-        ref={shellRef}
-        className={chrome ? "player-shell" : "player-shell idle"}
-        onMouseMove={wake}
-      >
-        <header className="player-head">
-          <div>
-            {work.series_title && <p className="kind-label">{work.series_title}</p>}
-            <h2>{work.title}</h2>
-            <p className="muted small">
-              {[
-                work.year,
-                work.video_codec?.toUpperCase(),
-                work.height ? `${work.height}p` : null,
-                work.audio_codec?.toUpperCase(),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          </div>
-          <div className="head-right">
-            {plan && (
+      {/* A cor dominante da obra vive AQUI e em nenhum outro lugar do player:
+          controle é sistema, e sistema é amarelo. Ver docs/DESIGN.md §12. */}
+      <div className="player-halo" />
+
+      <div className="player-stage" onClick={toggle}>
+        <video
+          ref={videoRef}
+          className="video"
+          src={plan?.mode === "direct_play" ? api.streamUrl(work.media_file_id) : undefined}
+          crossOrigin="anonymous"
+          autoPlay
+          onLoadedMetadata={(e) => {
+            setStreamDuration(e.currentTarget.duration);
+            // Só no Direct Play. Com sessão, o ffmpeg JÁ começou no ponto de
+            // retomada — pular `resumeFrom` de novo saltaria o dobro.
+            if (!session && resumeFrom > 30) e.currentTarget.currentTime = resumeFrom;
+          }}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          // Em HLS a duração só é conhecida depois que a playlist é lida, e
+          // continua crescendo enquanto o ffmpeg escreve.
+          onDurationChange={(e) => {
+            const value = e.currentTarget.duration;
+            if (isFinite(value) && value > 0) setStreamDuration(value);
+          }}
+          onProgress={(e) => {
+            const v = e.currentTarget;
+            if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+          }}
+          onPlay={() => {
+            setPlaying(true);
+            report("start");
+            wake();
+          }}
+          onPause={() => {
+            setPlaying(false);
+            report("pause");
+            wake();
+          }}
+          onSeeked={() => report("seek")}
+          onEnded={() => report("finish")}
+          onVolumeChange={(e) => setVolume(e.currentTarget.muted ? 0 : e.currentTarget.volume)}
+          onError={() => {
+            // Com plano de transcode o erro vem do hls.js, não daqui.
+            if (plan?.mode === "direct_play") {
+              setError("o navegador recusou o arquivo mesmo com plano de Direct Play");
+            }
+          }}
+        >
+          {/* Legendas de texto entram como faixa nativa: sem transcode. */}
+          {plan?.subtitles
+            .filter((t) => t.text_based)
+            .map((t) => (
+              <track
+                key={t.index}
+                kind="subtitles"
+                src={api.subtitleUrl(work.media_file_id!, t.index)}
+                srcLang={t.language ?? "und"}
+                label={t.label}
+                default={subtitle === t.index}
+              />
+            ))}
+        </video>
+
+        {!playing && !error && (
+          <button className="big-play" onClick={toggle} aria-label="tocar">
+            ▶
+          </button>
+        )}
+      </div>
+
+      <header className="player-top">
+        <div>
+          {work.series_title && <p className="player-series">{work.series_title}</p>}
+          <h2 className="player-title">{work.title}</h2>
+          <p className="player-tech">
+            {[
+              work.year,
+              work.season_number != null && work.episode_number != null
+                ? `T${work.season_number} E${work.episode_number}`
+                : null,
+              work.video_codec?.toUpperCase(),
+              work.height ? `${work.height}p` : null,
+              work.audio_codec?.toUpperCase(),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        <button className="player-close" onClick={onClose} title="fechar (Esc)">
+          ✕
+        </button>
+      </header>
+
+      {error && <div className="player-card erro">{error}</div>}
+
+      {/* A resposta que o Jellyfin nunca dá. */}
+      {showWhy && plan && (
+        <div className="player-card why-card">
+          <h4>Por que {MODE_LABEL[plan.mode] ?? plan.mode}</h4>
+          <ul>
+            {plan.reasons.map((reason, i) => (
+              <li key={i}>{reason}</li>
+            ))}
+          </ul>
+          <p className="rodape">
+            {plan.video === "copy" ? "vídeo copiado bit a bit" : `vídeo recodificado`}
+            {" · "}
+            {plan.audio === "copy" ? "áudio copiado" : "áudio recodificado"}
+            {/* O encoder só diz alguma coisa quando há encode: em remux o
+                backend devolve "copy", e "· copy" no fim da frase é ruído. */}
+            {session && plan.video === "encode" && ` · ${session.encoder}`}
+          </p>
+        </div>
+      )}
+
+      {showSubs && plan && (
+        <div className="player-card subs-card">
+          <h4>Legendas</h4>
+          {plan.subtitles.length === 0 ? (
+            <p className="muted small">este arquivo não tem faixa de legenda.</p>
+          ) : (
+            <div className="chips">
               <button
-                className={`mode-badge ${plan.mode}`}
-                onClick={() => setShowWhy(!showWhy)}
-                title="por que este modo?"
+                className={subtitle === null && burn === null ? "chip on" : "chip"}
+                onClick={() => {
+                  setSubtitle(null);
+                  setBurn(null);
+                }}
               >
-                {MODE_LABEL[plan.mode] ?? plan.mode}
-                {session && plan.video === "encode" && <span> · {session.encoder}</span>}
+                nenhuma
               </button>
-            )}
-            <button className="ghost" onClick={onClose}>
-              fechar ✕
-            </button>
-          </div>
-        </header>
-
-        {showWhy && plan && (
-          <div className="why-panel">
-            {/* A resposta que o Jellyfin nunca dá. */}
-            <ul className="reasons">
-              {plan.reasons.map((reason, i) => (
-                <li key={i}>{reason}</li>
-              ))}
-            </ul>
-
-            {plan.subtitles.length > 0 && (
-              <div className="filter-group">
-                <span className="filter-label">Legendas</span>
-                <div className="chips">
+              {plan.subtitles.map((t) => (
+                <span key={t.index} className="sub-option">
                   <button
-                    className={subtitle === null && burn === null ? "chip on" : "chip"}
+                    className={subtitle === t.index ? "chip on" : "chip"}
+                    disabled={!t.text_based}
+                    title={
+                      t.text_based
+                        ? "faixa de texto — sem transcode"
+                        : `${t.codec} é bitmap: só queimando`
+                    }
                     onClick={() => {
-                      setSubtitle(null);
+                      setSubtitle(t.index);
                       setBurn(null);
                     }}
                   >
-                    nenhuma
+                    {t.label}
+                    {t.origem === "arquivo" && <span className="muted"> · arquivo</span>}
                   </button>
-                  {plan.subtitles.map((t) => (
-                    <span key={t.index} className="sub-option">
-                      <button
-                        className={subtitle === t.index ? "chip on" : "chip"}
-                        disabled={!t.text_based}
-                        title={
-                          t.text_based
-                            ? "faixa de texto — sem transcode"
-                            : `${t.codec} é bitmap: só queimando`
-                        }
-                        onClick={() => {
-                          setSubtitle(t.index);
-                          setBurn(null);
-                        }}
-                      >
-                        {t.label}
-                      </button>
-                      {/* ASS/PGS: queimar preserva o visual original, ao custo
-                          de transcode. É uma escolha, e ela fica explícita. */}
-                      {(t.styled || !t.text_based) && (
-                        <button
-                          className={burn === t.index ? "chip on" : "chip"}
-                          title="queima na imagem — preserva o estilo, força transcode"
-                          onClick={() => {
-                            setBurn(t.index);
-                            setSubtitle(null);
-                          }}
-                        >
-                          queimar
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+                  {/* ASS/PGS: queimar preserva o visual original, ao custo de
+                      transcode. É uma escolha, e ela fica explícita.
 
-        <div className="stage" onClick={toggle}>
-          <video
-            ref={videoRef}
-            className="video"
-            src={plan?.mode === "direct_play" ? api.streamUrl(work.media_file_id) : undefined}
-            crossOrigin="anonymous"
-            autoPlay
-            onLoadedMetadata={(e) => {
-              setDuration(e.currentTarget.duration);
-              if (resumeFrom > 30) e.currentTarget.currentTime = resumeFrom;
-            }}
-            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-            // Em HLS a duração só é conhecida depois que a playlist é lida —
-            // confiar só no loadedmetadata deixa a timeline mentindo.
-            onDurationChange={(e) => {
-              const value = e.currentTarget.duration;
-              if (isFinite(value) && value > 0) setDuration(value);
-            }}
-            onProgress={(e) => {
-              const v = e.currentTarget;
-              if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
-            }}
-            onPlay={() => {
-              setPlaying(true);
-              report("start");
-              wake();
-            }}
-            onPause={() => {
-              setPlaying(false);
-              report("pause");
-              setChrome(true);
-            }}
-            onSeeked={() => report("seek")}
-            onEnded={() => report("finish")}
-            onVolumeChange={(e) => setVolume(e.currentTarget.muted ? 0 : e.currentTarget.volume)}
-            onError={() => {
-              // Com plano de transcode o erro vem do hls.js, não daqui.
-              if (plan?.mode === "direct_play") {
-                setError("o navegador recusou o arquivo mesmo com plano de Direct Play");
-              }
-            }}
-          >
-            {/* Legendas de texto entram como faixa nativa: sem transcode. */}
-            {plan?.subtitles
-              .filter((t) => t.text_based)
-              .map((t) => (
-                <track
-                  key={t.index}
-                  kind="subtitles"
-                  src={api.subtitleUrl(work.media_file_id!, t.index)}
-                  srcLang={t.language ?? "und"}
-                  label={t.label}
-                  default={subtitle === t.index}
-                />
+                      Só para faixa EMBUTIDA: queimar passa o índice pro filtro
+                      `subtitles=si=N` do ffmpeg, que conta faixas do container.
+                      Um índice negativo (legenda em arquivo) não existe pra ele
+                      — o caminho pra queimar externa é `subtitles=filename=`, e
+                      isso ainda não está feito. */}
+                  {t.index >= 0 && (t.styled || !t.text_based) && (
+                    <button
+                      className={burn === t.index ? "chip on" : "chip"}
+                      title="queima na imagem — preserva o estilo, força transcode"
+                      onClick={() => {
+                        setBurn(t.index);
+                        setSubtitle(null);
+                      }}
+                    >
+                      queimar
+                    </button>
+                  )}
+                </span>
               ))}
-          </video>
-
-          {!playing && !error && (
-            <button className="big-play" onClick={toggle} aria-label="tocar">
-              ▶
-            </button>
+            </div>
           )}
         </div>
+      )}
 
-        {error && <p className="error">{error}</p>}
+      <div className="player-scrim">
+        <div className="bulbs" />
 
-        <div className="controls">
+        {aviso && <p className="player-aviso">{aviso}</p>}
+
+        <div
+          ref={timelineRef}
+          className="timeline"
+          onMouseMove={(e) => setHover({ x: e.clientX, time: timeAt(e.clientX) })}
+          onMouseLeave={() => setHover(null)}
+          onClick={(e) => seekToFile(timeAt(e.clientX))}
+        >
+          <div className="track" />
+          {/* O que esta sessão NÃO entrega, marcado em vez de escondido: a
+              timeline mostra o arquivo inteiro, mas só parte dele é alcançável. */}
+          {offset > 0 && <div className="track fora" style={{ width: `${pctInicio}%` }} />}
+          {produzido < total - 1 && (
+            <div
+              className="track fora"
+              style={{ left: `${pctProduzido}%`, width: `${100 - pctProduzido}%` }}
+            />
+          )}
           <div
-            ref={timelineRef}
-            className="timeline"
-            onMouseMove={(e) => setHover({ x: e.clientX, time: timeAt(e.clientX) })}
-            onMouseLeave={() => setHover(null)}
-            onClick={(e) => {
-              const video = videoRef.current;
-              if (video) video.currentTime = timeAt(e.clientX);
+            className="track buffered"
+            style={{ left: `${pctInicio}%`, width: `${Math.max(0, pctBuffered - pctInicio)}%` }}
+          />
+          <div className="track played" style={{ width: `${pctPlayed}%` }} />
+          <div className="knob" style={{ left: `${pctPlayed}%` }} />
+
+          {hover && <ScrubPreview sprite={sprite} hover={hover} timeline={timelineRef.current} />}
+        </div>
+
+        <div className="control-row">
+          <button className="icon" onClick={() => seekBy(-SKIP_SECONDS)} title="voltar 10s">
+            ↺
+          </button>
+          <button className="icon big" onClick={toggle} title={playing ? "pausar" : "tocar"}>
+            {playing ? "❚❚" : "▶"}
+          </button>
+          <button className="icon" onClick={() => seekBy(SKIP_SECONDS)} title="avançar 10s">
+            ↻
+          </button>
+
+          <span className="timecode">
+            {clock(fileTime)} <span className="muted">/ {clock(total)}</span>
+          </span>
+
+          <div className="spacer" />
+
+          <button
+            className={showSubs ? "player-btn on" : "player-btn"}
+            onClick={() => {
+              setShowSubs(!showSubs);
+              setShowWhy(false);
             }}
           >
-            <div className="track" />
-            <div className="track buffered" style={{ width: `${bufferedPercent}%` }} />
-            <div className="track played" style={{ width: `${progress}%` }} />
-            <div className="knob" style={{ left: `${progress}%` }} />
+            legendas
+            {plan && plan.subtitles.length > 0 && (
+              <span className="muted"> {plan.subtitles.length}</span>
+            )}
+          </button>
 
-            {hover && <ScrubPreview sprite={sprite} hover={hover} timeline={timelineRef.current} />}
-          </div>
-
-          <div className="control-row">
-            <button className="icon" onClick={() => seekBy(-SKIP_SECONDS)} title="voltar 10s">
-              ↺
+          {plan && (
+            <button
+              className={`mode-badge ${plan.mode}`}
+              onClick={() => {
+                setShowWhy(!showWhy);
+                setShowSubs(false);
+              }}
+              title="por que este modo?"
+            >
+              {MODE_LABEL[plan.mode] ?? plan.mode}
+              <span className="q">?</span>
             </button>
-            <button className="icon big" onClick={toggle}>
-              {playing ? "❚❚" : "▶"}
+          )}
+
+          <div className="volume-wrap">
+            <button
+              className="icon"
+              onClick={() => {
+                const video = videoRef.current;
+                if (video) video.muted = !video.muted;
+              }}
+              title="mudo (m)"
+            >
+              {/* Glifo de texto e não emoji: emoji vem colorido da fonte do
+                  sistema e destoa dos outros controles, que são monocromáticos. */}
+              {volume === 0 ? "◀" : "◀)"}
             </button>
-            <button className="icon" onClick={() => seekBy(SKIP_SECONDS)} title="avançar 10s">
-              ↻
-            </button>
-
-            <span className="timecode">
-              {clock(time)} <span className="muted">/ {clock(duration)}</span>
-            </span>
-
-            <div className="spacer" />
-
             <input
               className="volume"
               type="range"
@@ -481,19 +585,19 @@ export default function Player({
                 video.muted = Number(e.target.value) === 0;
               }}
             />
-
-            <button
-              className="icon"
-              onClick={() =>
-                document.fullscreenElement
-                  ? document.exitFullscreen()
-                  : shellRef.current?.requestFullscreen?.().catch(() => {})
-              }
-              title="tela cheia (f)"
-            >
-              ⛶
-            </button>
           </div>
+
+          <button
+            className="icon"
+            onClick={() =>
+              document.fullscreenElement
+                ? document.exitFullscreen()
+                : shellRef.current?.requestFullscreen?.().catch(() => {})
+            }
+            title="tela cheia (f)"
+          >
+            ⛶
+          </button>
         </div>
       </div>
     </div>
@@ -504,6 +608,10 @@ export default function Player({
 ///
 /// A folha inteira já está no browser; mostrar o quadro certo é só recortar a
 /// célula com `background-position`. Nenhuma requisição ao arrastar.
+///
+/// `hover.time` é tempo de ARQUIVO, que é o mesmo eixo em que a folha foi
+/// gerada — antes isto usava o tempo do `<video>` e mostrava o quadro errado
+/// sempre que a sessão começava com offset.
 function ScrubPreview({
   sprite,
   hover,

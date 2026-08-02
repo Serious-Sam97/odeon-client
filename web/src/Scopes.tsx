@@ -15,23 +15,40 @@ import {
 /// O fluxo é sempre o mesmo, e o passo do meio não é pulável: escolher a obra →
 /// **ver o que vai acontecer** → aplicar. Escrever centenas de linhas sem
 /// mostrar antes é o oposto do que o projeto defende.
+const PAGINA = 50;
+
 export default function Scopes({ onChanged }: { onChanged: () => void }) {
   const [rows, setRows] = useState<ScopeRow[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [aberta, setAberta] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const page = await api.reviewScopes({ q, limit: 50 });
+      const page = await api.reviewScopes({ q, limit: PAGINA });
       setRows(page.items);
       setTotal(page.total);
     } finally {
       setLoading(false);
     }
   }, [q]);
+
+  /// O backend sempre aceitou `offset`; a tela é que pedia 50 fixas. Das 421
+  /// pastas, 371 só eram alcançáveis por quem adivinhasse parte do caminho —
+  /// e o próprio cabeçalho já dizia que elas existiam.
+  const carregarMais = async () => {
+    setCarregandoMais(true);
+    try {
+      const page = await api.reviewScopes({ q, limit: PAGINA, offset: rows.length });
+      setRows((prev) => [...prev, ...page.items]);
+      setTotal(page.total);
+    } finally {
+      setCarregandoMais(false);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(load, q ? 300 : 0);
@@ -49,16 +66,16 @@ export default function Scopes({ onChanged }: { onChanged: () => void }) {
 
   return (
     <div className="scopes">
+      <div className="strip primeira">
+        <h2>Pastas</h2>
+        <span className="rule" />
+        <span className="strip-meta">
+          {rows.length < total ? `${rows.length} de ${total}` : total}
+          {rows.length > 0 && ` · ${pendentesTotais} arquivos`}
+        </span>
+      </div>
+
       <div className="scopes-head">
-        <div>
-          <strong>{total}</strong> pastas com identificação pendente
-          {rows.length > 0 && (
-            <span className="muted">
-              {" "}
-              · {pendentesTotais} arquivos nas {rows.length} mostradas
-            </span>
-          )}
-        </div>
         <input
           className="scopes-filtro"
           placeholder="filtrar por caminho…"
@@ -89,6 +106,16 @@ export default function Scopes({ onChanged }: { onChanged: () => void }) {
           onResolvida={() => resolvida(row.dir_path)}
         />
       ))}
+
+      {rows.length < total && (
+        <div className="mais">
+          <button className="chip" onClick={carregarMais} disabled={carregandoMais}>
+            {carregandoMais
+              ? "carregando…"
+              : `carregar mais ${Math.min(PAGINA, total - rows.length)}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

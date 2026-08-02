@@ -156,7 +156,16 @@ export type AppEvent =
     }
   | { type: "scan_finished"; added: number; updated: number }
   | { type: "match_finished"; auto: number; needs_review: number }
-  | { type: "scrub_finished"; done: number; failed: number };
+  | { type: "scrub_finished"; done: number; failed: number }
+  | {
+      type: "programme_starting";
+      programme_id: number;
+      channel_id: string;
+      channel_name: string;
+      title: string;
+      starts_at: string;
+      user_id: string;
+    };
 
 export interface WorkListItem {
   id: string;
@@ -169,6 +178,10 @@ export interface WorkListItem {
   match_confidence: number | null;
   dominant_color: string | null;
   poster: string | null;
+  /** Arte larga da obra; o herói do painel prefere ela ao pôster. */
+  backdrop: string | null;
+  /** Quadro do episódio, quando existe — mais específico que o backdrop. */
+  still: string | null;
   series_title: string | null;
   media_file_id: string | null;
   duration_seconds: number | null;
@@ -181,6 +194,106 @@ export interface WorkListItem {
   position_seconds: number | null;
   finished: boolean | null;
   tags: string[] | null;
+}
+
+/**
+ * Uma entrada da biblioteca: ou uma **série inteira**, ou uma obra avulsa.
+ *
+ * As séries já existiam no grafo desde o M1 — a tela é que mostrava os 14.657
+ * episódios como cartões iguais, que é listagem de arquivo e não biblioteca.
+ */
+export interface LibraryEntry {
+  id: string;
+  is_series: boolean;
+  title: string;
+  year: number | null;
+  poster: string | null;
+  dominant_color: string | null;
+  work_count: number;
+  season_count: number;
+  finished_count: number;
+  media_file_id: string | null;
+  duration_seconds: number | null;
+  height: number | null;
+  size_bytes: number | null;
+  kind: string | null;
+  match_state: string | null;
+  position_seconds: number | null;
+  /** Repetido em toda linha — é o total de entradas do filtro atual. */
+  total: number;
+}
+
+/** Um canal com o que está no ar nele agora. */
+export interface CanalNoAr {
+  id: string;
+  name: string;
+  number: string | null;
+  logo_url: string | null;
+  grupo: string | null;
+  titulo: string | null;
+  sub_titulo: string | null;
+  comeca: string | null;
+  termina: string | null;
+  a_seguir: string | null;
+  programme_id: number | null;
+  /** Arte da obra ligada ao programa — só quando o casamento foi seguro. */
+  arte: string | null;
+  /** A obra e o arquivo dela: é o que "ver desde o início" toca. */
+  work_id: string | null;
+  media_file_id: string | null;
+}
+
+export interface ProgramaDoGuia {
+  id: number;
+  channel_id: string;
+  starts_at: string;
+  ends_at: string;
+  title: string;
+  sub_title: string | null;
+  description: string | null;
+  year: number | null;
+  categoria: string | null;
+  arte: string | null;
+  /** A obra na sua biblioteca, quando o casamento foi seguro. */
+  work_id: string | null;
+  /** O arquivo dela — o que "ver desde o início" toca. */
+  media_file_id: string | null;
+  lembrete: boolean;
+}
+
+export interface Lembrete {
+  programme_id: number;
+  title: string;
+  starts_at: string;
+  channel_id: string;
+  channel_name: string;
+}
+
+/** A grade traz o relógio DO SERVIDOR: a agulha do "agora" tem que ser
+ *  desenhada contra o mesmo relógio que produziu a grade. */
+export interface Guia {
+  agora: string;
+  ate: string;
+  programas: ProgramaDoGuia[];
+}
+
+export interface FonteAoVivo {
+  id: string;
+  name: string;
+  m3u_url: string;
+  xmltv_url: string | null;
+  enabled: boolean;
+  last_import_at: string | null;
+  last_error: string | null;
+  canais: number;
+}
+
+export interface CanalAberto {
+  channel: { id: string; name: string };
+  session_id: string;
+  playlist_url: string;
+  mode: PlaybackMode;
+  reasons: string[];
 }
 
 export interface Tag {
@@ -217,7 +330,10 @@ export interface Collection {
   position: number | null;
   origin: string;
   provider_key: string | null;
+  /** Obras na subárvore inteira — não só filhos diretos. */
   item_count: number;
+  /** Até quatro pôsteres da subárvore, pra capa empilhada do cartão. */
+  posters: string[] | null;
 }
 
 export interface CollectionNode extends Collection {
@@ -238,6 +354,26 @@ export interface Relation {
 /// Vem de `/api/works/{id}`, que achata a tabela `work` — projeção diferente da
 /// listagem, então não estende WorkListItem (lá `tags` é `string[]`, aqui é o
 /// objeto completo com origem e cor).
+/// O arquivo por trás da obra, com o que o probe do M0 extraiu. Vem no
+/// `GET /api/works/{id}` desde sempre; a UI só passou a olhar na R7.
+export interface MediaFileSummary {
+  id: string;
+  path: string;
+  filename: string;
+  size_bytes: number;
+  container: string | null;
+  duration_seconds: number | null;
+  bitrate: number | null;
+  video_codec: string | null;
+  width: number | null;
+  height: number | null;
+  frame_rate: number | null;
+  audio_codec: string | null;
+  audio_channels: number | null;
+  subtitle_langs: string[];
+  status: string;
+}
+
 export interface WorkDetail {
   id: string;
   kind: string;
@@ -245,15 +381,56 @@ export interface WorkDetail {
   original_title: string | null;
   year: number | null;
   overview: string | null;
+  runtime_seconds: number | null;
   season_number: number | null;
   episode_number: number | null;
   match_state: string;
   match_confidence: number | null;
   dominant_color: string | null;
+  /// `{poster, backdrop, still}` — caminhos relativos servidos em `/artwork/`.
+  artwork: Record<string, string>;
+  external_ids: Record<string, string>;
+  files: MediaFileSummary[];
+  /// Onde este usuário parou, em segundos. `0` se nunca começou.
+  position_seconds: number;
+  finished: boolean;
   tags: WorkTag[];
   collections: Collection[];
   relations: Relation[];
   credits: Credit[];
+}
+
+export interface ContaUsuario {
+  id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface Aparelho {
+  id: string;
+  device_label: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+}
+
+export interface Trabalho {
+  id: string;
+  kind: string;
+  state: string;
+  started_at: string | null;
+  finished_at: string | null;
+  done: number | null;
+  total: number | null;
+  current: string | null;
+  error: string | null;
+  progress: Record<string, unknown> | null;
+  cancel_requested: boolean;
 }
 
 export interface TasteProfile {
@@ -300,7 +477,10 @@ export interface PlaybackPlan {
 }
 
 export interface SubtitleTrack {
+  /** Negativo = legenda em arquivo ao lado do vídeo. */
   index: number;
+  /** `embutida` ou `arquivo`. */
+  origem: string;
   codec: string;
   language: string | null;
   title: string | null;
@@ -421,6 +601,8 @@ export interface Filters {
   minMinutes?: number;
   maxMinutes?: number;
   collection?: string;
+  /** Só pra tela: o nome da coleção em que se entrou, pro caminho de volta. */
+  collectionName?: string;
   state?: string;
   person?: string;
   personName?: string;
@@ -435,6 +617,18 @@ export const RELATION_KINDS: Record<string, string> = {
   alternate_cut_of: "é corte alternativo de",
   watch_order: "ordem de exibição",
   related: "relacionado a",
+};
+
+/** Os `work.kind` do CHECK do 0001, em português. */
+export const WORK_KINDS: Record<string, string> = {
+  movie: "filme",
+  episode: "episódio",
+  short: "curta",
+  standup: "stand-up",
+  concert: "show",
+  documentary: "documentário",
+  music_video: "clipe",
+  other: "avulso",
 };
 
 export const COLLECTION_KINDS: Record<string, string> = {
@@ -626,8 +820,12 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function queryString(filters: Filters): string {
-  const p = new URLSearchParams({ limit: "300" });
+/** Quantas entradas por página. O backend limita em 500. */
+export const PAGE_SIZE = 120;
+
+function queryString(filters: Filters, limit = PAGE_SIZE, offset = 0): string {
+  const p = new URLSearchParams({ limit: String(limit) });
+  if (offset > 0) p.set("offset", String(offset));
   if (filters.q?.trim()) p.set("q", filters.q.trim());
   if (filters.kind) p.set("kind", filters.kind);
   if (filters.tags?.length) {
@@ -646,9 +844,67 @@ function queryString(filters: Filters): string {
 }
 
 export const api = {
-  works: (filters: Filters = {}) => json<WorkListItem[]>(`/api/works?${queryString(filters)}`),
+  works: (filters: Filters = {}, offset = 0) =>
+    json<WorkListItem[]>(`/api/works?${queryString(filters, PAGE_SIZE, offset)}`),
+
+  /**
+   * A biblioteca agrupada: uma entrada por série, uma por obra avulsa.
+   *
+   * Cada linha carrega o `total` (via `count(*) OVER ()` no backend), então
+   * "300 de 17.498" não custa uma segunda requisição.
+   */
+  library: (filters: Filters = {}, offset = 0, limit = PAGE_SIZE) =>
+    json<LibraryEntry[]>(`/api/library?${queryString(filters, limit, offset)}`),
 
   continueWatching: () => json<WorkListItem[]>("/api/continue"),
+
+  // --- R6: canais ao vivo ---
+  liveChannels: () => json<CanalNoAr[]>("/api/live/channels"),
+  liveGuide: (hours = 3) => json<Guia>(`/api/live/guide?hours=${hours}`),
+
+  /// A grade dos canais que o próprio Odeon programa. Calculada, não guardada:
+  /// duas chamadas no mesmo dia devolvem a mesma programação.
+  liveOdeon: (hours = 5) =>
+    json<{
+      agora: string;
+      ate: string;
+      canais: { slug: string; nome: string; numero: string }[];
+      programas: {
+        id: string;
+        canal: string;
+        canal_nome: string;
+        numero: string;
+        work_id: string;
+        media_file_id: string | null;
+        title: string;
+        year: number | null;
+        arte: string | null;
+        categoria: string | null;
+        starts_at: string;
+        ends_at: string;
+      }[];
+    }>(`/api/live/odeon?hours=${hours}`),
+  liveSources: () => json<FonteAoVivo[]>("/api/live/sources"),
+  createLiveSource: (name: string, m3u_url: string, xmltv_url?: string) =>
+    json<{ id: string }>("/api/live/sources", {
+      method: "POST",
+      body: JSON.stringify({ name, m3u_url, xmltv_url: xmltv_url || null }),
+    }),
+  deleteLiveSource: (id: string) =>
+    json<{ ok: boolean }>(`/api/live/sources/${id}`, { method: "DELETE" }),
+  liveImport: () =>
+    json<{ started: boolean; reason?: string; fontes?: number }>("/api/live/import", {
+      method: "POST",
+    }),
+  watchChannel: (id: string) =>
+    json<CanalAberto>(`/api/live/${id}/watch`, { method: "POST" }),
+  reminders: () => json<Lembrete[]>("/api/live/reminders"),
+  createReminder: (programmeId: number) =>
+    json<{ ok: boolean; starts_at: string }>(`/api/live/reminders/${programmeId}`, {
+      method: "POST",
+    }),
+  deleteReminder: (programmeId: number) =>
+    json<{ ok: boolean }>(`/api/live/reminders/${programmeId}`, { method: "DELETE" }),
 
   scan: () => json<{ started: boolean; reason?: string }>("/api/scan", { method: "POST" }),
 
@@ -741,6 +997,53 @@ export const api = {
     json<{ ok: boolean; guess: GuessView }>(`/api/works/${workId}/parse`, {
       method: "POST",
       body: JSON.stringify(parse),
+    }),
+
+  /// A saúde do servidor: o que está torto e ninguém tinha como ver.
+  ///
+  /// `diagnostico` e não `health`: `/api/health` é outra coisa — o liveness,
+  /// que responde sem autenticação e só diz se o processo está de pé.
+  diagnostico: () =>
+    json<{
+      arquivos: {
+        total: number;
+        com_erro: number;
+        sumidos: number;
+        amostra: { arquivo: string; estado: string }[];
+      };
+      identificacao: { revisar: number; sem_identificacao: number; ignoradas: number };
+      sprites: { prontos: number; de: number };
+      ao_vivo: {
+        horas_de_grade: number | null;
+        fontes: { nome: string; erro: string | null; ultimo_import: string | null }[];
+      };
+    }>("/api/diagnostico"),
+
+  /// O que este servidor consegue fazer com os arquivos. `pode_apagar` sai de
+  /// uma escrita de teste de verdade, não da configuração.
+  storage: () =>
+    json<{
+      pode_apagar: boolean;
+      motivo: string | null;
+      raizes: { path: string; existe: boolean; gravavel: boolean }[];
+    }>("/api/storage"),
+
+  /// Apaga a obra. Com `apagarArquivos`, apaga os arquivos antes — e se algum
+  /// se recusar, nada sai do catálogo.
+  deleteWork: (workId: string, apagarArquivos: boolean) =>
+    json<{
+      ok: boolean;
+      titulo: string;
+      arquivos_apagados: number;
+      bytes_liberados: number;
+      aviso: string | null;
+    }>(`/api/works/${workId}?apagar_arquivos=${apagarArquivos}`, { method: "DELETE" }),
+
+  /// Some da biblioteca sem apagar nada.
+  ignoreWork: (workId: string, reason?: string) =>
+    json<{ ok: boolean }>(`/api/works/${workId}/ignore`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? null }),
     }),
 
   clearParse: (workId: string) =>
@@ -892,7 +1195,51 @@ export const api = {
     return json<ForYou>(`/api/curation/for-you?${p}`);
   },
 
-  taste: () => json<TasteProfile>("/api/curation/taste"),
+  /// O perfil + a contagem de votos. `curtidas`/`bloqueadas` são o que
+  /// permite ao "para você" saber que a calibração já rendeu.
+  taste: () => json<TasteProfile & { curtidas: number; bloqueadas: number }>("/api/curation/taste"),
+
+  /// Seis capas pra calibrar o gosto — uma por gênero, nunca votadas.
+  calibrar: () => json<WorkListItem[]>("/api/curation/calibrar"),
+
+  // --- R16: administração ---
+  //
+  // Sete rotas que existiam no backend sem nenhum cliente. Quatro delas só
+  // eram alcançáveis por `curl` — e duas foram entregues assim por mim.
+
+  usuarios: () => json<ContaUsuario[]>("/api/auth/users"),
+  criarUsuario: (body: {
+    username: string;
+    display_name?: string;
+    password: string;
+    role: "admin" | "user";
+  }) => json<ContaUsuario>("/api/auth/users", { method: "POST", body: JSON.stringify(body) }),
+  mudarUsuario: (id: string, body: { role?: "admin" | "user"; is_active?: boolean }) =>
+    json<{ ok: boolean }>(`/api/auth/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  apagarUsuario: (id: string) =>
+    json<{ ok: boolean }>(`/api/auth/users/${id}`, { method: "DELETE" }),
+
+  sessoes: () => json<Aparelho[]>("/api/auth/sessions"),
+  encerrarSessao: (id: string) =>
+    json<{ ok: boolean }>(`/api/auth/sessions/${id}`, { method: "DELETE" }),
+
+  trabalhos: (limit = 25) => json<Trabalho[]>(`/api/jobs?limit=${limit}`),
+  cancelarTrabalho: (id: string) =>
+    json<{ ok: boolean }>(`/api/jobs/${id}/cancel`, { method: "POST" }),
+
+  /// As quatro manutenções. `dryRun` é o padrão porque é o padrão delas — e
+  /// porque contar é inofensivo e reescrever milhares de linhas não é.
+  manutencao: (
+    qual: "repair-series" | "repair-episode-titles" | "reparse" | "artwork-orfao",
+    dryRun = true,
+  ) =>
+    json<Record<string, unknown>>(
+      `/api/maintenance/${qual}?dry_run=${dryRun}`,
+      { method: "POST" },
+    ),
 
   similar: (workId: string) => json<Recommendation[]>(`/api/works/${workId}/similar`),
 

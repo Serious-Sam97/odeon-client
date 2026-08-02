@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { api, type Filters, type Tag, type TagNamespace } from "./api";
 
 const SORTS = [
+  // Padrão. Ordenar por título põe `001 - Draw My Life As a Gamer` na frente,
+  // porque número vem antes de letra — ver `library_order_by` no backend.
+  ["featured", "em destaque"],
   ["title", "título"],
   ["year", "ano"],
   ["added", "adicionado"],
@@ -90,7 +93,15 @@ export default function FilterBar({
         {anyActive && (
           <button
             className="chip clear"
-            onClick={() => onChange({ q: filters.q, sort: filters.sort })}
+            onClick={() =>
+              onChange({
+                q: filters.q,
+                sort: filters.sort,
+                // Limpar filtro não deve tirar você de dentro da série.
+                collection: filters.collection,
+                collectionName: filters.collectionName,
+              })
+            }
           >
             limpar ✕
           </button>
@@ -164,6 +175,9 @@ export default function FilterBar({
                 ["auto", "automáticas"],
                 ["needs_review", "em dúvida"],
                 ["unmatched", "sem match"],
+                // Ignoradas ficam FORA da biblioteca por padrão — foram
+                // descartadas de propósito. Este chip é o único jeito de vê-las.
+                ["ignored", "ignoradas"],
               ].map(([value, label]) => (
                 <button
                   key={value}

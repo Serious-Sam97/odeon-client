@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import AoVivo, { AvisoDePrograma } from "./AoVivo";
 import Collections from "./Collections";
 import Details from "./Details";
@@ -8,7 +8,6 @@ import Guia from "./Guia";
 import Locadora from "./Locadora";
 import Mural from "./Mural";
 import Perfil from "./Perfil";
-import Retrospectiva from "./Retrospectiva";
 import ForYou from "./ForYou";
 import Libraries from "./Libraries";
 import Login from "./Login";
@@ -38,16 +37,310 @@ import {
   type WorkListItem,
 } from "./api";
 
+/// As abas, depois da R36.
+///
+/// **"Experimentação" acabou.** Ela era um estacionamento: locadora, wiki,
+/// retrospectiva e perfil moravam lá dentro porque estavam sendo construídas.
+/// Estão prontas — e uma feature pronta escondida atrás de uma palavra que não
+/// descreve nada é uma feature que ninguém acha.
+///
+/// A barra passou a ter dois lados, e a divisão é o que o §12 já tinha decidido
+/// pras operações de servidor: **navegação de um lado, ferramenta do outro**.
+/// À esquerda o que é acervo; à direita o que é você e o que é manutenção.
 type Tab =
   | "foryou"
   | "library"
-  | "locadora"
-  | "mural"
   | "collections"
+  | "locadora"
+  | "guia"
   | "live"
+  | "mural"
+  | "perfil"
   | "review"
   | "settings"
   | "admin";
+
+/// O que fica na barra, à esquerda. **Sete**, e a ordem é de "onde você entra"
+/// pra "onde você vai depois".
+const ABAS: { chave: Tab; rotulo: string }[] = [
+  { chave: "foryou", rotulo: "para você" },
+  { chave: "library", rotulo: "biblioteca" },
+  { chave: "collections", rotulo: "coleções" },
+  { chave: "locadora", rotulo: "locadora" },
+  { chave: "guia", rotulo: "guia" },
+  { chave: "live", rotulo: "ao vivo" },
+  { chave: "mural", rotulo: "mural" },
+];
+
+/// R36 — a barra de cima.
+///
+/// ## O que ela era
+///
+/// Nove entradas em fileira, mais quatro salas escondidas dentro de uma delas
+/// chamada **"experimentação"** — uma palavra que não descreve nada e que
+/// existia porque a locadora, o guia, a retrospectiva e o perfil estavam sendo
+/// construídos. Estão prontos.
+///
+/// E as nove entradas misturavam três coisas diferentes na mesma fileira, com o
+/// mesmo peso: **acervo** (biblioteca, coleções), **produto** (locadora, mural)
+/// e **manutenção** (revisão, pastas, admin). É o mesmo defeito que o §12
+/// corrigiu quando tirou as operações de servidor daqui — *"misturadas, elas
+/// competiam com as abas, e a mais gritante da tela era `identificar`"* —, só
+/// que meia dúzia de fases depois ele tinha voltado por outro caminho.
+///
+/// ## O que ela é
+///
+/// Dois lados. À esquerda **sete** entradas, todas do mesmo tipo: lugares do
+/// acervo. À direita o que não é acervo — a manutenção atrás de uma engrenagem,
+/// e você atrás do seu próprio nome.
+///
+/// ## Os efeitos, e o que cada um faz
+///
+/// Nenhum é enfeite solto; cada um responde uma pergunta que a barra antiga
+/// deixava a tela responder sozinha:
+///
+/// | efeito | o que ele diz |
+/// |---|---|
+/// | o traço que **desliza** entre as abas | de onde você veio, não só onde está |
+/// | o **holofote** que segue o mouse | onde o dedo está, numa fileira de sete alvos pequenos |
+/// | a barra que **condensa** ao rolar | você saiu do topo; o conteúdo é que importa agora |
+/// | o **anel** em volta do seu nome | quanto falta pro próximo nível, sem abrir o perfil |
+/// | a marca que **pulsa** | tem trabalho rodando no servidor |
+///
+/// Tudo isso desliga em `prefers-reduced-motion`. Alma não pode custar enjoo.
+function BarraDeCima({
+  aba,
+  aoTrocar,
+  eu,
+  isAdmin,
+  paraRevisar,
+  trabalhando,
+  aoAbrirServidor,
+  aoSair,
+  busca,
+}: {
+  aba: Tab;
+  aoTrocar: (t: Tab) => void;
+  eu: AuthUser;
+  isAdmin: boolean;
+  paraRevisar: number;
+  trabalhando: boolean;
+  aoAbrirServidor: () => void;
+  aoSair: () => void;
+  busca: React.ReactNode;
+}) {
+  const fileira = useRef<HTMLElement>(null);
+  const [traco, setTraco] = useState<{ x: number; w: number } | null>(null);
+  const [condensada, setCondensada] = useState(false);
+  const [menu, setMenu] = useState<"nenhum" | "eu" | "manutencao">("nenhum");
+  const [nivel, setNivel] = useState<{ n: number; fatia: number } | null>(null);
+
+  /// O traço que desliza.
+  ///
+  /// Medido do DOM e não calculado de larguras fixas: os rótulos têm tamanhos
+  /// diferentes e a fonte é do sistema, então a única fonte de verdade sobre
+  /// onde a aba está é a própria aba. `ResizeObserver` porque a barra encolhe
+  /// quando a janela encolhe, e um traço que fica pra trás lê como defeito.
+  useLayoutEffect(() => {
+    const medir = () => {
+      const el = fileira.current?.querySelector<HTMLElement>(".aba.on");
+      if (!el || !fileira.current) return setTraco(null);
+      const p = fileira.current.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      setTraco({ x: r.left - p.left, w: r.width });
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    if (fileira.current) ro.observe(fileira.current);
+    window.addEventListener("resize", medir);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", medir);
+    };
+  }, [aba, isAdmin]);
+
+  /// Condensa ao rolar. O limiar tem histerese — 24px pra condensar, 8px pra
+  /// voltar — porque sem ela a barra pisca quando a rolagem para em cima do
+  /// número.
+  useEffect(() => {
+    const aoRolar = () => {
+      const y = window.scrollY;
+      setCondensada((c) => (c ? y > 8 : y > 24));
+    };
+    aoRolar();
+    window.addEventListener("scroll", aoRolar, { passive: true });
+    return () => window.removeEventListener("scroll", aoRolar);
+  }, []);
+
+  /// O anel de nível. Uma requisição, na montagem: o número muda devagar e a
+  /// barra não é lugar de ficar perguntando.
+  useEffect(() => {
+    api
+      .perfil()
+      .then((p) => {
+        const g = p.progresso;
+        const faixa = Math.max(1, g.xp_do_proximo - g.xp_do_nivel);
+        setNivel({ n: g.nivel, fatia: Math.min(1, (g.xp - g.xp_do_nivel) / faixa) });
+      })
+      .catch(() => {});
+  }, []);
+
+  /// Fechar o menu ao clicar fora e no Escape. Sem isso ele fica aberto atrás
+  /// da tela seguinte, que é o defeito que todo menu tem uma vez.
+  useEffect(() => {
+    if (menu === "nenhum") return;
+    const fora = (e: MouseEvent) => {
+      if (!(e.target as Element).closest(".gaveta, .gaveta-abre")) setMenu("nenhum");
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu("nenhum");
+    window.addEventListener("mousedown", fora);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", fora);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [menu]);
+
+  /// O holofote: um brilho que segue o mouse pela barra. Duas variáveis CSS, e
+  /// o resto é um `radial-gradient` — nada de elemento extra pra posicionar.
+  const holofote = (e: React.MouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty("--hx", `${e.clientX - r.left}px`);
+    e.currentTarget.style.setProperty("--hy", `${e.clientY - r.top}px`);
+  };
+
+  const ir = (t: Tab) => {
+    setMenu("nenhum");
+    aoTrocar(t);
+  };
+
+  return (
+    <header
+      className={`topbar${condensada ? " condensada" : ""}`}
+      onMouseMove={holofote}
+    >
+      <button className="brand" onClick={() => ir("foryou")} title="para você">
+        {/* A marca pulsa quando há trabalho rodando no servidor. É o único
+            lugar da tela que diz isso sem ocupar espaço — a barra de varredura
+            aparece embaixo, mas só quando alguém está olhando pra lá. */}
+        <span className={`brand-mark${trabalhando ? " trabalhando" : ""}`}>◉</span>
+        <span className="brand-name">ODEON</span>
+      </button>
+
+      <nav className="abas" ref={fileira}>
+        {ABAS.map(({ chave, rotulo }) => (
+          <button
+            key={chave}
+            className={`aba${aba === chave ? " on" : ""}`}
+            onClick={() => ir(chave)}
+          >
+            {rotulo}
+          </button>
+        ))}
+        {/* O traço, posicionado. Ele existe **fora** dos botões de propósito:
+            uma borda por botão não desliza de um pro outro — ela aparece num e
+            some do outro, que é o que a barra fazia antes. */}
+        {traco && (
+          <span
+            className="aba-traco"
+            style={{ transform: `translateX(${traco.x}px)`, width: `${traco.w}px` }}
+          />
+        )}
+      </nav>
+
+      <div className="barra-fim">
+        {busca}
+
+        {/* A MANUTENÇÃO, atrás de uma engrenagem. Ela saiu da fileira porque
+            não é um lugar do acervo — e o contador continua visível por fora,
+            porque "3.238 esperando revisão" é a única coisa daqui que pede
+            alguma coisa de alguém. */}
+        <div className="gaveta-caixa">
+          <button
+            /* Aceso também quando você **está** numa das telas de dentro: sem
+               isso, ir pra "revisão" apaga a barra inteira — nenhuma aba fica
+               marcada e o traço some, que lê como defeito. */
+            className={`gaveta-abre${
+              menu === "manutencao" || ["review", "settings", "admin"].includes(aba) ? " on" : ""
+            }`}
+            onClick={() => setMenu((m) => (m === "manutencao" ? "nenhum" : "manutencao"))}
+            title="manutenção"
+          >
+            {/* Desenhado, e não o `⚙` do sistema: aquele é emoji, e emoji vem
+                colorido — um ícone azul e vermelho no meio de uma barra âmbar e
+                cinza.
+
+                E são controles, não uma engrenagem: a primeira tentativa foi um
+                gear de quatro dentes, e a 16px ele lia como estrela. Três
+                trilhos com um botão cada dizem "ajustes" em qualquer tamanho —
+                e os botões deslizam no hover, que é o gesto do próprio ícone. */}
+            <svg className="controles" viewBox="0 0 20 20" aria-hidden="true">
+              {[4.5, 10, 15.5].map((y, i) => (
+                <g key={y}>
+                  <rect x="2" y={y - 0.7} width="16" height="1.4" rx="0.7" opacity="0.45" />
+                  <circle className={`knob k${i}`} cx={i === 1 ? 13 : 7} cy={y} r="2.4" />
+                </g>
+              ))}
+            </svg>
+            {paraRevisar > 0 && <span className="pill">{paraRevisar}</span>}
+          </button>
+          {menu === "manutencao" && (
+            <div className="gaveta">
+              <button onClick={() => ir("review")}>
+                revisão
+                {paraRevisar > 0 && <i>{paraRevisar}</i>}
+              </button>
+              {isAdmin && <button onClick={() => ir("settings")}>pastas</button>}
+              {isAdmin && <button onClick={() => ir("admin")}>admin</button>}
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setMenu("nenhum");
+                    aoAbrirServidor();
+                  }}
+                >
+                  servidor…
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* VOCÊ. O anel é o progresso pro próximo nível — a fase 5 na barra,
+            sem ocupar uma entrada. */}
+        <div className="gaveta-caixa">
+          <button
+            className={`gaveta-abre eu${menu === "eu" || aba === "perfil" ? " on" : ""}`}
+            onClick={() => setMenu((m) => (m === "eu" ? "nenhum" : "eu"))}
+            title={`${isAdmin ? "administrador" : "morador"} · ${API}`}
+          >
+            <span
+              className="anel"
+              style={{ ["--fatia" as string]: `${(nivel?.fatia ?? 0) * 360}deg` }}
+            >
+              <b>{nivel?.n ?? "·"}</b>
+            </span>
+            <span className="eu-nome">{eu.display_name}</span>
+            {API.startsWith("https://") && <span className="lock">🔒</span>}
+          </button>
+          {menu === "eu" && (
+            <div className="gaveta">
+              <button onClick={() => ir("perfil")}>perfil</button>
+              <button
+                onClick={() => {
+                  setMenu("nenhum");
+                  void aoSair();
+                }}
+              >
+                sair
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
 
 export default function App() {
   const [me, setMe] = useState<AuthUser | null>(null);
@@ -213,98 +506,30 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">◉</span>
-          <span className="brand-name">ODEON</span>
-        </div>
-
-        {/* Só navegação. As operações de servidor foram pra gaveta `Servidor`:
-            misturadas aqui, elas competiam com as abas e a mais gritante da
-            tela era `identificar`. Ver docs/DESIGN.md §12. */}
-        <nav className="tabs">
-          {(
-            [
-              ["foryou", "para você"],
-              ["library", "biblioteca"],
-              ["locadora", "experimentação"],
-              // R33: a rede social saiu de dentro de "experimentação" e virou
-              // aba própria. *"Uma aba separada, que talvez venha a ser algo
-              // separado do Odeon"* — e daqui ela sai sem arrastar a locadora.
-              ["mural", "mural"],
-              ["collections", "coleções"],
-              ["live", "ao vivo"],
-              ["review", "revisão"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              className={tab === value ? "tab on" : "tab"}
-              onClick={() => setTab(value)}
-            >
-              {label}
-              {value === "review" && match && match.needs_review > 0 && (
-                <span className="pill">{match.needs_review}</span>
-              )}
-            </button>
-          ))}
-          {isAdmin && (
-            <>
-              <button
-                className={tab === "settings" ? "tab on" : "tab"}
-                onClick={() => setTab("settings")}
-              >
-                pastas
-              </button>
-              <button
-                className={tab === "admin" ? "tab on" : "tab"}
-                onClick={() => setTab("admin")}
-              >
-                admin
-              </button>
-            </>
-          )}
-        </nav>
-
-        {tab === "library" && (
-          <input
-            className="search"
-            placeholder="buscar na biblioteca…"
-            value={filters.q ?? ""}
-            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-          />
-        )}
-
-        <div className="actions">
-          <span
-            className="whoami"
-            title={`${isAdmin ? "administrador" : "usuário"} · ${API}`}
-          >
-            {API.startsWith("https://") && <span className="lock">🔒</span>}
-            {me.display_name}
-            {isAdmin && <span className="admin-dot">•</span>}
-          </span>
-          {isAdmin && (
-            <button
-              className="ghost"
-              onClick={() => setServerOpen(true)}
-              title="varrer, identificar, sprites, embeddings"
-            >
-              servidor
-            </button>
-          )}
-          <button
-            className="ghost"
-            onClick={async () => {
-              await api.logout().catch(() => {});
-              auth.clear();
-              setMe(null);
-            }}
-          >
-            sair
-          </button>
-        </div>
-      </header>
+      <BarraDeCima
+        aba={tab}
+        aoTrocar={setTab}
+        eu={me}
+        isAdmin={isAdmin}
+        paraRevisar={match?.needs_review ?? 0}
+        trabalhando={!!scan?.running || !!match?.running}
+        aoAbrirServidor={() => setServerOpen(true)}
+        aoSair={async () => {
+          await api.logout().catch(() => {});
+          auth.clear();
+          setMe(null);
+        }}
+        busca={
+          tab === "library" ? (
+            <input
+              className="search"
+              placeholder="buscar na biblioteca…"
+              value={filters.q ?? ""}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            />
+          ) : null
+        }
+      />
 
       {serverOpen && isAdmin && (
         <Servidor
@@ -351,7 +576,14 @@ export default function App() {
           qualquer aba, senão agendar não serviria pra nada. */}
       <AvisoDePrograma userId={me.id} />
 
-      <main>
+      {/* R36: a troca de aba não é um corte seco.
+
+          `key={tab}` remonta o conteúdo, e a animação de entrada dá a ele um
+          instante pra chegar — sem isso, ir de "biblioteca" (600 capas) pra
+          "mural" (três linhas) é um piscar que o olho lê como falha de
+          carregamento. Sobe 8px e clareia; 0,28s, que é curto o bastante pra
+          não atrasar quem já sabe pra onde vai. */}
+      <main key={tab} className="troca">
         {tab === "settings" && isAdmin && (
           <Libraries onChanged={() => refresh(filters)} />
         )}
@@ -363,19 +595,26 @@ export default function App() {
         )}
 
         {tab === "locadora" && (
-          <Experimentacao
+          <Locadora
             onPlay={setPlaying}
-            onDetails={setDetailsOf}
             onAbrirColecao={(id, titulo) => {
               setTab("library");
               setFilters({ collection: id, collectionName: titulo });
             }}
+          />
+        )}
+
+        {tab === "guia" && (
+          <Guia
+            onDetails={setDetailsOf}
             onExplorar={(f) => {
               setTab("library");
               setFilters(f);
             }}
           />
         )}
+
+        {tab === "perfil" && <Perfil />}
         {tab === "admin" && isAdmin && <Admin eu={me?.username ?? ""} />}
         {tab === "mural" && <Mural />}
         {tab === "collections" && <Collections onPlay={setPlaying} />}
@@ -505,6 +744,7 @@ export default function App() {
           workId={detailsOf}
           onClose={() => setDetailsOf(null)}
           onChanged={() => refresh(filters)}
+          isAdmin={isAdmin}
           // A ficha era beco sem saída: mostrava a obra e não deixava tocar.
           onPlay={(w) => {
             setDetailsOf(null);
@@ -837,54 +1077,6 @@ function Card({
 /// elas é o mesmo da revisão logo abaixo — repetir o vocabulário é o que faz as
 /// telas parecerem o mesmo produto (§14).
 ///
-/// A locadora vem primeiro porque é a que já existia e é a mais visual. O guia
-/// (R18) é a sala ao lado: a mesma biblioteca, lida por quem fez em vez de por
-/// capa.
-function Experimentacao({
-  onPlay,
-  onDetails,
-  onAbrirColecao,
-  onExplorar,
-}: {
-  onPlay: (w: WorkListItem) => void;
-  onDetails: (id: string) => void;
-  onAbrirColecao: (id: string, titulo: string) => void;
-  onExplorar: (f: Filters) => void;
-}) {
-  const [sala, setSala] = useState<"locadora" | "guia" | "retro" | "perfil">("locadora");
-
-  return (
-    <div className="revisao">
-      <div className="revisao-tabs">
-        <button className={sala === "locadora" ? "on" : ""} onClick={() => setSala("locadora")}>
-          locadora
-        </button>
-        <button className={sala === "guia" ? "on" : ""} onClick={() => setSala("guia")}>
-          wiki
-        </button>
-        {/* R24: duas salas, e elas são separadas de propósito.
-            O §6.2 decidiu "os dois, separados" porque isso é o que torna a
-            decisão reversível. Ela foi: o placar saiu na R32 e o **perfil**
-            entrou no lugar — nível, XP, conquistas, títulos e a comparação com
-            os amigos, que foi pedida e nunca existiu. A retrospectiva ficou,
-            porque descrever quem você é continua sendo outra coisa que dar
-            ponto. Nenhuma das duas cita a outra. */}
-
-        <button className={sala === "retro" ? "on" : ""} onClick={() => setSala("retro")}>
-          retrospectiva
-        </button>
-        <button className={sala === "perfil" ? "on" : ""} onClick={() => setSala("perfil")}>
-          perfil
-        </button>
-      </div>
-      {sala === "locadora" && <Locadora onPlay={onPlay} onAbrirColecao={onAbrirColecao} />}
-      {sala === "guia" && <Guia onDetails={onDetails} onExplorar={onExplorar} />}
-      {sala === "retro" && <Retrospectiva />}
-      {sala === "perfil" && <Perfil />}
-    </div>
-  );
-}
-
 /// A revisão tem duas entradas, e a ordem delas é a recomendação.
 ///
 /// **Pastas** primeiro porque é onde uma decisão vale centenas de arquivos —

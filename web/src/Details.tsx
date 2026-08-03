@@ -28,12 +28,20 @@ export default function Details({
   onChanged,
   onPickPerson,
   onPlay,
+  isAdmin = false,
 }: {
   workId: string;
   onClose: () => void;
   onChanged: () => void;
   onPickPerson?: (id: string, name: string) => void;
   onPlay?: (w: WorkListItem) => void;
+  /// R37: a **edição do grafo** — tag e relação — é de administrador.
+  ///
+  /// O backend passou a recusar (403), e a tela precisa parar de oferecer:
+  /// deixar o botão aparecendo pra quem vai levar 403 é o produto mentindo pra
+  /// si mesmo, que é o mesmo erro que o perfil evita ao só listar os títulos
+  /// que a pessoa desbloqueou (§48).
+  isAdmin?: boolean;
 }) {
   const [work, setWork] = useState<WorkDetail | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -118,7 +126,7 @@ export default function Details({
           work={work}
           serieDe={serieDe}
           editando={editando}
-          onEditar={() => setEditando((v) => !v)}
+          onEditar={isAdmin ? () => setEditando((v) => !v) : undefined}
           onPlay={onPlay}
           onClose={onClose}
           onChanged={touched}
@@ -145,7 +153,7 @@ export default function Details({
             <RelationSection work={work} />
           </div>
 
-          {editando && (
+          {editando && isAdmin && (
             <div className="cartaz-editor">
               <p className="cartaz-editor-t">edição do grafo</p>
               <TagForm work={work} onChanged={touched} />
@@ -578,7 +586,8 @@ function Cabeca({
   work: WorkDetail;
   serieDe: Record<string, string>;
   editando: boolean;
-  onEditar: () => void;
+  /// `undefined` quando quem olha não é administrador — e aí o botão nem nasce.
+  onEditar?: () => void;
   onPlay?: (w: WorkListItem) => void;
   onClose: () => void;
   onChanged: () => void;
@@ -648,13 +657,19 @@ function Cabeca({
               {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
             </button>
             <Veredito work={work} onChanged={onChanged} />
-            <button
-              className={`cartaz-ed${editando ? " on" : ""}`}
-              onClick={onEditar}
-              title="tags, coleções e relações"
-            >
-              ✎ editar
-            </button>
+            {/* R37: só nasce pra administrador. Tag e relação são metadado do
+                acervo — mudam o que todo mundo vê, e a curadoria (§8f) e o guia
+                leem `work_tag` como verdade. O backend recusa; a tela não pode
+                continuar oferecendo. */}
+            {onEditar && (
+              <button
+                className={`cartaz-ed${editando ? " on" : ""}`}
+                onClick={onEditar}
+                title="tags, coleções e relações"
+              >
+                ✎ editar
+              </button>
+            )}
           </div>
 
           {retomando && (

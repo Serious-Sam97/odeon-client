@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Retrospectiva from "./Retrospectiva";
 import {
   api,
   type Cadencia,
@@ -145,6 +146,20 @@ export default function Perfil({ userId }: { userId?: string }) {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* R36: A RETROSPECTIVA veio pra cá. O §40 a separou do placar "pra a
+          decisão ser reversível", e o `IDEIAS.md` §4 previu o destino dela:
+          *"pode sobreviver como tela de perfil"*. Sobreviveu — e faz mais
+          sentido aqui que numa aba: ela **descreve quem você é**, que é
+          literalmente o assunto desta tela.
+
+          Só no seu perfil. A retrospectiva de outra pessoa não é assunto de
+          ninguém, e a rota nem aceita usuário. */}
+      {p.meu && (
+        <section className="perfil-retro">
+          <Retrospectiva />
         </section>
       )}
 

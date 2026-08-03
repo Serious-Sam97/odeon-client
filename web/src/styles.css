@@ -89,38 +89,410 @@ code {
 
 /* ---------------------------------------------------------------- topbar */
 
+/* ------------------------------------------- R36: a barra de cima
+
+   Dois lados: acervo à esquerda, você e manutenção à direita. A fileira antiga
+   misturava os três na mesma linha e com o mesmo peso — o mesmo defeito que o
+   §12 corrigiu ao tirar as operações de servidor daqui, voltando por outro
+   caminho seis fases depois.
+
+   Os efeitos não são enfeite: cada um responde uma pergunta que a barra antiga
+   deixava a tela responder sozinha. E todos desligam em
+   `prefers-reduced-motion`, no fim deste bloco. */
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 20px 0;
-  background: linear-gradient(var(--bg) 70%, transparent);
-  flex-wrap: wrap;
+  gap: var(--s5);
+  padding: 18px var(--s4);
+  margin: 0 calc(var(--s4) * -1);
+  /* O vidro. `backdrop-filter` e não um fundo opaco: o conteúdo passando por
+     baixo é o que faz a barra parecer estar SOBRE a página em vez de ser o topo
+     dela — e é o que dá sentido a ela condensar. */
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid transparent;
+  transition:
+    padding 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.32s ease,
+    border-color 0.32s ease;
+}
+
+/* O HOLOFOTE. Um brilho que segue o mouse — duas variáveis CSS e um
+   `radial-gradient`, sem elemento extra pra posicionar. Numa fileira de sete
+   alvos pequenos, ele diz onde o dedo está antes de o rótulo acender. */
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: radial-gradient(
+    260px circle at var(--hx, 50%) var(--hy, 50%),
+    color-mix(in oklab, var(--accent) 9%, transparent),
+    transparent 70%
+  );
+}
+
+.topbar:hover::before {
+  opacity: 1;
+}
+
+/* CONDENSADA. Ao rolar, a barra encolhe e ganha uma linha embaixo: o conteúdo
+   passou a ser o assunto, e ela sai da frente sem sumir. O limiar tem
+   histerese no JS — sem ela a barra pisca quando a rolagem para em cima do
+   número. */
+.topbar.condensada {
+  padding: 9px var(--s4);
+  /* Mais opaca que no topo, e não menos: rolando, o que passa por baixo é
+     capa de filme — e um vidro que deixa oito pôsteres atravessarem faz o
+     rótulo da aba competir com um deles. Conferido por screenshot: a 92% a
+     leitura sofria. */
+  background: color-mix(in oklab, var(--bg) 97%, transparent);
+  backdrop-filter: blur(20px) saturate(1.1);
+  border-bottom-color: var(--line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
 .brand {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .brand-mark {
   color: var(--accent);
   font-size: 20px;
+  display: inline-block;
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* A marca pulsa quando há trabalho rodando no servidor. É o único lugar da tela
+   que diz isso sem ocupar espaço — a barra de varredura aparece embaixo, mas só
+   quando alguém já está olhando pra lá. */
+.brand-mark.trabalhando {
+  animation: odeon-pulsa 1.8s ease-in-out infinite;
+}
+
+@keyframes odeon-pulsa {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.86); }
+}
+
+.brand:hover .brand-mark {
+  transform: rotate(90deg);
 }
 
 .brand-name {
   font-weight: 700;
   letter-spacing: 0.28em;
   font-size: 15px;
+  transition: font-size 0.32s ease, letter-spacing 0.32s ease;
+}
+
+.topbar.condensada .brand-name {
+  font-size: 13px;
+  letter-spacing: 0.2em;
+}
+
+/* ------------------------------------------------------------ as sete abas */
+
+.abas {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.aba {
+  position: relative;
+  background: none;
+  border: 0;
+  color: var(--fg-muted);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.aba:hover {
+  color: var(--fg);
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+}
+
+.aba:active {
+  transform: scale(0.96);
+}
+
+.aba.on {
+  color: var(--fg);
+}
+
+/* O TRAÇO QUE DESLIZA.
+
+   Ele existe **fora** dos botões de propósito: uma borda por botão não desliza
+   de um pro outro — ela aparece num e some do outro, que é exatamente o que a
+   barra fazia antes. Assim ele viaja, e a viagem diz de onde você veio.
+
+   Posição e largura vêm do JS, medidas do DOM: os rótulos têm tamanhos
+   diferentes e a fonte é do sistema, então a única fonte de verdade sobre onde
+   a aba está é a própria aba. */
+.aba-traco {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.28, 1),
+    width 0.42s cubic-bezier(0.22, 1, 0.28, 1);
+}
+
+/* ---------------------------------------------------------- o lado direito */
+
+.barra-fim {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+}
+
+.gaveta-caixa {
+  position: relative;
+}
+
+.gaveta-abre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--fg-muted);
+  padding: 6px 10px;
+  font: 400 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.gaveta-abre:hover,
+.gaveta-abre.on {
+  color: var(--fg);
+  border-color: var(--line);
+  background: var(--bg-raised);
+}
+
+/* Estar numa tela de dentro acende a borda de âmbar — é o traço das abas dito
+   de outro jeito, porque aqui não há fileira pra ele correr. */
+.gaveta-abre.on {
+  border-color: var(--accent-dim);
+}
+
+/* Controles, e não uma engrenagem.
+
+   A primeira tentativa foi um gear de quatro dentes em SVG — e a 16px ele lia
+   como estrela, o que o screenshot mostrou na cara. Três trilhos com um botão
+   cada dizem "ajustes" em qualquer tamanho.
+
+   E os botões deslizam no hover: é o gesto do próprio ícone, o que é melhor que
+   girar uma coisa que não gira. Cada um com um atraso diferente, senão os três
+   andam como um bloco. */
+.controles {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.controles .knob {
+  transition: transform 0.42s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.gaveta-abre:hover .controles .k0,
+.gaveta-abre.on .controles .k0 {
+  transform: translateX(6px);
+}
+
+.gaveta-abre:hover .controles .k1,
+.gaveta-abre.on .controles .k1 {
+  transform: translateX(-6px);
+  transition-delay: 0.05s;
+}
+
+.gaveta-abre:hover .controles .k2,
+.gaveta-abre.on .controles .k2 {
+  transform: translateX(4px);
+  transition-delay: 0.1s;
+}
+
+.gaveta-abre:hover .engrenagem,
+.gaveta-abre.on .engrenagem {
+  transform: rotate(120deg);
+}
+
+/* O ANEL. `conic-gradient` até a fatia, o resto apagado — é o progresso pro
+   próximo nível em volta do seu nome, sem abrir o perfil e sem ocupar uma
+   entrada na fileira. A fase 5 aparecendo onde ela é útil. */
+/* O anel entra girando: de zero até a fatia, uma vez, na carga. Um arco que já
+   nasce cheio não é lido como progresso — é lido como enfeite. */
+@property --fatia {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.anel {
+  animation: odeon-anel 1.1s 0.35s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  background: conic-gradient(
+    var(--accent) var(--fatia, 0deg),
+    color-mix(in oklab, var(--fg) 14%, transparent) 0
+  );
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes odeon-anel {
+  from { --fatia: 0deg; }
+}
+
+.gaveta-abre:hover .anel {
+  transform: scale(1.08);
+}
+
+/* O miolo, pra o anel virar anel e não disco. */
+.anel::before {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.anel b {
+  position: relative;
+  font: 600 11px/1 system-ui, sans-serif;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.eu-nome {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A GAVETA. Abre a partir do botão — `transform-origin` no canto de cima à
+   direita — em vez de aparecer no meio da tela. Um menu que nasce longe do
+   que foi clicado faz o olho procurar. */
+.gaveta {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 168px;
+  display: grid;
+  gap: 1px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transform-origin: 100% 0;
+  animation: odeon-gaveta 0.22s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  z-index: 40;
+}
+
+@keyframes odeon-gaveta {
+  from { opacity: 0; transform: scale(0.9) translateY(-6px); }
+}
+
+.gaveta button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  padding: 9px 12px;
+  font: 400 13px/1 system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gaveta button:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--fg);
+}
+
+.gaveta button i {
+  font-style: normal;
+  font: 700 10px/1 system-ui, sans-serif;
+  background: var(--accent);
+  color: #17130a;
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .abas {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .eu-nome {
+    display: none;
+  }
+}
+
+/* Nada disso pode custar enjoo a quem pediu pra não ter movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .topbar,
+  .topbar::before,
+  .brand-mark,
+  .brand-name,
+  .aba,
+  .aba-traco,
+  .controles .knob,
+  .anel,
+  .gaveta {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 .search {
-  flex: 1;
-  min-width: 200px;
+  flex: 0 1 auto;
+  /* Antes era `flex: 1` numa barra que a envolvia inteira. Na barra nova ela
+     divide a direita com duas gavetas — crescer aqui empurraria o seu nome pra
+     fora da tela. */
+  width: clamp(140px, 22vw, 260px);
+  min-width: 0;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -424,43 +796,47 @@ button.ghost {
 
 /* Texto sublinhado, não cápsula. A cápsula fazia as abas parecerem botões, e
    elas ficavam indistinguíveis dos botões de manutenção que dividiam a barra. */
-.tabs {
-  display: flex;
-  gap: var(--s5);
-}
+/* A entrada do conteúdo ao trocar de aba. `key={tab}` no `<main>` remonta, e
+   isto dá ao conteúdo um instante pra chegar — sem ele, ir de 600 capas pra
+   três linhas é um piscar que o olho lê como falha.
 
-.tab {
+   ## Por que `top` e não `transform` — e é um bug pago
+
+   A primeira versão subia com `transform: translateY(8px)` e `fill-mode: both`.
+   Funcionava, e **quebrou todo overlay de dentro do `main`**: a caixa da
+   locadora voando pro centro, o menu de DVD, a tela da fita.
+
+   O motivo é uma linha do CSS que quase nunca importa: **qualquer `transform`
+   diferente de `none` faz o elemento virar bloco de contenção pra
+   `position: fixed` dos descendentes**. E o `fill-mode: both` deixa a animação
+   preenchendo pra sempre — o valor final é a matriz identidade, que é
+   `matrix(1,0,0,1,0,0)` e **não** é `none`.
+
+   Medido no navegador: `.mao-fundo`, que é `fixed inset:0`, devolvia
+   `{y: -277, h: 3907}` — o tamanho da página inteira — e a caixa pousava em
+   `y = 1326` numa viewport de 814. Ela ia pro foco e saía de vista.
+
+   `position: relative` + `top` dá o mesmo movimento e **não** cria bloco de
+   contenção pra `fixed` (só pra `absolute`, que aqui não existe). Custa um
+   reflow de 8px num elemento, o que é irrelevante, e é seguro por construção em
+   vez de seguro por 280ms. */
+main.troca {
   position: relative;
-  background: none;
-  border: 0;
-  color: var(--fg-muted);
-  padding: 6px 0;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  transition: color var(--snap);
+  animation: odeon-troca 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.tab:hover {
-  color: var(--fg);
+@keyframes odeon-troca {
+  from { opacity: 0; top: 8px; }
 }
 
-.tab.on {
-  color: var(--fg);
+@media (prefers-reduced-motion: reduce) {
+  main.troca {
+    animation: none;
+  }
 }
 
-/* o amarelo marca ONDE VOCÊ ESTÁ — não o que o servidor faz */
-.tab.on::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 2px;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
-}
+/* `.tabs` e `.tab` morreram com a barra antiga (R36). O amarelo que marcava
+   "onde você está" continua marcando — agora ele é `.aba-traco`, e desliza. */
 
 .pill {
   background: var(--accent);

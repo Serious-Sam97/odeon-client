@@ -613,7 +613,13 @@ function Calibragem({
       <header>
         <h3>Me diga o que você gosta</h3>
         <span className="rule" />
-        <span className="placar">
+        {/* Fileira de lâmpadas: quantas obras da calibração você já votou.
+            Chamava-se `.placar` e mudou de nome na R24 (§40) — não por
+            estética, mas porque o placar de verdade nasceu ali ao lado e o
+            §6.2 exige que dê pra desligá-lo sozinho. Um `grep placar` que
+            encontra um indicador de calibração no fluxo principal faz quem
+            for desligar concluir a coisa errada. */}
+        <span className="calib-luzes">
           {capas.map((c, i) => (
             <i key={c.id} className={votadas[c.id] ? "acesa" : undefined} style={{ ["--n" as string]: i }} />
           ))}

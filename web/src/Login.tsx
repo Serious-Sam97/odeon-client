@@ -5,6 +5,12 @@ import { api, API, auth, mixedContentProblem, setServer, type AuthUser } from ".
 /// login — o servidor diz qual dos dois pela rota `/api/auth/status`.
 export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUser) => void }) {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+  /// R26: quem chegou com um código de convite troca ele por conta aqui.
+  ///
+  /// A porta fica no login e não numa URL secreta porque o convidado recebeu um
+  /// código, não um link — e um código sem porta é um segredo sem fechadura.
+  const [resgatando, setResgatando] = useState(false);
+  const [codigo, setCodigo] = useState("");
   const [server, setServerInput] = useState(API);
   const [showServer, setShowServer] = useState(false);
   const [username, setUsername] = useState("");
@@ -47,8 +53,19 @@ export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUs
       return;
     }
 
+    if (resgatando && password !== confirm) {
+      setError("as senhas não conferem");
+      return;
+    }
+
     setBusy(true);
     try {
+      // Resgatar cria a conta e em seguida entra com ela: pedir pra pessoa
+      // digitar o mesmo usuário e senha de novo, logo depois de criá-los,
+      // seria cerimônia.
+      if (resgatando) {
+        await api.resgatar(codigo.trim(), username, password);
+      }
       const result = needsSetup
         ? await api.setup(username, password)
         : await api.login(username, password);
@@ -58,7 +75,7 @@ export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUs
       // O servidor devolve a MESMA mensagem pra usuário inexistente e senha
       // errada — distinguir entregaria a lista de usuários válidos.
       setError(
-        needsSetup
+        needsSetup || resgatando
           ? e instanceof Error
             ? e.message
             : String(e)
@@ -86,6 +103,25 @@ export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUs
               Nenhuma senha definida ainda. Crie o administrador — depois disso esta tela some e
               só o login continua.
             </p>
+          </>
+        ) : resgatando ? (
+          <>
+            <h1>Entrar com convite</h1>
+            <p className="muted small">
+              Você vai ser <b>convidado</b> deste Odeon: navega o acervo inteiro e assiste o que
+              pegar emprestado na locadora.
+            </p>
+            <label>
+              <span>código do convite</span>
+              <input
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                placeholder="32 caracteres"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </label>
           </>
         ) : (
           <h1>Entrar</h1>
@@ -132,7 +168,7 @@ export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUs
           />
         </label>
 
-        {needsSetup && (
+        {(needsSetup || resgatando) && (
           <label>
             <span>repita a senha</span>
             <input
@@ -148,11 +184,26 @@ export default function Login({ onAuthenticated }: { onAuthenticated: (u: AuthUs
         {error && <p className="error small">{error}</p>}
 
         <button className="primary" type="submit" disabled={busy}>
-          {busy ? "…" : needsSetup ? "criar administrador" : "entrar"}
+          {busy ? "…" : needsSetup ? "criar administrador" : resgatando ? "entrar com o convite" : "entrar"}
         </button>
 
-        {needsSetup && (
+        {(needsSetup || resgatando) && (
           <p className="muted small">Mínimo de 8 caracteres. A senha é cifrada com Argon2id.</p>
+        )}
+
+        {/* A porta do convite só existe depois que o servidor já tem dono —
+            na primeira execução não há quem convide. */}
+        {!needsSetup && (
+          <button
+            type="button"
+            className="login-alterna"
+            onClick={() => {
+              setResgatando((r) => !r);
+              setError(null);
+            }}
+          >
+            {resgatando ? "já tenho conta" : "tenho um código de convite"}
+          </button>
         )}
       </form>
     </div>

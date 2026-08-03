@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Aparelho, type ContaUsuario, type Trabalho } from "./api";
+import Convites from "./Convites";
+import {
+  api,
+  type Aparelho,
+  type ContaUsuario,
+  type OpcoesDaLocadora,
+  type Trabalho,
+} from "./api";
 
 /// A área de administração.
 ///
@@ -49,11 +56,194 @@ export default function Admin({ eu }: { eu: string }) {
 
       {saude && <Saudinha s={saude} />}
 
+      {/* R29: a loja vem primeiro entre as configurações porque é a única
+          seção desta tela que muda o que as **outras pessoas** veem — o resto
+          administra contas, aparelhos e trabalhos. */}
+      <Loja />
+
       <Pessoas usuarios={usuarios} eu={eu} proteger={proteger} />
+      {/* R26: convidar vem logo depois de "Pessoas" porque é o mesmo assunto —
+          quem tem conta aqui — visto pelo outro lado: quem ainda não tem. */}
+      <Convites />
       <Aparelhos lista={aparelhos} proteger={proteger} />
       <Trabalhos lista={trabalhos} proteger={proteger} />
       <Manutencao />
     </div>
+  );
+}
+
+// -------------------------------------------------------------------- loja
+
+/// As opções da locadora.
+///
+/// ## Por que estes quatro números existem
+///
+/// A R20 (§36) escondeu três deles no binário e um em coluna sem tela. O
+/// `IDEIAS.md` §3.2 é explícito: *"os números — tamanho do estoque, prazo,
+/// quantas por pessoa, escassez ligada ou não — são **opções no menu do
+/// servidor**, para serem customizados"*. Esta é a tela que faltava.
+///
+/// ## Cada campo diz o que muda, e não o que é
+///
+/// "Estoque: 40" não informa nada a quem não escreveu o código. **"40 das 600
+/// caixas ficam expostas por semana"** informa. É a mesma regra que fez a placa
+/// da estante dizer "3 de 113" em vez de "3": um número sem o denominador
+/// convida à conclusão errada (§14).
+function Loja() {
+  const [o, setO] = useState<OpcoesDaLocadora | null>(null);
+  const [salvo, setSalvo] = useState<OpcoesDaLocadora | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    api
+      .opcoesDaLocadora()
+      .then((r) => {
+        setO(r);
+        setSalvo(r);
+      })
+      .catch((e) => setErro(String(e)));
+  }, []);
+
+  if (erro) return <p className="error">{erro}</p>;
+  if (!o || !salvo) return null;
+
+  // Botão só aparece quando há o que salvar. Um "salvar" permanentemente
+  // clicável ensina a clicar sem olhar.
+  const mudou =
+    o.estoque !== salvo.estoque ||
+    o.prazo_dias !== salvo.prazo_dias ||
+    o.limite_por_pessoa !== salvo.limite_por_pessoa ||
+    o.escassez !== salvo.escassez;
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const r = await api.salvarOpcoesDaLocadora(o);
+      setO(r);
+      setSalvo(r);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      // Volta pro que está gravado: deixar na tela um número que o servidor
+      // recusou faria a próxima visita acreditar que ele valeu.
+      setO(salvo);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Secao
+      titulo="A locadora"
+      dica="vale pra todo mundo"
+      acao={
+        mudou ? (
+          <button className="chip" disabled={salvando} onClick={() => void salvar()}>
+            {salvando ? "salvando…" : "salvar"}
+          </button>
+        ) : undefined
+      }
+    >
+      <div className="adm-opcoes">
+        <Numero
+          rotulo="Estoque"
+          valor={o.estoque}
+          min={1}
+          max={1000}
+          onChange={(v) => setO({ ...o, estoque: v })}
+          explica={`caixas expostas na loja inteira por semana — não por estante. A vitrine vira toda segunda.`}
+        />
+        <Numero
+          rotulo="Prazo"
+          valor={o.prazo_dias}
+          min={1}
+          max={90}
+          sufixo={o.prazo_dias === 1 ? "dia" : "dias"}
+          onChange={(v) => setO({ ...o, prazo_dias: v })}
+          explica="depois disso a fita volta sozinha — menos se alguém estiver assistindo na hora."
+        />
+        <Numero
+          rotulo="Por pessoa"
+          valor={o.limite_por_pessoa}
+          min={1}
+          max={50}
+          sufixo={o.limite_por_pessoa === 1 ? "caixa" : "caixas"}
+          onChange={(v) => setO({ ...o, limite_por_pessoa: v })}
+          explica="quantas cada um segura ao mesmo tempo. O limite é a feature, não o obstáculo."
+        />
+
+        {/* A chave é a única opção desta seção que muda uma **regra**, e não um
+            número — por isso ela tem a linha mais longa. Desligar sem dizer o
+            que sai seria o botão que ninguém entende até já ter clicado. */}
+        <label className="adm-chave">
+          <input
+            type="checkbox"
+            checked={o.escassez}
+            onChange={(e) => setO({ ...o, escassez: e.target.checked })}
+          />
+          <span>
+            <b>Escassez</b>
+            <i>
+              {o.escassez
+                ? "uma cópia por caixa: quem pegou tirou da prateleira, e os outros pedem de volta."
+                : "ninguém barra ninguém — a loja continua curta, mas duas pessoas pegam a mesma caixa."}
+            </i>
+          </span>
+        </label>
+      </div>
+
+      {/* Uma fita que saiu sob a escassez continua trancada até voltar, e isso
+          precisa ser dito: desligar a chave e ver "fulano está com esta" leria
+          como a opção não ter pegado. */}
+      {!o.escassez && (
+        <p className="adm-nota">
+          O que já está emprestado continua exclusivo até voltar — a fita está com
+          alguém, e desligar uma opção não a traz de volta.
+        </p>
+      )}
+    </Secao>
+  );
+}
+
+/// Um número com nome, unidade e uma frase dizendo o que ele faz.
+function Numero({
+  rotulo,
+  valor,
+  min,
+  max,
+  sufixo,
+  explica,
+  onChange,
+}: {
+  rotulo: string;
+  valor: number;
+  min: number;
+  max: number;
+  sufixo?: string;
+  explica: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="adm-opcao">
+      <span className="adm-opcao-nome">{rotulo}</span>
+      <span className="adm-opcao-campo">
+        <input
+          type="number"
+          value={valor}
+          min={min}
+          max={max}
+          onChange={(e) => {
+            // Campo vazio vira o mínimo, e não `NaN`: um input controlado com
+            // NaN dentro para de aceitar digitação.
+            const n = Number.parseInt(e.target.value, 10);
+            onChange(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min);
+          }}
+        />
+        {sufixo && <i>{sufixo}</i>}
+      </span>
+      <span className="adm-opcao-explica">{explica}</span>
+    </label>
   );
 }
 
@@ -160,9 +350,14 @@ function Pessoas({
   return (
     <Secao
       titulo="Pessoas"
+      // Chamava-se "+ convidar" e mudou de nome na R26 (§42), e não por
+      // estética: ele cria um MORADOR — alguém com acesso total ao disco — com
+      // a senha definida aqui. O convite de verdade, que cria um convidado, é a
+      // seção logo abaixo. Dois botões com o mesmo rótulo e consequências de
+      // acesso diferentes é como um estranho vira morador por engano.
       acao={
         <button className="chip" onClick={() => setAbrindo(!abrindo)}>
-          {abrindo ? "cancelar" : "+ convidar"}
+          {abrindo ? "cancelar" : "+ criar conta"}
         </button>
       }
     >
@@ -180,7 +375,7 @@ function Pessoas({
             value={papel}
             onChange={(e) => setPapel(e.target.value as "admin" | "user")}
           >
-            <option value="user">usuário</option>
+            <option value="user">morador — vê e assiste tudo</option>
             <option value="admin">administrador</option>
           </select>
           <button

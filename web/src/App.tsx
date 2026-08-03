@@ -4,7 +4,11 @@ import Collections from "./Collections";
 import Details from "./Details";
 import Admin from "./Admin";
 import Gerenciar from "./Gerenciar";
+import Guia from "./Guia";
 import Locadora from "./Locadora";
+import Mural from "./Mural";
+import Perfil from "./Perfil";
+import Retrospectiva from "./Retrospectiva";
 import ForYou from "./ForYou";
 import Libraries from "./Libraries";
 import Login from "./Login";
@@ -16,7 +20,7 @@ import Servidor from "./Servidor";
 import {
   api,
   API,
-  auth,
+  auth, midia,
   mixedContentProblem,
   DEVICE_ID,
   Unauthorized,
@@ -38,6 +42,7 @@ type Tab =
   | "foryou"
   | "library"
   | "locadora"
+  | "mural"
   | "collections"
   | "live"
   | "review"
@@ -73,7 +78,13 @@ export default function App() {
     }
     api
       .me()
-      .then(setMe)
+      .then((u) => {
+        setMe(u);
+        // R27: o token de mídia é curto (8h) e separado do de sessão, então
+        // ele é renovado a cada boot. Sem `await`: a arte carrega quando ele
+        // chegar, e a API não depende dele pra nada.
+        void midia.renovar();
+      })
       .catch(() => auth.clear())
       .finally(() => setChecking(false));
   }, []);
@@ -186,7 +197,15 @@ export default function App() {
   };
 
   if (checking) return null;
-  if (!me) return <Login onAuthenticated={setMe} />;
+  if (!me)
+    return (
+      <Login
+        onAuthenticated={(u) => {
+          setMe(u);
+          void midia.renovar();
+        }}
+      />
+    );
 
   const isAdmin = me.role === "admin";
   // Quantas estão na tela agora. Dentro de coleção a lista é plana.
@@ -209,6 +228,10 @@ export default function App() {
               ["foryou", "para você"],
               ["library", "biblioteca"],
               ["locadora", "experimentação"],
+              // R33: a rede social saiu de dentro de "experimentação" e virou
+              // aba própria. *"Uma aba separada, que talvez venha a ser algo
+              // separado do Odeon"* — e daqui ela sai sem arrastar a locadora.
+              ["mural", "mural"],
               ["collections", "coleções"],
               ["live", "ao vivo"],
               ["review", "revisão"],
@@ -340,15 +363,21 @@ export default function App() {
         )}
 
         {tab === "locadora" && (
-          <Locadora
+          <Experimentacao
             onPlay={setPlaying}
+            onDetails={setDetailsOf}
             onAbrirColecao={(id, titulo) => {
               setTab("library");
               setFilters({ collection: id, collectionName: titulo });
             }}
+            onExplorar={(f) => {
+              setTab("library");
+              setFilters(f);
+            }}
           />
         )}
         {tab === "admin" && isAdmin && <Admin eu={me?.username ?? ""} />}
+        {tab === "mural" && <Mural />}
         {tab === "collections" && <Collections onPlay={setPlaying} />}
 
         {tab === "live" && <AoVivo isAdmin={isAdmin} />}
@@ -800,6 +829,58 @@ function Card({
       <button className="card-info" title="gerenciar" onClick={() => onManage(work.id)}>
         ⋯
       </button>
+    </div>
+  );
+}
+
+/// A aba `experimentação` passou a ter duas salas, e o gesto de trocar entre
+/// elas é o mesmo da revisão logo abaixo — repetir o vocabulário é o que faz as
+/// telas parecerem o mesmo produto (§14).
+///
+/// A locadora vem primeiro porque é a que já existia e é a mais visual. O guia
+/// (R18) é a sala ao lado: a mesma biblioteca, lida por quem fez em vez de por
+/// capa.
+function Experimentacao({
+  onPlay,
+  onDetails,
+  onAbrirColecao,
+  onExplorar,
+}: {
+  onPlay: (w: WorkListItem) => void;
+  onDetails: (id: string) => void;
+  onAbrirColecao: (id: string, titulo: string) => void;
+  onExplorar: (f: Filters) => void;
+}) {
+  const [sala, setSala] = useState<"locadora" | "guia" | "retro" | "perfil">("locadora");
+
+  return (
+    <div className="revisao">
+      <div className="revisao-tabs">
+        <button className={sala === "locadora" ? "on" : ""} onClick={() => setSala("locadora")}>
+          locadora
+        </button>
+        <button className={sala === "guia" ? "on" : ""} onClick={() => setSala("guia")}>
+          wiki
+        </button>
+        {/* R24: duas salas, e elas são separadas de propósito.
+            O §6.2 decidiu "os dois, separados" porque isso é o que torna a
+            decisão reversível. Ela foi: o placar saiu na R32 e o **perfil**
+            entrou no lugar — nível, XP, conquistas, títulos e a comparação com
+            os amigos, que foi pedida e nunca existiu. A retrospectiva ficou,
+            porque descrever quem você é continua sendo outra coisa que dar
+            ponto. Nenhuma das duas cita a outra. */}
+
+        <button className={sala === "retro" ? "on" : ""} onClick={() => setSala("retro")}>
+          retrospectiva
+        </button>
+        <button className={sala === "perfil" ? "on" : ""} onClick={() => setSala("perfil")}>
+          perfil
+        </button>
+      </div>
+      {sala === "locadora" && <Locadora onPlay={onPlay} onAbrirColecao={onAbrirColecao} />}
+      {sala === "guia" && <Guia onDetails={onDetails} onExplorar={onExplorar} />}
+      {sala === "retro" && <Retrospectiva />}
+      {sala === "perfil" && <Perfil />}
     </div>
   );
 }

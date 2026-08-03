@@ -72,6 +72,7 @@ export function mixedContentProblem(
 }
 
 const TOKEN_KEY = "odeon.token";
+const MEDIA_KEY = "odeon.media";
 
 /**
  * O token vive no localStorage e vai em `Authorization: Bearer`.
@@ -84,7 +85,13 @@ const TOKEN_KEY = "odeon.token";
 export const auth = {
   token: (): string | null => localStorage.getItem(TOKEN_KEY),
   setToken: (value: string) => localStorage.setItem(TOKEN_KEY, value),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    // O de mídia sai junto: uma sessão encerrada que deixasse bytes acessíveis
+    // por oito horas seria um "sair" que não sai. O servidor faz o mesmo do
+    // lado dele, no `revoke`.
+    localStorage.removeItem(MEDIA_KEY);
+  },
 };
 
 export interface AuthUser {
@@ -104,11 +111,42 @@ export class Unauthorized extends Error {
 }
 
 /**
+ * O token de mídia: curto, e **só abre bytes**.
+ *
+ * `<video src>`, `<img src>` e `<track src>` não mandam header, então o token
+ * precisa ir na URL — e URL vaza pra log de acesso e histórico de navegador.
+ * Até a R27 o que ia ali era o token de sessão: 90 dias, acesso total à API.
+ *
+ * Agora é um token separado, que vence em horas e não serve pra mais nada. Ele
+ * fica em memória e no `localStorage` pela mesma razão que o de sessão: um
+ * recarregamento não pode obrigar a buscar tudo de novo antes do primeiro
+ * pôster aparecer.
+ */
+export const midia = {
+  token: (): string | null => localStorage.getItem(MEDIA_KEY),
+  set: (value: string) => localStorage.setItem(MEDIA_KEY, value),
+  clear: () => localStorage.removeItem(MEDIA_KEY),
+
+  /// Pede um token novo. Chamado no boot e depois que a sessão nasce — e o
+  /// servidor aposenta os anteriores do mesmo usuário ao emitir.
+  renovar: async (): Promise<void> => {
+    try {
+      const r = await json<{ token: string }>("/api/auth/media-token", { method: "POST" });
+      midia.set(r.token);
+    } catch {
+      /* sem token de mídia a arte não carrega, mas a API continua de pé —
+         e a próxima tentativa acontece no próximo boot. */
+    }
+  },
+};
+
+/**
  * `<video src>`, `<img src>` e `<track src>` não mandam header. O servidor
- * aceita `?token=` só nas rotas de mídia, justamente por isso.
+ * aceita `?token=` só nas rotas de mídia — e desde a R27 **só aceita o token
+ * de mídia ali**, nunca o de sessão.
  */
 function withToken(url: string): string {
-  const token = auth.token();
+  const token = midia.token();
   if (!token) return url;
   return url + (url.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
 }
@@ -165,6 +203,29 @@ export type AppEvent =
       title: string;
       starts_at: string;
       user_id: string;
+    }
+  /// R33: chegou mensagem. **Só o aviso** — o barramento é aberto a todos os
+  /// aparelhos autenticados, então o texto não vem por aqui. Cada cliente
+  /// descarta o que não é seu pelo `para`.
+  | {
+      type: "mensagem";
+      de: string;
+      de_nome: string;
+      para: string;
+    }
+  /// R19: alguém mexeu na locadora.
+  ///
+  /// Um evento pras quatro ações porque quem ouve faz a mesma coisa com todas —
+  /// recarrega a prateleira. O que muda é a frase.
+  ///
+  /// Carregava um `circulo_id` que ninguém filtrava. Com uma loja só (R28), o
+  /// que acontece nela acontece pra todo mundo que está nela.
+  | {
+      type: "locadora";
+      acao: "pegou" | "devolveu" | "pediu" | "venceu";
+      caixa_id: string | null;
+      titulo: string | null;
+      quem_nome: string | null;
     };
 
 export interface WorkListItem {
@@ -564,6 +625,109 @@ export interface PersonDetail {
   person: Person;
   roles: { role: string; label: string; count: number }[];
   works: WorkListItem[];
+}
+
+/// R18 — o guia de cinema.
+///
+/// A diferença pro `Person` acima é o que vem junto: `terminadas` e `comecadas`
+/// são **suas**, não da pessoa. Sem elas isto seria uma lista de créditos, que
+/// qualquer site tem.
+///
+/// `obras` conta **títulos**, não obras: uma série inteira é um título só. Ver
+/// o cabeçalho de `backend/src/routes/guia.rs` pro que aconteceu antes desse
+/// rollup existir.
+export interface PessoaDoGuia {
+  id: string;
+  name: string;
+  image_path: string | null;
+  known_for: string | null;
+  obras: number;
+  terminadas: number;
+  comecadas: number;
+  posters: string[] | null;
+  total: number;
+}
+
+/// Um eixo que não é pessoa: gênero ou década.
+export interface FaixaDoGuia {
+  rotulo: string;
+  /// O que vai pro filtro da biblioteca: `genre:Terror`, ou o ano da década.
+  chave: string;
+  obras: number;
+  posters: string[] | null;
+}
+
+/// Uma curiosidade sobre a obra, montada no servidor.
+///
+/// O texto vem pronto de propósito: escrever a frase no cliente seria manter
+/// uma segunda gramática, e o backend já monta os `reasons` do score assim
+/// desde o M1. `tipo` serve pro ícone, não pra reescrever nada.
+export interface Curiosidade {
+  tipo: string;
+  texto: string;
+  /// "Wikidata" ou "Wikipédia" no que vem de fora; ausente no que sai do
+  /// próprio acervo. Crédito não é enfeite: a Wikipédia é CC BY-SA.
+  fonte?: string;
+  fonte_url?: string;
+}
+
+/// R34 — a revista da semana.
+///
+/// A capa do guia: um tema sorteado do acervo, os filmes que se encaixam, o
+/// ensaio (quando há chave do LLM) e o evento em cartaz. **Igual pra todo
+/// mundo**, e virando na mesma segunda-feira que a vitrine da locadora — é o
+/// que dá assunto em comum (`IDEIAS.md` §2.4).
+export interface FilmeDaCapa {
+  id: string;
+  titulo: string;
+  ano: number | null;
+  poster: string | null;
+  diretor: string | null;
+  /// A única coisa da capa que é sua.
+  visto: boolean;
+}
+
+export interface EventoDaSemana {
+  tipo: "obra" | "saga";
+  id: string;
+  titulo: string;
+  poster: string | null;
+  obras: number;
+  suas: number;
+  participou: boolean;
+  participantes: string[];
+}
+
+export interface Revista {
+  semana_de: string;
+  vira_em: string;
+  eixo: "genero" | "decada" | "pais" | "diretor" | "saga";
+  tema: string;
+  filmes: FilmeDaCapa[];
+  /// `null` quando não há chave do LLM ou o texto ainda não foi gerado. A tela
+  /// **omite a seção** — não mostra "carregando" nem inventa prosa (§18, §24).
+  ensaio: string | null;
+  /// O selo. Quem lê tem direito de saber que aquele parágrafo não foi escrito
+  /// por gente — a mesma regra do crédito `WIKIPÉDIA` das curiosidades (§32).
+  ensaio_por: string | null;
+  evento: EventoDaSemana | null;
+}
+
+export interface GuiaEixos {
+  direcao: PessoaDoGuia[];
+  elenco: PessoaDoGuia[];
+  trilha: PessoaDoGuia[];
+  generos: FaixaDoGuia[];
+  decadas: FaixaDoGuia[];
+  /// R22: de onde os filmes vêm. Só países com 2 obras ou mais — dos 33 do
+  /// acervo, 10 têm um filme só, e um país com uma obra não é prateleira.
+  paises: FaixaDoGuia[];
+  /// Quantos filmes NÃO são dos Estados Unidos.
+  ///
+  /// Vem junto porque sem ele o eixo diz "Estados Unidos 491" e o resto vira
+  /// rodapé. Este é o número que faz a região valer uma seção: é a pergunta
+  /// que ninguém conseguia fazer antes da R22.
+  fora_de_hollywood: number;
 }
 
 export interface Library {
@@ -1315,6 +1479,27 @@ export const api = {
 
   workCredits: (workId: string) => json<Credit[]>(`/api/works/${workId}/credits`),
 
+  // --- R18: o guia de cinema ---
+
+  /// A capa do guia inteira numa requisição. Seis rotas separadas repetiriam o
+  /// custo que a locadora já paga (§20) na aba ao lado.
+  guia: () => json<GuiaEixos>("/api/guia"),
+
+  /// R34: a capa. O índice acima continua onde estava — ele virou a parte de
+  /// consulta, atrás da revista.
+  revista: () => json<Revista>("/api/guia/revista"),
+
+  /// Buscada **depois** que o cartaz já está na tela: são sete consultas, e
+  /// nenhuma delas vale atrasar a leitura da sinopse.
+  curiosidades: (workId: string) =>
+    json<Curiosidade[]>(`/api/works/${workId}/curiosidades`),
+
+  guiaPessoas: (role: string, q?: string, offset = 0, limit = 40) => {
+    const p = new URLSearchParams({ role, limit: String(limit), offset: String(offset) });
+    if (q?.trim()) p.set("q", q.trim());
+    return json<PessoaDoGuia[]>(`/api/guia/pessoas?${p}`);
+  },
+
   // --- autenticação ---
 
   authStatus: () => json<{ needs_setup: boolean }>("/api/auth/status"),
@@ -1334,7 +1519,644 @@ export const api = {
     }),
 
   logout: () => json<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
+  // --- R19: a locadora, e R28: o estoque é do servidor ---
+
+  /// O que está FORA da prateleira, e o que voltou.
+  ///
+  /// Não devolve o estado das 746 caixas — devolve as poucas que estão em mãos.
+  /// Quem cruza com a estante é a tela, que já tem as caixas carregadas.
+  prateleira: () => json<Prateleira>("/api/locadora/prateleira"),
+
+  /// R20: a loja desta semana — as estantes já reivindicadas, rotacionadas e
+  /// cortadas. Uma requisição no lugar das doze que a tela fazia.
+  estantes: () => json<Loja>("/api/locadora/estantes"),
+
+  // --- R26: o convidado ---
+
+  convites: () => json<ConviteNaLista[]>("/api/convites"),
+
+  /// O código volta **uma vez só** — ele não fica guardado, só o SHA-256 dele.
+  convidar: (para?: string) =>
+    json<{ codigo: string; expira_em_dias: number; aviso: string }>("/api/convites", {
+      method: "POST",
+      body: JSON.stringify({ para: para ?? null }),
+    }),
+
+  revogarConvite: (para: string) =>
+    json<{ revogado: boolean }>(`/api/convites/${encodeURIComponent(para)}`, {
+      method: "DELETE",
+    }),
+
+  /// Público, como o login: quem resgata ainda não tem sessão.
+  resgatar: (codigo: string, username: string, password: string, display_name?: string) =>
+    json<{ ok: boolean; username: string }>("/api/convites/resgatar", {
+      method: "POST",
+      body: JSON.stringify({ codigo, username, password, display_name: display_name ?? null }),
+    }),
+
+  // --- R25: o mural, com o escopo que a R28 deu a ele ---
+  //
+  // Nenhuma tabela nova por trás: é um UNION sobre `play_event`, `emprestimo` e
+  // `avaliacao`, escopado por **você e seus amigos**.
+  feed: (limit?: number) =>
+    json<Mural>(`/api/feed${limit ? `?limit=${limit}` : ""}`),
+
+  // --- R30: a fita ---
+  //
+  // Chamada **no play**, não na montagem da estante.
+  fita: (workId: string) => json<Fita>(`/api/locadora/fita/${workId}`),
+
+  // --- R29: as opções da loja ---
+  //
+  // Ler é de qualquer morador; gravar, só de administrador.
+  opcoesDaLocadora: () => json<OpcoesDaLocadora>("/api/locadora/opcoes"),
+
+  salvarOpcoesDaLocadora: (o: OpcoesDaLocadora) =>
+    json<OpcoesDaLocadora>("/api/locadora/opcoes", {
+      method: "PUT",
+      body: JSON.stringify(o),
+    }),
+
+  // --- R33: a rede social ---
+
+  presenca: () => json<Presente[]>("/api/presenca"),
+
+  pessoas: (q?: string) =>
+    json<Achado[]>(`/api/pessoas${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+
+  postar: (texto: string, workId?: string) =>
+    json<{ id: string }>("/api/posts", {
+      method: "POST",
+      body: JSON.stringify({ texto, work_id: workId ?? null }),
+    }),
+
+  apagarPost: (id: string) =>
+    json<{ apagado: boolean }>(`/api/posts/${id}`, { method: "DELETE" }),
+
+  /// Uma chamada pros dois alvos, espelhando a tabela.
+  comentar: (alvo: { post_id: string } | { review_user: string; review_work: string }, texto: string) =>
+    json<{ id: string }>("/api/comentarios", {
+      method: "POST",
+      body: JSON.stringify({ ...alvo, texto }),
+    }),
+
+  apagarComentario: (id: string) =>
+    json<{ apagado: boolean }>(`/api/comentarios/${id}`, { method: "DELETE" }),
+
+  comentariosDaReview: (quem: string, obra: string) =>
+    json<Comentario[]>(`/api/avaliacao/${quem}/${obra}/comentarios`),
+
+  conversas: () => json<Conversa[]>("/api/mensagens"),
+
+  conversa: (com: string) => json<Mensagem[]>(`/api/mensagens/${com}`),
+
+  mandar: (para: string, texto: string) =>
+    json<{ id: number }>(`/api/mensagens/${para}`, {
+      method: "POST",
+      body: JSON.stringify({ texto }),
+    }),
+
+  // --- R28: amigos ---
+
+  amigos: () => json<MinhasAmizades>("/api/amigos"),
+
+  /// Pede **ou** aceita — é o mesmo gesto nas duas pontas, e quem sabe em qual
+  /// estado a relação está é o banco, não esta tela.
+  pedirAmizade: (id: string) =>
+    json<{ estado: "amigo" | "enviado"; recado: string }>(`/api/amigos/${id}`, {
+      method: "POST",
+    }),
+
+  /// Recusa, cancela ou desfaz: as três apagam a mesma linha.
+  desfazerAmizade: (id: string) =>
+    json<{ desfeita: boolean; era_amizade: boolean }>(`/api/amigos/${id}`, {
+      method: "DELETE",
+    }),
+
+  // --- R24: a retrospectiva ---
+  //
+  // O placar que morava aqui saiu na R32: era quatro números com um aviso
+  // mandando ignorá-los. A retrospectiva ficou — descrever quem você é continua
+  // sendo outra coisa que dar ponto.
+
+  retrospectiva: () => json<RetrospectivaDoUsuario>("/api/retrospectiva"),
+
+  // --- R32: o perfil ---
+
+  perfil: (userId?: string) =>
+    json<PerfilCompleto>(userId ? `/api/perfil/${userId}` : "/api/perfil"),
+
+  // --- R35: os desafios ---
+
+  desafios: () => json<MeusDesafios>("/api/desafios"),
+
+  salvarCadencia: (cadencia: Cadencia) =>
+    json<{ cadencia: Cadencia }>("/api/desafios/cadencia", {
+      method: "PUT",
+      body: JSON.stringify({ cadencia }),
+    }),
+
+  salvarPerfil: (p: {
+    titulo: string | null;
+    tags: string[];
+    bio: string | null;
+    vitrine: string[];
+  }) => json<{ ok: boolean }>("/api/perfil", { method: "PUT", body: JSON.stringify(p) }),
+
+  // --- R23: a nota e a resenha ---
+
+  avaliacoes: (workId: string) =>
+    json<AvaliacoesDaObra>(`/api/works/${workId}/avaliacao`),
+
+  /// `PUT` porque avaliar de novo é trocar de ideia, não criar uma segunda.
+  avaliar: (workId: string, nota: number, texto?: string) =>
+    json<{ ok: boolean }>(`/api/works/${workId}/avaliacao`, {
+      method: "PUT",
+      body: JSON.stringify({ nota, texto: texto ?? null }),
+    }),
+
+  desavaliar: (workId: string) =>
+    json<{ apagada: boolean }>(`/api/works/${workId}/avaliacao`, { method: "DELETE" }),
+
+  // --- R21: o menu de DVD ---
+
+  /// Tudo que o menu precisa, numa requisição.
+  menuDoDisco: (workId: string) => json<MenuDoDisco>(`/api/works/${workId}/menu`),
+
+  /// A grade de cenas. **Custa ~4s na primeira vez** — doze extrações de
+  /// quadro — e é instantânea depois. Por isso só é chamada quando alguém
+  /// entra na tela de cenas, e nunca ao abrir o menu.
+  cenasDoDisco: (workId: string) => json<Cena[]>(`/api/works/${workId}/cenas`),
+
+  alugar: (alvo: AlvoDaCaixa) =>
+    json<{ id: number; titulo: string; vence_em_dias: number }>("/api/locadora/alugar", {
+      method: "POST",
+      body: JSON.stringify(alvo),
+    }),
+
+  devolverEmprestimo: (id: number) =>
+    json<{ devolvido_como: CondicaoDaFita; atrasada: boolean }>(
+      `/api/locadora/devolver/${id}`,
+      { method: "POST" },
+    ),
+
+  pedirDeVolta: (id: number) =>
+    json<{ pedido_a: string }>(`/api/locadora/pedir/${id}`, { method: "POST" }),
+
+  /// Destrutivo: apaga o "continuar de onde parou". Quem chama confirma antes.
+  rebobinar: (alvo: AlvoDaCaixa) =>
+    json<{ rebobinadas: number }>("/api/locadora/rebobinar", {
+      method: "POST",
+      body: JSON.stringify(alvo),
+    }),
 };
+
+/// A caixa é uma obra avulsa **ou** a coleção de uma série — nunca as duas.
+/// É o mesmo par de colunas que o CHECK da migração 0021 impõe do outro lado.
+export type AlvoDaCaixa = { work_id: string } | { collection_id: string };
+
+export type CondicaoDaFita = "rebobinada" | "no-meio" | "terminada";
+
+/// As opções da loja. Moravam no círculo até a R28; hoje são do servidor, e a
+/// fase 2 (`IDEIAS.md` §3.2) põe uma tela em cima delas.
+export interface OpcoesDaLocadora {
+  /// Quantas caixas ficam expostas na **loja inteira** por semana — não por
+  /// estante. É a escala do `IDEIAS.md` §3.2.
+  estoque: number;
+  prazo_dias: number;
+  limite_por_pessoa: number;
+  /// Ligada, uma cópia por caixa. Desligada, sai **só o bloqueio**: a loja
+  /// continua curta e ninguém barra ninguém.
+  escassez: boolean;
+}
+
+/// Alguém que frequenta a loja, e quanto tem na mão.
+///
+/// São as pessoas do **servidor**, não as de um grupo: com estoque único quem
+/// te barra pode ser qualquer uma delas.
+export interface PessoaNaLoja {
+  id: string;
+  display_name: string;
+  na_mao: number;
+  /// Quantas fitas dela **alguém teve que rebobinar**. A reputação, e cada
+  /// unidade é uma vez em que outra pessoa gastou os segundos por causa dela.
+  zoadas: number;
+  /// E quantas ela rebobinou dos outros. O outro lado precisa existir: um
+  /// placar que só conta o defeito faz de todo mundo réu.
+  rebobinou: number;
+  /// Fitas que ela deixou no meio **agora**. Estado, não histórico — some no
+  /// instante em que alguém rebobina, e é a única das três que dá pra
+  /// consertar sozinha.
+  no_meio: number;
+}
+
+/// R30 — onde está esta fita.
+///
+/// **Só chega quando alguém põe pra tocar.** A estante não sabe, de propósito:
+/// *"você descobre quando põe pra tocar — não na estante, não antes"*.
+export interface Fita {
+  posicao_segundos: number;
+  duracao_segundos: number | null;
+  /// Quem deixou assim. `null` quando ninguém tocou, ou quando a conta sumiu —
+  /// a fita sobrevive ao dono.
+  deixada_por: string | null;
+  deixada_em: string | null;
+  /// Se fui eu que deixei assim. É o que decide se rebobinar é obrigatório:
+  /// pausar o próprio filme e voltar é continuar; encontrar a fita de outra
+  /// pessoa no minuto 47 é outra coisa.
+  minha: boolean;
+  /// DVD não é fita — ele lembra onde parou (§35).
+  vhs: boolean;
+}
+
+export interface Emprestada {
+  id: number;
+  /// O mesmo id que `/api/library` devolve — é por ele que a estante casa.
+  caixa_id: string;
+  serie: boolean;
+  titulo: string;
+  quem: string;
+  quem_nome: string;
+  meu: boolean;
+  pego_em: string;
+  vence_em: string;
+  pedido_em: string | null;
+  pedido_por_nome: string | null;
+  /// Se este empréstimo disputa a única cópia — é o que decide se a caixa some
+  /// da prateleira. Com a escassez desligada ele é `false`, e a caixa continua
+  /// exposta pra quem ainda pode pegá-la.
+  exclusivo: boolean;
+  /// A arte, pra caixa poder ser desenhada fora da estante. Existe porque a
+  /// rotação da R20 pode não expor esta semana a caixa que alguém levou — e
+  /// uma caixa invisível não tem como ser pedida de volta.
+  poster: string | null;
+  dominant_color: string | null;
+  ano: number | null;
+}
+
+export interface Devolvida {
+  caixa_id: string;
+  titulo: string;
+  quem_nome: string;
+  devolvido_em: string;
+  devolvido_como: CondicaoDaFita;
+  /// `membro` — devolveu; `prazo` — venceu e voltou sozinha.
+  devolvido_por: "membro" | "prazo";
+  atrasada: boolean;
+}
+
+export interface ConviteNaLista {
+  para: string | null;
+  criado_em: string;
+  expira_em: string;
+  usado_em: string | null;
+  usado_por_nome: string | null;
+  /// Vencido e não usado. A lista mostra em vez de sumir: quem convidou
+  /// precisa saber que o convite morreu sem ser usado.
+  vencido: boolean;
+}
+
+export interface Acontecimento {
+  /// `terminou` | `pegou` | `devolveu` | `pediu` | `avaliou`. Lista fechada:
+  /// um tipo que a tela não sabe dizer não vira linha muda, some.
+  tipo: string;
+  quando: string;
+  quem: string;
+  quem_id: string;
+  meu: boolean;
+  titulo: string;
+  obra_id: string | null;
+  poster: string | null;
+  detalhe: string | null;
+  /// O id do post, quando o acontecimento **é** um post — é por ele que o
+  /// comentário se pendura. `null` no resto: comentar um "fulano terminou X"
+  /// seria comentar um fato, não uma fala.
+  post_id: string | null;
+  comentarios: Comentario[];
+}
+
+/// R33 — um comentário, de post ou de review. A mesma forma nos dois lugares,
+/// porque é a mesma tabela e a mesma tela.
+export interface Comentario {
+  id: string;
+  quem: string;
+  quem_id: string;
+  meu: boolean;
+  texto: string;
+  criado_em: string;
+}
+
+/// Quem está aqui agora.
+export interface Presente {
+  id: string;
+  display_name: string;
+  /// O que está assistindo **agora**. `null` é "online e não está vendo nada" —
+  /// e a tela não inventa frase pra isso.
+  assistindo: string | null;
+  work_id: string | null;
+  poster: string | null;
+  /// É o que separa as duas listas pedidas (no servidor · entre amigos) sem
+  /// pedir duas consultas.
+  amigo: boolean;
+  eu: boolean;
+}
+
+export interface Achado {
+  id: string;
+  username: string;
+  display_name: string;
+  relacao: "amigo" | "enviado" | "recebido" | "nenhuma";
+}
+
+export interface Conversa {
+  com: string;
+  display_name: string;
+  ultima: string | null;
+  quando: string | null;
+  nao_lidas: number;
+}
+
+export interface Mensagem {
+  id: number;
+  minha: boolean;
+  texto: string;
+  criado_em: string;
+}
+
+export interface Mural {
+  acontecimentos: Acontecimento[];
+  /// Quantas pessoas apareceram. Um mural com um nome só não é uma conversa —
+  /// e a tela diz isso em vez de parecer completa.
+  vozes: number;
+  /// Quantas poderiam aparecer: você mais os seus amigos.
+  pessoas: number;
+}
+
+/// Alguém do servidor, visto de onde você está.
+export interface Alguem {
+  id: string;
+  username: string;
+  display_name: string;
+  desde: string;
+}
+
+/// R28 — amizade é entre duas contas que já existem, com pedido e aceite.
+///
+/// As quatro listas vêm juntas porque são a mesma pergunta ("quem são as outras
+/// pessoas daqui?") separada por estado — quatro requisições poderiam voltar de
+/// estados diferentes se alguém aceitasse um pedido no meio.
+export interface MinhasAmizades {
+  amigos: Alguem[];
+  /// Pedidos que chegaram pra mim.
+  recebidos: Alguem[];
+  /// Pedidos que eu mandei e ninguém respondeu.
+  enviados: Alguem[];
+  /// Quem mais está no servidor, sem relação nenhuma comigo.
+  no_servidor: Alguem[];
+}
+
+export interface ItemDaRetrospectiva {
+  rotulo: string;
+  nota: string | null;
+  imagem: string | null;
+}
+
+export interface BlocoDaRetrospectiva {
+  chave: string;
+  titulo: string;
+  /// Montada no servidor, como os `reasons` do score (§8b) e as curiosidades
+  /// (§32) — montá-la aqui seria uma segunda gramática pra manter.
+  frase: string;
+  detalhe?: ItemDaRetrospectiva[];
+}
+
+export interface RetrospectivaDoUsuario {
+  blocos: BlocoDaRetrospectiva[];
+  /// Quantos blocos ficaram calados por falta de material. A tela diz isso em
+  /// vez de deixar a pessoa concluir que o Odeon não sabe nada dela.
+  calados: number;
+  desde: string | null;
+}
+
+/// R32 — o perfil, e o placar que ele substitui.
+///
+/// O §40 entregou quatro números numa aba escondida com um aviso mandando
+/// ignorá-los. Aqui há nível, XP, uma lista longa de conquistas, títulos e tags
+/// desbloqueáveis, campo livre, vitrine — e a comparação com os amigos, que foi
+/// pedida e nunca existiu.
+export type CamadaDaConquista =
+  | "facil"
+  | "media"
+  | "dificil"
+  | "impossivel"
+  | "nivel"
+  | "saga";
+
+export interface ConquistaNaTela {
+  chave: string;
+  nome: string;
+  descricao: string;
+  camada: CamadaDaConquista;
+  pontos: number;
+  /// Se ela também serve de título no perfil.
+  titulo: boolean;
+  /// E se libera uma tag.
+  tag: string | null;
+  /// `null` enquanto trancada.
+  em: string | null;
+}
+
+export interface ProgressoDoUsuario {
+  xp: number;
+  nivel: number;
+  /// Onde o nível atual começou e onde o próximo começa. Servidos, e não
+  /// recalculados aqui: a curva é regra, e regra mora num lugar só.
+  xp_do_nivel: number;
+  xp_do_proximo: number;
+  desbloqueadas: number;
+  total: number;
+}
+
+/// R35 — um desafio: tarefa com prazo, sorteada **por pessoa**.
+///
+/// O oposto do guia (§2.4): a revista é igual pra todo mundo, o desafio é seu.
+export interface DesafioNaTela {
+  id: string;
+  chave: string;
+  alvo: string | null;
+  xp: number;
+  vence_em: string;
+  cumprido_em: string | null;
+  /// A frase pronta. Montada no servidor porque o rótulo e o alvo moram lá —
+  /// mandar os dois separados faria a tela remontar a gramática.
+  rotulo: string;
+}
+
+export type Cadencia = "diaria" | "tres_dias" | "semanal";
+
+export interface MeusDesafios {
+  cadencia: Cadencia;
+  desafios: DesafioNaTela[];
+}
+
+export interface NaVitrine {
+  id: string;
+  titulo: string;
+  ano: number | null;
+  poster: string | null;
+}
+
+export interface AmigoNoPlacar {
+  id: string;
+  display_name: string;
+  nivel: number;
+  xp: number;
+  desbloqueadas: number;
+  titulo: string | null;
+  eu: boolean;
+}
+
+export interface PerfilCompleto {
+  user_id: string;
+  username: string;
+  display_name: string;
+  meu: boolean;
+  progresso: ProgressoDoUsuario;
+  /// A chave do título; `titulo_nome` é o que se mostra.
+  titulo: string | null;
+  titulo_nome: string | null;
+  tags: string[];
+  bio: string | null;
+  vitrine: NaVitrine[];
+  conquistas: ConquistaNaTela[];
+  amigos: AmigoNoPlacar[];
+  /// Só vem no seu próprio perfil: o que dá pra escolher.
+  titulos_disponiveis: [string, string][];
+  tags_disponiveis: string[];
+}
+
+export interface AvaliacaoDeAlguem {
+  user_id: string;
+  quem: string;
+  nota: number;
+  texto: string | null;
+  atualizado_em: string;
+  meu: boolean;
+}
+
+export interface AvaliacoesDaObra {
+  minha: AvaliacaoDeAlguem | null;
+  /// As dos seus amigos — **não** uma média global.
+  ///
+  /// A média de estranhos é o IMDb com passos extras. A nota de gente que você
+  /// conhece diz alguma coisa.
+  de_amigos: AvaliacaoDeAlguem[];
+  media: number | null;
+  quantas: number;
+}
+
+/// Um capítulo, como o container o declara.
+export interface Capitulo {
+  inicio: number;
+  fim: number;
+  /// `null` quando o "título" é vazio, `Chapter 01` ou o próprio timecode —
+  /// que é o caso de 98,4% dos filmes deste acervo. Exibir um timecode como
+  /// nome de capítulo seria mentir com cara de metadado (§18).
+  titulo: string | null;
+}
+
+export interface Cena {
+  segundos: number;
+  imagem: string;
+  /// `capitulo` quando o disco disse onde a cena começa, `regular` quando foi
+  /// o relógio que dividiu. A tela usa isto pra escrever a legenda certa, não
+  /// pra mudar o desenho.
+  origem: "capitulo" | "regular";
+}
+
+export interface MenuDoDisco {
+  work_id: string;
+  media_file_id: string;
+  titulo: string;
+  ano: number | null;
+  cor: string | null;
+  backdrop: string | null;
+  duracao: number | null;
+  /// `null` quando não há de onde continuar — e aí o item nem existe no menu.
+  posicao: number | null;
+  terminado: boolean;
+  capitulos: Capitulo[];
+  /// Idiomas distintos, na ordem das faixas do disco.
+  legendas: string[];
+  /// Onde a cena de fundo começa. **Sorteada a cada abertura**, no miolo do
+  /// filme — abrir o mesmo disco duas vezes dá dois planos diferentes.
+  cena_de_fundo: number;
+  /// O clima: o índice da estante que reivindicaria este filme na locadora.
+  ///
+  /// Era um gênero cru vindo de um `SELECT … LIMIT 1` sem ordenação, e o
+  /// sintetizador reduzia isso a três variantes — daí *a música é igual em
+  /// todos os filmes*. Agora é a mesma ordem de reivindicação da prateleira,
+  /// então o filme que mora na estante de terror abre um menu de terror.
+  clima: number;
+  clima_nome: string;
+}
+
+/// Uma caixa exposta nesta semana.
+///
+/// Os nomes são os do servidor e não os de `LibraryEntry` — esta é uma
+/// resposta da locadora, não da biblioteca, e traduzir no meio do caminho só
+/// criaria um terceiro vocabulário.
+export interface CaixaExposta {
+  id: string;
+  serie: boolean;
+  titulo: string;
+  ano: number | null;
+  poster: string;
+  dominant_color: string | null;
+  temporadas: number;
+  media_file_id: string | null;
+  position_seconds: number | null;
+  estante: number;
+  total: number;
+}
+
+export interface EstanteExposta {
+  nome: string;
+  /// Quantas caixas esta estante tem **no acervo**, não quantas estão à vista.
+  /// A placa diz "16 de 113" com isso.
+  total: number;
+  caixas: CaixaExposta[];
+}
+
+export interface Loja {
+  estantes: EstanteExposta[];
+  /// Quantas caixas o acervo tem nas estantes, **inteiro**.
+  ///
+  /// Servido, e não somado aqui: uma estante que o sorteio não contemplou não
+  /// vem na resposta, e somar os totais das que vieram esconde o acervo dela.
+  no_acervo: number;
+  /// A segunda-feira desta rotação.
+  semana_de: string;
+  /// Quando a vitrine vira. É o que torna a rotação promessa, não sorteio.
+  vira_em: string;
+  ultimo_ano_vhs: number;
+}
+
+export interface Prateleira {
+  opcoes: OpcoesDaLocadora;
+  pessoas: PessoaNaLoja[];
+  emprestadas: Emprestada[];
+  devolvidas: Devolvida[];
+  posso_pegar: number;
+  /// O corte entre fita e disco, servido pelo servidor.
+  ///
+  /// **Não é constante daqui de propósito.** O backend usa o mesmo número pra
+  /// decidir se uma caixa rebobina; se os dois divergissem, uma caixa desenhada
+  /// como VHS recusaria o rebobinar — a mesma família do botão que dizia "ver
+  /// as 644" e abria 1.424 (§30).
+  ultimo_ano_vhs: number;
+}
 
 export function formatDuration(seconds: number | null): string {
   if (!seconds || !isFinite(seconds)) return "—";

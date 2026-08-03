@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  type AvaliacoesDaObra,
   COLLECTION_KINDS,
   RELATION_KINDS,
   type Collection,
+  type Comentario,
+  type Curiosidade,
   type MediaFileSummary,
   type WorkDetail,
   type WorkListItem,
@@ -124,6 +127,15 @@ export default function Details({
         <div className="cartaz-corpo">
           {work.overview && <p className="cartaz-sinopse">{work.overview}</p>}
 
+          {/* Logo depois da sinopse: você acabou de ler o que o filme é, e a
+              pergunta natural seguinte é o que ele tem a ver com o resto da
+              sua estante. */}
+          <Curiosidades workId={work.id} />
+
+          {/* Depois das curiosidades: a leitura vai do que a obra é, pro que
+              ela tem a ver com a sua estante, e só então pro que você achou. */}
+          <Avaliacoes workId={work.id} />
+
           <CreditSection work={work} onPick={onPickPerson} />
 
           <div className="cartaz-duas">
@@ -146,6 +158,334 @@ export default function Details({
     </div>
   );
 }
+
+/// R23 — a nota e a resenha.
+///
+/// **Cinco estrelas, e não dez nem meia.** Meia-estrela dá impressão de
+/// precisão que ninguém tem sobre um filme; cinco degraus é o que uma locadora
+/// usava e é o que a pessoa consegue distinguir.
+///
+/// O texto é opcional de propósito: a maior parte das avaliações do mundo é só
+/// a nota, e exigir prosa faria a nota não ser dada.
+///
+/// E o que aparece aqui são **os seus amigos**, não uma média global — a de
+/// estranhos é o IMDb com passos extras (§39).
+function Avaliacoes({ workId }: { workId: string }) {
+  const [dados, setDados] = useState<AvaliacoesDaObra | null>(null);
+  const [editando, setEditando] = useState(false);
+  const [nota, setNota] = useState(0);
+  const [texto, setTexto] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  /// Sobre qual estrela o ponteiro está — é o que faz a fileira responder
+  /// antes do clique, como um controle de verdade.
+  const [pairando, setPairando] = useState(0);
+
+  const carregar = useCallback(() => {
+    api
+      .avaliacoes(workId)
+      .then((d) => {
+        setDados(d);
+        setNota(d.minha?.nota ?? 0);
+        setTexto(d.minha?.texto ?? "");
+      })
+      .catch(() => setDados(null));
+  }, [workId]);
+
+  useEffect(carregar, [carregar]);
+
+  const salvar = async (n: number, t: string) => {
+    setSalvando(true);
+    try {
+      await api.avaliar(workId, n, t);
+      setEditando(false);
+      carregar();
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const apagar = async () => {
+    setSalvando(true);
+    try {
+      await api.desavaliar(workId);
+      setNota(0);
+      setTexto("");
+      setEditando(false);
+      carregar();
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (!dados) return null;
+
+  const visiveis = dados.minha ? [dados.minha, ...dados.de_amigos] : dados.de_amigos;
+
+  return (
+    <section className="cartaz-secao avaliacoes">
+      <div className="aval-topo">
+        <h4>O que a gente achou</h4>
+        {/* A média só existe quando alguém avaliou. Um "—" no lugar dela
+            ensinaria a não olhar pra este canto (§24). */}
+        {dados.media !== null && (
+          <span className="aval-media">
+            {dados.media.toFixed(1)}
+            <i>
+              {dados.quantas} {dados.quantas === 1 ? "nota" : "notas"}
+            </i>
+          </span>
+        )}
+      </div>
+
+      {/* A sua nota, sempre clicável — dar e trocar são o mesmo gesto. */}
+      <div className="aval-minha">
+        <div
+          className="estrelas"
+          onMouseLeave={() => setPairando(0)}
+          role="radiogroup"
+          aria-label="sua nota"
+        >
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              className={`estrela${n <= (pairando || nota) ? " acesa" : ""}`}
+              disabled={salvando}
+              onMouseEnter={() => setPairando(n)}
+              onClick={() => {
+                setNota(n);
+                // Clicar numa estrela já grava. Exigir "salvar" pra uma nota
+                // transformaria um gesto em formulário — e o texto, que é o
+                // que de fato precisa de confirmação, tem o botão dele.
+                void salvar(n, texto);
+              }}
+              title={`${n} de 5`}
+              aria-checked={n === nota}
+              role="radio"
+            >
+              ★
+            </button>
+          ))}
+        </div>
+
+        {nota > 0 && !editando && (
+          <button className="aval-link" onClick={() => setEditando(true)}>
+            {dados.minha?.texto ? "editar o que você escreveu" : "escrever algo"}
+          </button>
+        )}
+        {nota > 0 && (
+          <button className="aval-link apagar" disabled={salvando} onClick={apagar}>
+            tirar a nota
+          </button>
+        )}
+      </div>
+
+      {editando && (
+        <div className="aval-editor">
+          <textarea
+            value={texto}
+            maxLength={2000}
+            rows={4}
+            placeholder="o que ficou depois que acabou"
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <div className="aval-editor-acoes">
+            <button onClick={() => (setEditando(false), setTexto(dados.minha?.texto ?? ""))}>
+              cancelar
+            </button>
+            <button
+              className="cartaz-play"
+              disabled={salvando || nota === 0}
+              onClick={() => void salvar(nota, texto)}
+            >
+              guardar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {visiveis.length > 0 && (
+        <ul className="aval-lista">
+          {visiveis.map((a) => (
+            <li key={a.user_id} className={a.meu ? "meu" : ""}>
+              <span className="aval-quem">{a.meu ? "você" : a.quem}</span>
+              {/* `aria-label` com o número, e as estrelas escondidas do
+                  leitor de tela: o texto da fileira tem cinco glifos sempre
+                  (é a parte apagada que dá a proporção), então lido em voz
+                  alta ele diria "cinco estrelas" pra uma nota 3. */}
+              <span className="aval-nota" aria-label={`${a.nota} de 5`}>
+                <span aria-hidden="true">
+                  {"★".repeat(a.nota)}
+                  <i>{"★".repeat(5 - a.nota)}</i>
+                </span>
+              </span>
+              {a.texto && <p>{a.texto}</p>}
+              {/* R33: a review foi pedida com "as pessoas podem comentar"
+                  explícito (§3.4). É a mesma tabela e a mesma tela do
+                  comentário do mural — comentário é comentário. */}
+              <ComentariosDaReview quem={a.user_id} obra={workId} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/// Os comentários de uma review.
+///
+/// **Buscados em separado**, e só quando a lista existe: a ficha já faz sete
+/// consultas de curiosidade, e um comentário é a coisa menos urgente da tela.
+/// Enquanto não chegam, não há esqueleto — a mesma regra que a seção de
+/// curiosidades usa logo abaixo.
+function ComentariosDaReview({ quem, obra }: { quem: string; obra: string }) {
+  const [lista, setLista] = useState<Comentario[] | null>(null);
+  const [texto, setTexto] = useState("");
+  const [abrindo, setAbrindo] = useState(false);
+
+  const carregar = useCallback(() => {
+    api.comentariosDaReview(quem, obra).then(setLista).catch(() => setLista([]));
+  }, [quem, obra]);
+
+  useEffect(carregar, [carregar]);
+
+  const enviar = async () => {
+    if (!texto.trim()) return;
+    await api
+      .comentar({ review_user: quem, review_work: obra }, texto.trim())
+      .catch(() => {});
+    setTexto("");
+    setAbrindo(false);
+    carregar();
+  };
+
+  if (!lista) return null;
+
+  return (
+    <div className="comentarios">
+      {lista.map((c) => (
+        <div key={c.id} className="comentario">
+          <b>{c.meu ? "Você" : c.quem}</b>
+          <span>{c.texto}</span>
+          {c.meu && (
+            <button
+              className="comentario-x"
+              title="apagar"
+              onClick={() => void api.apagarComentario(c.id).then(carregar).catch(() => {})}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      {abrindo ? (
+        <div className="comentar-caixa">
+          <input
+            autoFocus
+            value={texto}
+            maxLength={500}
+            placeholder="responder"
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void enviar();
+              if (e.key === "Escape") setAbrindo(false);
+            }}
+          />
+        </div>
+      ) : (
+        <button className="comentar-abrir" onClick={() => setAbrindo(true)}>
+          comentar
+        </button>
+      )}
+    </div>
+  );
+}
+
+/// Curiosidades sobre a obra, tiradas do próprio acervo.
+///
+/// **Nada aqui é inventado.** Toda frase é derivada do grafo e do seu
+/// histórico — o porquê de não usarmos trivia de terceiro nem texto gerado está
+/// no cabeçalho de `backend/src/routes/curiosidades.rs` e em `IDEIAS.md` §6.3.
+///
+/// Buscada em separado do resto do cartaz: são sete consultas, e a sinopse não
+/// pode esperar por elas. Enquanto não chegam, **não há esqueleto nem
+/// "carregando"** — a seção simplesmente não existe ainda. Um bloco cinza
+/// piscando por 200ms no meio da leitura é pior que a seção aparecer.
+///
+/// E quando a obra não rende curiosidade nenhuma, a seção também não nasce.
+/// Uma tela que sempre diz alguma coisa ensina a não ser lida (§24).
+function Curiosidades({ workId }: { workId: string }) {
+  const [itens, setItens] = useState<Curiosidade[] | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    setItens(null);
+    api
+      .curiosidades(workId)
+      .then((c) => vivo && setItens(c))
+      .catch(() => vivo && setItens([]));
+    return () => {
+      vivo = false;
+    };
+  }, [workId]);
+
+  if (!itens || itens.length === 0) return null;
+
+  return (
+    <section className="cartaz-secao curiosidades">
+      <h3>Você sabia</h3>
+      <ul>
+        {itens.map((c) => (
+          <li key={c.texto} className={`cur cur-${c.tipo}`}>
+            <span className="cur-ico" aria-hidden="true">
+              {ICONE[c.tipo] ?? "◈"}
+            </span>
+            <span>
+              {c.texto}
+              {/* Crédito e link. A Wikipédia é CC BY-SA e atribuir não é
+                  opcional; o Wikidata é CC0 e não exige nada, mas o link vai
+                  junto assim mesmo — curiosidade que não se deixa conferir é a
+                  mesma adivinhação que o §8b recusa no score. */}
+              {c.fonte &&
+                (c.fonte_url ? (
+                  <a
+                    className="cur-fonte"
+                    href={c.fonte_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {c.fonte}
+                  </a>
+                ) : (
+                  <span className="cur-fonte">{c.fonte}</span>
+                ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/// Um símbolo por tipo. Texto, não emoji colorido: o resto do Odeon é preto,
+/// âmbar e a cor da obra, e um emoji cheio de cor rompe isso — a mesma razão
+/// pela qual a marca é `◉` e não 🎬.
+const ICONE: Record<string, string> = {
+  // do filme (Wikidata / Wikipédia)
+  premio: "★",
+  dinheiro: "$",
+  baseado: "❧",
+  local: "⌖",
+  fotografia: "◐",
+  producao: "❝",
+  // do seu acervo
+  direcao: "✦",
+  trilha: "♪",
+  elenco: "◎",
+  raridade: "◈",
+  duracao: "⧗",
+  ano: "⌛",
+  voce: "●",
+};
 
 // ------------------------------------------------------------ formatação
 

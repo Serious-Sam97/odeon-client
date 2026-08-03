@@ -32,6 +32,23 @@ export default function Admin({ eu }: { eu: string }) {
 
   useEffect(carregar, [carregar]);
 
+  /// Só a lista de trabalhos, e não as quatro chamadas do `carregar`.
+  ///
+  /// É ela que anda enquanto um aquecimento roda; recarregar contas, aparelhos
+  /// e diagnóstico a cada dois segundos seria pagar quatro requisições pra ver
+  /// um número mudar.
+  const recarregarTrabalhos = useCallback(() => {
+    api.trabalhos().then(setTrabalhos).catch(() => {});
+  }, []);
+
+  /// O painel acompanha o que está rodando, e para quando nada está.
+  const rodando = trabalhos.some((j) => j.state === "running");
+  useEffect(() => {
+    if (!rodando) return;
+    const t = window.setInterval(recarregarTrabalhos, 2000);
+    return () => window.clearInterval(t);
+  }, [rodando, recarregarTrabalhos]);
+
   const proteger = (fn: () => Promise<unknown>) => async () => {
     setErro(null);
     try {
@@ -67,6 +84,7 @@ export default function Admin({ eu }: { eu: string }) {
       <Convites />
       <Aparelhos lista={aparelhos} proteger={proteger} />
       <Trabalhos lista={trabalhos} proteger={proteger} />
+      <Aquecimentos lista={trabalhos} recarregar={recarregarTrabalhos} />
       <Manutencao />
     </div>
   );
@@ -549,6 +567,117 @@ function Trabalhos({
       </table>
     </Secao>
   );
+}
+
+// ----------------------------------------------------------- aquecimentos
+
+/// Os três aquecimentos, e o `kind` do job que cada um abre.
+///
+/// A ordem é a do que se pergunta primeiro: *"como dou refresh nas coleções
+/// para pegar filmes novos?"* foi o pedido, e a resposta honesta era **por
+/// `curl`**.
+const AQUECER = [
+  {
+    id: "sagas" as const,
+    kind: "saga",
+    titulo: "Sagas dos filmes",
+    texto:
+      "Pergunta ao TMDB a que franquia cada filme pertence, cria as coleções que faltam e baixa as capas delas. Roda de novo sem repetir trabalho.",
+  },
+  {
+    id: "trivia" as const,
+    kind: "trivia",
+    titulo: "Curiosidades",
+    texto: "Preenche o cache de trivia das obras identificadas.",
+  },
+  {
+    id: "producao" as const,
+    kind: "producao",
+    titulo: "Ficha de produção",
+    texto: "Orçamento, bilheteria, estúdios e países — um GET por filme.",
+  },
+];
+
+/// Os aquecimentos, que até aqui não tinham porta.
+///
+/// **É o defeito do §27 outra vez**: três rotas existiam sem nenhum cliente, e
+/// as três só eram alcançáveis por `curl`. A do §3.5 do `IDEIAS-2.md` foi
+/// pedida com todas as letras — *"como dou refresh nas coleções para pegar
+/// filmes novos?"* —, e as outras duas estavam do lado dela, no mesmo estado.
+///
+/// Não há ensaio aqui, ao contrário da manutenção logo abaixo: aquecimento não
+/// reescreve o acervo, ele preenche o que está vazio. O que ele faz aparece em
+/// **Trabalhos**, que é onde o progresso já morava.
+function Aquecimentos({ lista, recarregar }: { lista: Trabalho[]; recarregar: () => void }) {
+  const [erro, setErro] = useState<string | null>(null);
+  const [pedindo, setPedindo] = useState<string | null>(null);
+
+  const chamar = async (qual: (typeof AQUECER)[number]["id"]) => {
+    setPedindo(qual);
+    setErro(null);
+    try {
+      const r = await api.aquecer(qual);
+      // A rota responde `started: false` com o motivo em vez de erro — e o
+      // motivo é a informação. Engoli-lo seria repetir o §8b.
+      if (!r.started) setErro(r.reason ?? "o servidor não abriu o trabalho");
+      recarregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPedindo(null);
+    }
+  };
+
+  return (
+    <Secao titulo="Aquecimentos" dica="o progresso aparece em Trabalhos">
+      {erro && <p className="error">{erro}</p>}
+      <div className="mnt-grade">
+        {AQUECER.map((a) => {
+          // O último job deste tipo. A lista já vem do mais novo pro mais
+          // velho, então o primeiro que casa é o que interessa.
+          const job = lista.find((j) => j.kind === a.kind) ?? null;
+          const rodando = job?.state === "running";
+          return (
+            <div key={a.id} className="mnt">
+              <h4>{a.titulo}</h4>
+              <p>{a.texto}</p>
+              <div className="mnt-acoes">
+                <button
+                  className="ghost small-btn"
+                  disabled={rodando || pedindo === a.id}
+                  onClick={() => void chamar(a.id)}
+                >
+                  {rodando ? "rodando…" : pedindo === a.id ? "…" : "aquecer"}
+                </button>
+                <span className="mnt-res">{estadoDoAquecimento(job)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Secao>
+  );
+}
+
+/// A frase de um aquecimento, do que o próprio job publica.
+///
+/// Enquanto roda, o que importa é onde ele está; terminado, o que importa é
+/// quando foi e o que rendeu. Nunca rodou é o que se diz quando nunca rodou —
+/// e não um "0 de 0" com cara de resultado (§18).
+function estadoDoAquecimento(j: Trabalho | null): string {
+  if (!j) return "nunca rodou";
+  const p = (j.progress ?? {}) as Record<string, unknown>;
+  const atual = typeof p.atual === "string" ? p.atual : null;
+
+  if (j.state === "running") {
+    const quanto = j.total ? `${j.done ?? 0} de ${j.total}` : `${j.done ?? 0}`;
+    return atual ? `${quanto} · ${atual}` : quanto;
+  }
+
+  const partes: string[] = [`${ESTADO[j.state] ?? j.state} ${dia(j.started_at)}`];
+  if (j.error) partes.push(j.error.slice(0, 60));
+  else partes.push(resumo(j));
+  return partes.join(" · ");
 }
 
 // ------------------------------------------------------------- manutenção

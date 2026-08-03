@@ -420,13 +420,21 @@ export default function MenuDVD({
       if (!disco) return;
       setFase("saindo");
       // O que o player espera. O menu não inventa uma segunda forma de obra —
-      // manda o mínimo que `Player` usa e deixa o resto com quem já sabe.
+      // manda o que `Player` usa e deixa o resto com quem já sabe.
+      //
+      // **`duration_seconds` faz parte desse mínimo, e faltava** (R39). Sem
+      // ele o player não tem a duração da obra e cai na duração do stream —
+      // que, sendo a playlist HLS do tipo `event`, nasce nos vinte segundos já
+      // produzidos e cresce enquanto o ffmpeg escreve. Era o *"começa com um
+      // tempo mega pequeno e vai aumentando"*, e só acontecia nos filmes
+      // abertos pelo menu de DVD.
       aoTocar(
         {
           id: disco.work_id,
           title: disco.titulo,
           year: disco.ano,
           media_file_id: disco.media_file_id,
+          duration_seconds: disco.duracao,
           poster: null,
           dominant_color: disco.cor,
         } as WorkListItem,

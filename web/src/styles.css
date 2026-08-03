@@ -4072,6 +4072,90 @@ label.stacked input {
     0 20px 34px -20px #000;
 }
 
+/* ---------------------------------------- R41: a loja abrindo
+
+   O que havia era a frase "acendendo as luzes…" e mais nada: as quarenta
+   caixas chegavam juntas e a página saltava quando chegavam. É o mesmo defeito
+   que o §47 resolveu na grade de capítulos — moldura vazia em vez da palavra
+   "carregando" —, e a resposta aqui é a mesma com o vocabulário da loja: a
+   prateleira nasce com a madeira desenhada e as caixas caem uma a uma.
+
+   A altura vem antes do conteúdo. É ela que faz a caixa cair DENTRO do espaço
+   que já existia, em vez de criar espaço ao chegar.
+
+   **E ela é a mesma pra toda prateleira, cheia ou vazia.** Medido: das 13
+   estantes desta loja, 7 mediam 230px (só DVD) e 6 mediam 246px (alguma VHS,
+   que é 16px mais alta). Reservar um dos dois números deixaria metade das
+   estantes saltando 16px na chegada das caixas — então a fileira passa a ter
+   piso fixo, e a reserva bate por construção em vez de por acerto.
+
+   O ganho é dobrado: com todas as prateleiras da mesma altura, as tábuas se
+   alinham entre estantes de conteúdo diferente. A sobra vai pro alto, porque a
+   fileira alinha as caixas pela base (`align-items: flex-end`). */
+.fileira {
+  min-height: var(--h-prateleira);
+}
+
+/* A placa vazia respira junto, e não pisca: um esqueleto que pulsa promete uma
+   espera longa. Esta só existe pra reservar a linha do nome. */
+.estante.vazia .placa span,
+.estante.vazia .placa i {
+  display: block;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--line);
+  opacity: 0.5;
+  animation: estante-respira 1.9s var(--atraso, 0ms) ease-in-out infinite;
+}
+
+.estante.vazia .placa span {
+  width: 140px;
+  height: 18px;
+}
+
+.estante.vazia .placa i {
+  width: 74px;
+}
+
+@keyframes estante-respira {
+  50% {
+    opacity: 0.22;
+  }
+}
+
+/* A caixa caindo na prateleira.
+
+   `backwards` é o que segura ela invisível durante o próprio atraso — sem isso
+   as quarenta aparecem todas no primeiro quadro e só então começam a cair, que
+   é o oposto do que se quer.
+
+   Ela cai e assenta: a sobra de 4px no fim é o peso do objeto batendo na
+   madeira. Sem esse quadro extra o movimento lê como fade, não como queda.
+
+   **A queda é `translate`, e não `transform`.** A caixa já tem uma pose em 3D
+   (`rotateX(3deg) rotateY(22deg)`) e um `transition` de `transform` que o hover
+   usa. Animar `transform` aqui apagaria a pose durante a queda — a caixa cairia
+   plana e giraria de repente ao pousar. A propriedade `translate` compõe com a
+   `transform` em vez de substituí-la, e deixa o hover intacto. */
+.fileira .caixa {
+  animation: caixa-cai 0.42s var(--atraso, 0ms) cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+
+@keyframes caixa-cai {
+  from {
+    opacity: 0;
+    translate: 0 -26px;
+  }
+  70% {
+    opacity: 1;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
 /* ------------------------------------------------------------- a caixa */
 
 .caixa {
@@ -4098,6 +4182,14 @@ label.stacked input {
   --w: 104px;
   --h: 200px;
   --d: 28px;
+}
+
+/* A altura de uma prateleira: a caixa mais alta da loja — a fita, logo acima —
+   mais o respiro de 46px que a `.fileira` reserva pro hover. Mexer em
+   `.caixa.vhs { --h }` sem mexer aqui volta a fazer a estante saltar quando as
+   caixas chegam (R41). */
+.locadora {
+  --h-prateleira: 246px;
 }
 
 /* Caixa de coleção: a série inteira numa caixa só, e uma série de oito
@@ -8054,25 +8146,130 @@ a.cur-fonte:focus-visible {
   color: var(--accent-dim);
 }
 
-/* O carretel. Gira ao contrário, que é o ponto inteiro do gesto. */
-.rebo-carretel {
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  border: 3px solid var(--accent-dim);
-  border-top-color: var(--accent-hot);
-  border-right-color: transparent;
-  animation: odeon-rebobinar 0.45s linear infinite reverse;
+/* R45 — a janela da fita, e os dois carretéis.
+
+   O que havia era um anel girando ao contrário. O §46 anotou a dívida: *"falta
+   o objeto girando, o ruído e o tranco no fim"*. O objeto é este — a mesma
+   janela que a caixa já desenha na estante, na mesma linguagem, porque é a
+   mesma fita.
+
+   O giro NÃO vem de `@keyframes`: ele é escrito quadro a quadro como
+   `--giro-a` e `--giro-b`. Uma animação de velocidade constante não sabe
+   desacelerar junto com um ponteiro que vem do banco. */
+.rebo-fita {
+  /* Grande o bastante pra o giro ser LEGÍVEL: na primeira medida (190px) os
+     dentes tinham 12px e o movimento sumia — um disco girando pequeno demais é
+     um disco parado. */
+  width: 268px;
+  height: 152px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #22222a, #121216 62%, #0a0a0d);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 30px -16px #000;
+  display: grid;
+  place-items: center;
 }
 
-@keyframes odeon-rebobinar {
-  to {
-    transform: rotate(360deg);
+.rebo-janela {
+  position: relative;
+  width: 80%;
+  height: 68%;
+  border-radius: 4px;
+  background: #08080b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 7%;
+}
+
+.rebo-carretel {
+  position: relative;
+  width: 46%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #16161b 0 26%, #241f1c 27%, #100c0a 46%, #09070a 54%, transparent 55%);
+}
+
+/* O ROLO DE FITA. `--restante` é quanta fita ainda está no carretel da direita,
+   de 1 a 0 — o mesmo número do ponteiro. O da esquerda engorda enquanto o da
+   direita afina: a fita voltando pro lugar de onde saiu, que é literalmente o
+   que "rebobinar" quer dizer. A escala vai de 0,45 (só o miolo) a 1 (cheio). */
+.rebo-rolo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* O rolo é marrom de fita magnética, e claro o bastante pra a diferença
+     entre cheio e vazio ser vista de longe. */
+  background: radial-gradient(circle, transparent 0 42%, #4a3a2c 43%, #2a1f19 84%, #120d0c 100%);
+  box-shadow: inset 0 0 0.7em rgba(0, 0, 0, 0.85);
+}
+
+.rebo-carretel.a .rebo-rolo {
+  transform: scale(calc(0.45 + (1 - var(--restante, 1)) * 0.55));
+}
+
+.rebo-carretel.b .rebo-rolo {
+  transform: scale(calc(0.45 + var(--restante, 1) * 0.55));
+}
+
+/* Os dentes são o que deixa o giro VISÍVEL: um disco liso girando é um disco
+   parado. Doze deles, como na caixa da estante. */
+.rebo-dentes {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  aspect-ratio: 1;
+  margin: -20% 0 0 -20%;
+  border-radius: 50%;
+  /* Contraste alto de propósito: são eles que provam que o disco está girando,
+     e um dente cinza sobre preto a 40px não prova nada. */
+  background: repeating-conic-gradient(from 0deg, #6b6b7a 0 12deg, #14141a 12deg 30deg);
+  box-shadow: inset 0 0 0 2px #0c0c10;
+}
+
+.rebo-carretel.a .rebo-dentes {
+  rotate: var(--giro-a, 0deg);
+}
+
+.rebo-carretel.b .rebo-dentes {
+  rotate: var(--giro-b, 0deg);
+}
+
+/* O vidro: o reflexo que diz que existe uma janela na frente dos carretéis. */
+.rebo-vidro {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(104deg, rgba(255, 255, 255, 0.1) 0 14%, transparent 26%, transparent 74%, rgba(255, 255, 255, 0.05) 84%, transparent 92%);
+  pointer-events: none;
+}
+
+/* O TRANCO.
+
+   *"A parada seca com um pulo de um quadro."* O mecanismo bate no fim de curso:
+   a fita inteira recua 3px e volta, uma vez, em 160ms. Não é um tremor de tela
+   de jogo — é um solavanco só, e é o que separa "parou" de "chegou". */
+.rebobinando.trancou .rebo-fita {
+  animation: odeon-tranco 0.16s cubic-bezier(0.2, 0.9, 0.3, 1) 1;
+}
+
+@keyframes odeon-tranco {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+  35% {
+    transform: translateX(-3px) rotate(-0.7deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rebo-carretel {
+  .rebobinando.trancou .rebo-fita {
     animation: none;
   }
 }
@@ -9184,6 +9381,248 @@ a.cur-fonte:focus-visible {
    as conquistas da Steam. A paleta continua a da casa — o âmbar do §12 é o que
    acende, e o que está trancado é o mesmo cinza do resto do produto. */
 
+/* ------------------------------------------- R43: os enfeites do perfil
+
+   Rosto, capa e cor. A cor vem do servidor num hex e entra por variável — o
+   perfil inteiro se tinge com ela, e a lista de cores continua existindo num
+   lugar só (`enfeites.rs`). */
+
+/* A CAPA: arte de um filme do acervo. O degradê no pé não é enfeite — é o que
+   deixa o nome legível em cima de um backdrop claro. */
+.perfil-capa {
+  height: clamp(140px, 22vw, 240px);
+  margin: 0 calc(-1 * var(--s5)) 0;
+  background-size: cover;
+  background-position: center 32%;
+  border-radius: var(--radius) var(--radius) 0 0;
+  position: relative;
+}
+
+.perfil-capa::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(transparent 30%, var(--bg) 98%);
+}
+
+/* Com capa, o topo sobe pra dentro dela: o rosto fica montado na borda, que é
+   o gesto que todo perfil com capa faz — e sem ele a capa vira só uma faixa. */
+.perfil-topo.com-capa {
+  margin-top: clamp(-70px, -7vw, -46px);
+  position: relative;
+  z-index: 1;
+}
+
+.perfil-rosto,
+.perfil-topo .avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  /* A moldura é literalmente uma moldura: o anel em volta do rosto é onde a
+     cor escolhida aparece primeiro. */
+  border: 2px solid var(--perfil-cor);
+  box-shadow: 0 0 0 4px var(--bg), 0 8px 22px -10px #000;
+  background: var(--bg-raised);
+}
+
+/* A cor escolhida manda no que o perfil tem de próprio — e só nisso. Barra,
+   título e placar respondem a ela; o resto da interface continua âmbar,
+   porque cromo é sistema (§12). */
+.perfil .perfil-titulo,
+.perfil .perfil-vitrine h3,
+.perfil .perfil-placar h3,
+.perfil .perfil-conquistas h3 {
+  color: var(--perfil-cor);
+}
+
+.perfil .perfil-barra span {
+  background: var(--perfil-cor);
+}
+
+.perfil-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+/* O link é discreto de propósito: ele é uma porta de saída, não uma chamada. */
+.perfil-link {
+  font: 600 10.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.perfil-link:hover {
+  color: var(--perfil-cor);
+  border-color: var(--perfil-cor);
+}
+
+/* ------------------------------------------------- as galerias de escolha */
+
+.editor-dica {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--fg-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.galeria {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.enfeite {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--fg-muted);
+  font: 600 9px/1.2 system-ui, sans-serif;
+}
+
+.galeria.larga .enfeite {
+  width: 132px;
+}
+
+.enfeite img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* O nome fica em cima da arte, na base, sobre um véu — fora dela a grade
+   ficaria com alturas diferentes conforme o tamanho do nome. */
+.enfeite span {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 10px 4px 4px;
+  background: linear-gradient(transparent, #000c);
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enfeite.on {
+  border-color: var(--perfil-cor, var(--accent));
+  box-shadow: 0 0 0 2px var(--perfil-cor, var(--accent));
+}
+
+/* Trancado: a arte aparece apagada e em cinza. Ver o que falta é o ponto —
+   esconder seria transformar a recompensa em surpresa que ninguém persegue. */
+.enfeite.trancado {
+  cursor: not-allowed;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.enfeite.trancado span {
+  color: var(--accent-dim);
+}
+
+.enfeite.nenhum,
+.enfeite.cor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.enfeite.cor {
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+}
+
+.enfeite.cor span {
+  display: none;
+}
+
+/* O nome da cor fica FORA do disco: nenhuma tinta é legível sobre as quatro. */
+.enfeite.cor {
+  overflow: visible;
+  margin-bottom: 18px;
+}
+
+.enfeite-nome {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  font: 600 9px/1 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------- a vitrine, montável */
+
+.vitrine-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: var(--s3);
+}
+
+.vitrine-edit .vitrine-caixa {
+  position: relative;
+  width: 84px;
+}
+
+.vitrine-mexer {
+  display: flex;
+  justify-content: space-between;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.vitrine-mexer button {
+  flex: 1;
+  font: 600 11px/1 system-ui, sans-serif;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.vitrine-mexer button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.vitrine-mexer .tirar:hover {
+  color: var(--erro, #d9736a);
+  border-color: currentColor;
+}
+
+.vitrine-vaga {
+  font: 600 9.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding-bottom: 22px;
+}
+
 .perfil-topo {
   display: flex;
   align-items: flex-start;
@@ -9371,6 +9810,13 @@ a.cur-fonte:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s3);
+}
+
+/* R43: a vitrine vazia é uma seção como as outras, e precisa do mesmo respiro
+   embaixo. Sem isto o convite "monte em editar perfil" encostava no título da
+   retrospectiva e os dois liam como um parágrafo só. */
+.perfil-vitrine {
+  margin-bottom: var(--s6);
 }
 
 .vitrine-caixa {
@@ -9648,6 +10094,35 @@ a.cur-fonte:focus-visible {
   border-top: 1px solid var(--line);
   font: 400 12.5px/1.5 system-ui, sans-serif;
   color: var(--fg-muted);
+}
+
+/* A versão do "para você" (R41): a mesma lista, mais discreta.
+
+   Ela divide a tela com o herói da curadoria, então não pode competir com ele
+   — sem fundo elevado, sem moldura inteira, e o título no tamanho do resto da
+   página. É a mesma lista e a mesma regra: nada que pareça cobrança. */
+.desafios.compacto {
+  margin: var(--s4) 0;
+  padding: var(--s3) 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+
+.desafios.compacto h3 {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.desafios.compacto .desafios-prazo {
+  margin-left: auto;
+}
+
+.desafios.compacto .desafio-lista li {
+  padding: 6px 0;
 }
 
 /* ------------------------------------------- R34: a revista da semana
@@ -10214,6 +10689,381 @@ a.cur-fonte:focus-visible {
 .gente-linha button.sim {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* --------------------------------------- R42: a marca de uma pessoa
+
+   Desenhada, não baixada — a régua do §12. A cor sai do nome por hash, então a
+   mesma conta tem a mesma marca em toda tela e em toda sessão. */
+.avatar {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.avatar-fundo {
+  fill: oklch(0.32 0.06 var(--hue));
+  stroke: oklch(0.42 0.07 var(--hue));
+  stroke-width: 1;
+}
+
+/* Textura, não desenho: a figura existe pra separar duas contas que caíram em
+   cores parecidas, e uma figura que compete com a inicial deixa a lista mais
+   difícil de ler — que é o oposto do que um avatar faz numa lista. */
+.avatar-marca {
+  fill: oklch(0.52 0.09 var(--hue));
+  opacity: 0.42;
+}
+
+.avatar-letra {
+  fill: oklch(0.94 0.02 var(--hue));
+  font: 600 17px/1 system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Está vendo alguma coisa agora. É a mesma informação da luz verde da
+   presença, dita no próprio retrato pra não virar uma segunda marca ao lado. */
+.avatar-anel {
+  fill: none;
+  stroke: #4ea36b;
+  stroke-width: 2;
+}
+
+.avatar.vendo {
+  filter: drop-shadow(0 0 5px color-mix(in oklab, #4ea36b 55%, transparent));
+}
+
+/* O rosto escolhido (R43) entra no lugar da marca desenhada, e o recorte é o
+   mesmo: quem escolheu e quem não escolheu ocupam o mesmo espaço na lista. */
+.avatar.rosto {
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-raised);
+}
+
+.avatar.rosto.vendo {
+  box-shadow: 0 0 0 2px #4ea36b;
+}
+
+/* ------------------------------------- R42: a sala de gente, melhorada
+
+   Era nome e um botão. A linha passou a ter altura de retrato, então ela
+   alinha pelo centro e não mais pela linha de base do nome. */
+.gente-linha {
+  align-items: center;
+}
+
+.gente-quem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* O que a pessoa está vendo. Não é link: o cartaz da obra alheia é uma segunda
+   decisão, e esta linha é sobre a pessoa. */
+.gente-vendo {
+  font: 400 11.5px/1.2 system-ui, sans-serif;
+  color: #7fbb92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gente-acoes {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Os atalhos são mais leves que a ação de amizade: "falar" e "perfil" são
+   portas, e "desfazer" é uma decisão. Peso igual faria as três competirem. */
+.gente-linha .gente-atalho {
+  border-color: transparent;
+  color: var(--accent-dim);
+  padding: 7px 10px;
+}
+
+.gente-linha .gente-atalho:hover {
+  color: var(--accent);
+  border-color: var(--line);
+}
+
+/* `margin-left: auto` no primeiro botão empurrava a ação pra direita quando ela
+   era o único elemento à direita do nome. Agora quem empurra é `.gente-acoes`, e
+   a regra antiga deixaria um buraco entre "falar" e "desfazer". */
+.gente-linha .gente-acoes button:first-of-type {
+  margin-left: 0;
+}
+
+/* ------------------------------------------ R44: o que você agendou
+
+   Uma faixa entre a sintonia e a linha do tempo. Some quando não há nada (§24)
+   — e por isso ela nunca precisa dizer que está vazia. */
+.agendados {
+  margin: var(--s5) 0;
+}
+
+.agendados-lista {
+  list-style: none;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agendados-lista button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  cursor: pointer;
+  text-align: left;
+  font: 400 13px/1.2 system-ui, sans-serif;
+  color: var(--fg-muted);
+}
+
+.agendados-lista button:hover {
+  border-color: var(--accent);
+}
+
+.agendados-lista b {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* A hora é o que se procura nesta lista, então ela é a única coisa em âmbar. */
+.agendados-lista i {
+  font-style: normal;
+  font: 600 10.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* ------------------------------------------- R46: assistir junto
+
+   A conversa fica AO LADO do filme, não por cima: o §4.6 pediu "conversa ao
+   lado durante a sessão", e uma caixa flutuando sobre a imagem seria a conversa
+   disputando espaço com o que se veio ver. */
+.player.com-sala .player-stage {
+  right: 320px;
+}
+
+.player.com-sala .player-scrim,
+.player.com-sala .player-top {
+  right: 320px;
+}
+
+.junto {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: rgba(8, 8, 11, 0.92);
+  border-left: 1px solid var(--line);
+}
+
+.junto-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.junto-topo h3 {
+  margin: 2px 0 0;
+  font: 400 19px/1.15 var(--font-display);
+  color: var(--fg);
+}
+
+/* QUEM ESTÁ SEGURANDO. A consequência que o §4.6 avisou que viria — "a conexão
+   mais lenta manda no ritmo de todo mundo" — dita com nome. Sem o nome, a
+   espera é inexplicável; com ele, é uma decisão social do host. */
+.junto-esperando {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 34%, transparent);
+  font: 400 12px/1.3 system-ui, sans-serif;
+  color: var(--accent);
+}
+
+.junto-gente {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.junto-gente li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 13px/1 system-ui, sans-serif;
+  color: var(--fg-muted);
+}
+
+.junto-gente b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.junto-host {
+  font-style: normal;
+  font: 600 8.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  border-radius: 999px;
+  padding: 3px 6px;
+}
+
+.junto-estado {
+  margin-left: auto;
+  font: 600 9px/1 system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-dim);
+}
+
+/* "Sumiu" não é "carregando", e a cor diz isso antes da palavra: um segura a
+   sala, o outro já saiu dela. */
+.junto-estado.sumiu {
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.junto-gente li.pronto b {
+  color: var(--fg);
+}
+
+.junto-expulsar {
+  margin-left: 6px;
+  font: 600 11px/1 system-ui, sans-serif;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.junto-expulsar:hover {
+  color: #d9736a;
+  border-color: currentColor;
+}
+
+.junto-conversa {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: var(--s3);
+}
+
+.junto-conversa p {
+  margin: 0;
+  font: 400 13px/1.4 system-ui, sans-serif;
+  color: var(--fg);
+}
+
+.junto-conversa b {
+  color: var(--accent-dim);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.junto-rodape {
+  margin: 0;
+  font: 400 10.5px/1.3 system-ui, sans-serif;
+  color: var(--fg-muted);
+}
+
+/* Quem não manda vê a frase no lugar dos botões: o controle não fica
+   desabilitado, ele não existe (§53). */
+.quem-manda {
+  font: 600 10px/1 system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-dim);
+}
+
+/* O CONVITE, no mural. Não há tabela de convite: a amizade já é o aceite. */
+.salas-abertas {
+  display: grid;
+  gap: 8px;
+  margin-bottom: var(--s4);
+}
+
+.sala-aberta {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.sala-aberta img {
+  width: 34px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.sala-aberta div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sala-aberta b {
+  font: 600 13px/1.2 system-ui, sans-serif;
+  color: var(--fg);
+}
+
+.sala-aberta button {
+  margin-left: auto;
+  font: 600 11px/1 system-ui, sans-serif;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.cartaz-junto {
+  font: 600 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: none;
+  border: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 999px;
+  padding: 12px 18px;
+  cursor: pointer;
+}
+
+.cartaz-junto:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
 }
 
 /* ------------------------------------------------- R25/R28: o mural

@@ -122,10 +122,94 @@ export class Unauthorized extends Error {
  * recarregamento não pode obrigar a buscar tudo de novo antes do primeiro
  * pôster aparecer.
  */
+let emCurso: Promise<void> | null = null;
+
+// ------------------------------------------------- o barramento, um só (R46)
+
+const ouvintes = new Set<(evento: Record<string, unknown>) => void>();
+let barramento: EventSource | null = null;
+let tentativasDoBarramento = 0;
+let religar: number | undefined;
+
+async function abrirBarramento() {
+  if (barramento) return;
+  await midia.garantir();
+  // O último ouvinte pode ter ido embora enquanto o token era buscado.
+  if (ouvintes.size === 0 || barramento) return;
+
+  const fonte = new EventSource(api.eventsUrl());
+  barramento = fonte;
+
+  fonte.onopen = () => {
+    // Uma conexão que vingou zera a conta: a próxima queda recomeça rápido.
+    tentativasDoBarramento = 0;
+  };
+
+  fonte.onmessage = (m) => {
+    let evento: Record<string, unknown>;
+    try {
+      evento = JSON.parse(m.data);
+    } catch {
+      return; /* evento malformado não derruba a tela */
+    }
+    // Cópia da lista: um ouvinte que se desinscreve ao receber não pode
+    // quebrar a entrega pros outros.
+    for (const ouvinte of [...ouvintes]) {
+      try {
+        ouvinte(evento);
+      } catch {
+        /* um ouvinte com defeito não cala os outros */
+      }
+    }
+  };
+
+  fonte.onerror = () => {
+    fonte.close();
+    if (barramento === fonte) barramento = null;
+    if (ouvintes.size === 0 || tentativasDoBarramento >= 5) return;
+    const espera = 1000 * 2 ** tentativasDoBarramento;
+    tentativasDoBarramento += 1;
+    // **Reconecta com o token que estiver valendo — sem forçar um novo.**
+    // Emitir um token aposenta o anterior (§43), e o anterior é o que está
+    // dentro do `<video src=…?token=>` e de cada `<img>` da página. Medido: o
+    // segundo participante de uma sala recebia "o navegador recusou o arquivo
+    // mesmo com plano de Direct Play" — era o barramento derrubando o filme
+    // dele. Quando o token foi trocado por outra aba, o novo já está no
+    // `localStorage`; quando expirou de vez, `garantir()` emite um.
+    religar = window.setTimeout(() => void abrirBarramento(), espera);
+  };
+}
+
+function fecharBarramento() {
+  window.clearTimeout(religar);
+  barramento?.close();
+  barramento = null;
+  tentativasDoBarramento = 0;
+}
+
 export const midia = {
   token: (): string | null => localStorage.getItem(MEDIA_KEY),
   set: (value: string) => localStorage.setItem(MEDIA_KEY, value),
   clear: () => localStorage.removeItem(MEDIA_KEY),
+
+  /// Garante que existe token de mídia **antes** de quem depende dele começar.
+  ///
+  /// R44 — o defeito que isto conserta: o `renovar()` do boot não é esperado
+  /// por ninguém ("a arte carrega quando ele chegar"), e pra uma `<img>` isso
+  /// é verdade — ela recarrega. Pra um `EventSource` não é: ele monta a URL
+  /// **uma vez**, e sem token toma 401 e reconecta pra sempre, em silêncio.
+  ///
+  /// Quem abria o Odeon direto numa tela com barramento nunca recebia evento
+  /// nenhum. Quem passeava por outras abas antes recebia — o token tinha
+  /// chegado no meio do caminho. Daí o defeito parecer intermitente.
+  garantir: async (): Promise<void> => {
+    if (midia.token()) return;
+    // Uma renovação só, mesmo com quatro componentes pedindo ao mesmo tempo.
+    emCurso ??= midia.renovar().finally(() => {
+      emCurso = null;
+    });
+    await emCurso;
+  },
 
   /// Pede um token novo. Chamado no boot e depois que a sessão nasce — e o
   /// servidor aposenta os anteriores do mesmo usuário ao emitir.
@@ -492,6 +576,47 @@ export interface Trabalho {
   error: string | null;
   progress: Record<string, unknown> | null;
   cancel_requested: boolean;
+}
+
+/// R46 — uma sala de assistir junto.
+export interface Sala {
+  id: string;
+  work_id: string;
+  titulo: string;
+  poster: string | null;
+  media_file_id: string | null;
+  host_id: string;
+  host_nome: string;
+  /// Se eu sou o host. A tela não decide isso comparando ids.
+  sou_host: boolean;
+  modo: "por_pessoa" | "compartilhado";
+  transcode_id: string | null;
+  /// A intenção do host.
+  tocando: boolean;
+  /// O que toca de verdade: a intenção **e** todo mundo pronto.
+  rodando: boolean;
+  /// Quem está segurando a sala agora, pelo nome.
+  esperando: string[];
+  posicao_segundos: number;
+  atualizado_em: string;
+  gente: {
+    user_id: string;
+    username: string;
+    display_name: string;
+    pronto: boolean;
+    host: boolean;
+    ausente: boolean;
+  }[];
+  conversa: { id: number; user_id: string; display_name: string; texto: string; em: string }[];
+}
+
+export interface SalaAberta {
+  id: string;
+  host_id: string;
+  host_nome: string;
+  titulo: string;
+  poster: string | null;
+  gente: number;
 }
 
 export interface TasteProfile {
@@ -1350,6 +1475,68 @@ export const api = {
   // EventSource também não manda header.
   eventsUrl: () => withToken(`${API}/api/events`),
 
+  /// Ouve o barramento. **Uma conexão pro aplicativo inteiro.**
+  ///
+  /// ## Os quatro defeitos que isto conserta (R44 e R46)
+  ///
+  /// 1. **`EventSource` não manda header**, então a URL leva `?token=`. E
+  ///    `/api/events` não estava na lista de rotas que aceitam token na query:
+  ///    401 em toda conexão, com reconexão infinita e silenciosa.
+  ///
+  /// 2. **A URL é congelada na criação.** O `renovar()` do boot não é esperado
+  ///    por ninguém — pra uma `<img>` tudo bem, ela recarrega; pra um
+  ///    `EventSource` não, ele nasce sem token e morre assim pra sempre. Por
+  ///    isso `garantir()` vem antes.
+  ///
+  /// 3. **Emitir um token de mídia aposenta o anterior** (§43): duas abas, um
+  ///    modo estrito que monta duas vezes, ou oito horas de sessão derrubam a
+  ///    conexão aberta com o velho. Daí a reconexão — que **não força um token
+  ///    novo**, porque forçar mataria o `<video src=…?token=>` da página.
+  ///
+  /// 4. **Uma conexão, e não uma por componente.** O navegador dá **seis**
+  ///    conexões por host em HTTP/1.1, e um `EventSource` segura a dele pra
+  ///    sempre. Com quatro telas abrindo a sua, sobrava quase nada — e o
+  ///    sintoma foi o pior possível: no segundo participante de uma sala, o
+  ///    `fetch` do plano de reprodução **ficava trinta segundos pendurado**, o
+  ///    vídeo nunca carregava, e a sala inteira esperava por ele. O comentário
+  ///    do `events.rs` já dizia o desenho certo desde o M3: *"o navegador já
+  ///    mantém UM `EventSource` aberto"*. Agora mantém mesmo.
+  ///
+  /// Assinar é barato: a conexão nasce no primeiro ouvinte e morre com o
+  /// último.
+  ouvirEventos: (aoReceber: (evento: Record<string, unknown>) => void): (() => void) => {
+    ouvintes.add(aoReceber);
+    if (ouvintes.size === 1) abrirBarramento();
+    return () => {
+      ouvintes.delete(aoReceber);
+      if (ouvintes.size === 0) fecharBarramento();
+    };
+  },
+
+  // --- R46: assistir junto ---
+
+  /// A sala em que eu estou, se estiver em alguma.
+  junto: () => json<Sala | null>("/api/junto"),
+  /// As salas abertas dos meus amigos — o convite, sem tabela de convite.
+  juntoAbertas: () => json<SalaAberta[]>("/api/junto/abertas"),
+  criarJunto: (p: { work_id: string; media_file_id?: string | null; modo?: string }) =>
+    json<Sala>("/api/junto", { method: "POST", body: JSON.stringify(p) }),
+  entrarJunto: (id: string) => json<Sala>(`/api/junto/${id}/entrar`, { method: "POST" }),
+  sairJunto: (id: string) =>
+    json<{ encerrada: boolean }>(`/api/junto/${id}/sair`, { method: "POST" }),
+  /// Só o host. O play, a pausa e o pulo da sala inteira.
+  estadoJunto: (
+    id: string,
+    p: { tocando: boolean; posicao_segundos: number; transcode_id?: string | null },
+  ) => json<Sala>(`/api/junto/${id}/estado`, { method: "PUT", body: JSON.stringify(p) }),
+  /// "Estou carregando" / "voltei" — e batimento de vida.
+  prontoJunto: (id: string, pronto: boolean) =>
+    json<Sala>(`/api/junto/${id}/pronto`, { method: "PUT", body: JSON.stringify({ pronto }) }),
+  recadoJunto: (id: string, texto: string) =>
+    json<Sala>(`/api/junto/${id}/recado`, { method: "POST", body: JSON.stringify({ texto }) }),
+  expulsarJunto: (id: string, quem: string) =>
+    json<{ ok: boolean }>(`/api/junto/${id}/membro/${quem}`, { method: "DELETE" }),
+
   // --- M5: curadoria ---
 
   forYou: (minutes?: number, mood?: string) => {
@@ -1393,6 +1580,18 @@ export const api = {
   trabalhos: (limit = 25) => json<Trabalho[]>(`/api/jobs?limit=${limit}`),
   cancelarTrabalho: (id: string) =>
     json<{ ok: boolean }>(`/api/jobs/${id}/cancel`, { method: "POST" }),
+
+  /// Os três aquecimentos. R40 — as rotas existiam desde a R14, a R25 e a R32,
+  /// e nenhuma tinha cliente: todas as três só eram alcançáveis por `curl`.
+  ///
+  /// Não há `dry_run` aqui, ao contrário das manutenções: um aquecimento não
+  /// reescreve o acervo, ele preenche o que está vazio — e o que ele fez fica
+  /// visível em "Trabalhos" enquanto acontece.
+  aquecer: (qual: "trivia" | "producao" | "sagas") =>
+    json<{ started: boolean; job_id?: string; reason?: string }>(
+      `/api/maintenance/aquecer-${qual}`,
+      { method: "POST" },
+    ),
 
   /// As quatro manutenções. `dryRun` é o padrão porque é o padrão delas — e
   /// porque contar é inofensivo e reescrever milhares de linhas não é.
@@ -1662,6 +1861,9 @@ export const api = {
     tags: string[];
     bio: string | null;
     vitrine: string[];
+    avatar?: string | null;
+    capa?: string | null;
+    moldura?: string | null;
   }) => json<{ ok: boolean }>("/api/perfil", { method: "PUT", body: JSON.stringify(p) }),
 
   // --- R23: a nota e a resenha ---
@@ -1860,6 +2062,8 @@ export interface Presente {
   /// pedir duas consultas.
   amigo: boolean;
   eu: boolean;
+  /// R43 — o rosto escolhido.
+  rosto: string | null;
 }
 
 export interface Achado {
@@ -1894,10 +2098,26 @@ export interface Mural {
 }
 
 /// Alguém do servidor, visto de onde você está.
+/// Um enfeite do catálogo (R43): rosto, capa ou cor.
+export interface EnfeiteNaTela {
+  chave: string;
+  /// O nome da pessoa, o título do filme, ou o hex da cor.
+  rotulo: string;
+  /// Caminho servível em `/artwork/…`. `null` na cor, que não tem arte.
+  arte: string | null;
+  exige: string | null;
+  exige_nome: string | null;
+  /// O hex, quando é cor de moldura. A tela pinta com ele e mostra o `rotulo`.
+  cor: string | null;
+  aberto: boolean;
+}
+
 export interface Alguem {
   id: string;
   username: string;
   display_name: string;
+  /// R43 — o rosto escolhido, como caminho de arte. `null` cai na marca do nome.
+  rosto: string | null;
   desde: string;
 }
 
@@ -2009,6 +2229,7 @@ export interface NaVitrine {
 
 export interface AmigoNoPlacar {
   id: string;
+  username: string;
   display_name: string;
   nivel: number;
   xp: number;
@@ -2031,6 +2252,18 @@ export interface PerfilCompleto {
   vitrine: NaVitrine[];
   conquistas: ConquistaNaTela[];
   amigos: AmigoNoPlacar[];
+  /// R43 — o rosto e a capa escolhidos, já resolvidos pelo servidor.
+  avatar: EnfeiteNaTela | null;
+  capa: EnfeiteNaTela | null;
+  /// A cor da moldura, em hex. O servidor traduz a chave — a lista de cores é
+  /// dele, e traduzir aqui seria a mesma lista escrita duas vezes.
+  moldura: string | null;
+  /// Os três catálogos, **inteiros**: o trancado vem junto, com a conquista que
+  /// o abre, porque um rosto que ninguém sabe que existe não é perseguido.
+  /// Só no seu próprio perfil.
+  rostos: EnfeiteNaTela[];
+  capas: EnfeiteNaTela[];
+  molduras: EnfeiteNaTela[];
   /// Só vem no seu próprio perfil: o que dá pra escolher.
   titulos_disponiveis: [string, string][];
   tags_disponiveis: string[];

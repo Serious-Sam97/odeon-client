@@ -4,6 +4,7 @@ import {
   type CanalAberto,
   type CanalNoAr,
   type Guia,
+  type Lembrete,
   type ProgramaDoGuia,
 } from "./api";
 import { ligarHls } from "./hls";
@@ -28,7 +29,16 @@ function hhmm(iso: string): string {
 /// E o Odeon deixou de só sintonizar. Além das fontes IPTV, ele agora programa
 /// canais próprios do seu acervo (`live::emissora`) — que aparecem como pistas
 /// iguais às outras, marcadas em amarelo. Ver docs/DESIGN.md §25.
-export default function AoVivo({ isAdmin }: { isAdmin: boolean }) {
+export default function AoVivo({
+  isAdmin,
+  onDetails,
+}: {
+  isAdmin: boolean;
+  /// Abre o cartaz de uma obra do acervo. R39: é o que o bloco de um canal da
+  /// casa passou a fazer — ele aponta pra uma obra, que é mais do que um
+  /// programa de IPTV tem.
+  onDetails: (workId: string) => void;
+}) {
   const [canais, setCanais] = useState<CanalNoAr[]>([]);
   const [guia, setGuia] = useState<Guia | null>(null);
   const [casa, setCasa] = useState<GradeOdeon | null>(null);
@@ -37,6 +47,9 @@ export default function AoVivo({ isAdmin }: { isAdmin: boolean }) {
   const [assistindo, setAssistindo] = useState<CanalAberto | null>(null);
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<ProgramaDoGuia | null>(null);
+  /// R44 — o que você agendou. A rota existe desde a R17 e **nunca teve
+  /// cliente**: dava pra agendar e não dava pra ver o que estava agendado.
+  const [agendados, setAgendados] = useState<Lembrete[]>([]);
   const [configurando, setConfigurando] = useState(false);
   const [foco, setFoco] = useState(0);
   /// Sobe a cada virada de programa. Não guarda o relógio — quem guarda o
@@ -46,14 +59,17 @@ export default function AoVivo({ isAdmin }: { isAdmin: boolean }) {
 
   const carregar = useCallback(async () => {
     try {
-      const [c, g, o] = await Promise.all([
+      const [c, g, o, l] = await Promise.all([
         api.liveChannels(),
         api.liveGuide(JANELA_H),
         api.liveOdeon(JANELA_H).catch(() => null),
+        // A lista de agendamentos não derruba a aba: sem ela a grade continua.
+        api.reminders().catch(() => []),
       ]);
       setCanais(c);
       setGuia(g);
       setCasa(o);
+      setAgendados(l);
       setErro(null);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
@@ -238,13 +254,40 @@ export default function AoVivo({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </section>
 
+      <Agendados
+        lista={agendados}
+        onAbrir={(id) => {
+          const p = guia?.programas.find((x) => x.id === id);
+          if (p) setDetalhe(p);
+        }}
+      />
+
       <LinhaDoTempo
         pistas={pistas}
         foco={foco}
         onFoco={setFoco}
+        // R39 — o clique que não fazia nada.
+        //
+        // O modal procurava o bloco na grade do IPTV. Os canais da casa são
+        // programados pela emissora (§25) **sem tabela**, e os blocos deles não
+        // existem nessa lista: `p` vinha `undefined` e o `if` engolia. Um
+        // clique que não faz nada não é recurso ausente, é recurso quebrado
+        // (§8b).
+        //
+        // Agora o bloco da casa abre o **cartaz da obra** — ele aponta pra uma
+        // obra do acervo, que é mais do que um programa de IPTV tem.
         onAbrir={(b) => {
           const p = guia?.programas.find((x) => String(x.id) === b.id);
-          if (p) setDetalhe(p);
+          if (p) {
+            setDetalhe(p);
+            return;
+          }
+          if (b.workId) {
+            onDetails(b.workId);
+            return;
+          }
+          // Nem programa nem obra: dizer, em vez de engolir de novo.
+          setErro("este bloco não tem ficha — recarregue a grade");
         }}
         onVirada={() => setVirada((v) => v + 1)}
       />
@@ -1119,6 +1162,8 @@ function ModalPrograma({
   const [agendado, setAgendado] = useState(programa.lembrete);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  /// Por que a notificação do sistema não vai sair, quando não vai.
+  const [semSistema, setSemSistema] = useState<string | null>(null);
 
   const comeca = new Date(programa.starts_at);
   const jaComecou = comeca.getTime() <= Date.now();
@@ -1139,6 +1184,7 @@ function ModalPrograma({
       if (agendado) {
         await api.deleteReminder(programa.id);
         setAgendado(false);
+        setSemSistema(null);
       } else {
         // A permissão é pedida no clique, não na carga da página: navegador
         // esconde o pedido feito sem gesto do usuário, e ninguém entende por
@@ -1148,6 +1194,16 @@ function ModalPrograma({
         }
         await api.createReminder(programa.id);
         setAgendado(true);
+        // R44 — **e o que o navegador respondeu é dito.**
+        //
+        // Sem isto o agendamento ficava verde e a notificação do sistema nunca
+        // chegava, porque a permissão estava negada de uma vez anterior — e
+        // quem agendou não tinha como saber. É o §8b com outra roupa: o produto
+        // mostrando sucesso pra um recurso que ele sabe que não vai entregar.
+        //
+        // Não é erro, e por isso não é `setErro`: o agendamento **funcionou**, e
+        // o aviso dentro do Odeon continua chegando. O que mudou é o alcance.
+        setSemSistema(motivoSemSistema());
       }
       onMudou();
     } catch (e) {
@@ -1217,6 +1273,7 @@ function ModalPrograma({
             )}
           </div>
 
+          {semSistema && <p className="muted small">{semSistema}</p>}
           {erro && <p className="error">{erro}</p>}
         </div>
       </aside>
@@ -1224,47 +1281,211 @@ function ModalPrograma({
   );
 }
 
+/// O que você agendou, e quando começa.
+///
+/// **É o §27 de novo**: `GET /api/live/reminders` existe desde a R17 e nunca
+/// teve cliente nenhum — dava pra agendar um programa e não dava pra ver o que
+/// estava agendado. O pedido *"adicionar uma notificação para receber os
+/// agendamentos"* é sobre o aviso chegar; mas um agendamento que a pessoa não
+/// consegue reler é um compromisso que só o servidor conhece.
+///
+/// Some quando não há nada — uma seção vazia dizendo "nenhum agendamento" é a
+/// linha que o §24 manda sumir.
+function Agendados({
+  lista,
+  onAbrir,
+}: {
+  lista: Lembrete[];
+  onAbrir: (programmeId: number) => void;
+}) {
+  if (lista.length === 0) return null;
+
+  return (
+    <section className="agendados">
+      <header className="dial-topo">
+        <h2>Você agendou</h2>
+        <span className="dica">o aviso chega quando começar</span>
+      </header>
+      <ul className="agendados-lista">
+        {lista.map((l) => (
+          <li key={l.programme_id}>
+            <button onClick={() => onAbrir(l.programme_id)}>
+              <b>{l.title}</b>
+              <span className="muted">{l.channel_name}</span>
+              <i>{quando(l.starts_at)}</i>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/// "hoje 21:30", "amanhã 14:00", "sábado 20:00".
+///
+/// O dia da semana em vez da data: um agendamento é sempre nos próximos dias —
+/// a grade do IPTV vai a 38 horas —, e ninguém conta nos dedos até "05/08".
+function quando(iso: string): string {
+  const d = new Date(iso);
+  const hoje = new Date();
+  const dia = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dias = Math.round((dia(d) - dia(hoje)) / 86_400_000);
+  const hora = hhmm(iso);
+  if (dias <= 0) return `hoje ${hora}`;
+  if (dias === 1) return `amanhã ${hora}`;
+  if (dias < 7) return `${d.toLocaleDateString("pt-BR", { weekday: "long" })} ${hora}`;
+  return `${d.toLocaleDateString("pt-BR", { day: "numeric", month: "short" })} ${hora}`;
+}
+
+/// O que dizer quando a notificação do sistema não vai sair.
+///
+/// Três estados diferentes, e três frases diferentes — "não vai funcionar" sem
+/// dizer por quê é a mesma coisa que não dizer nada. `null` é o caso bom.
+function motivoSemSistema(): string | null {
+  if (!("Notification" in window)) {
+    return "Este navegador não tem notificação de sistema — o aviso vai aparecer aqui dentro, com o Odeon aberto.";
+  }
+  if (Notification.permission === "denied") {
+    return "As notificações estão bloqueadas para este site, então o aviso só vai aparecer aqui dentro. Dá pra liberar no cadeado da barra de endereço.";
+  }
+  if (Notification.permission === "default") {
+    return "Sem permissão de notificação, o aviso só aparece com o Odeon aberto.";
+  }
+  return null;
+}
+
 /// Ouve o barramento e avisa quando um programa agendado começa.
 ///
 /// Vive no App e não aqui dentro porque o aviso tem que chegar **mesmo com a
 /// aba "ao vivo" fechada** — é esse o ponto de agendar.
 export function AvisoDePrograma({ userId }: { userId: string }) {
-  const [aviso, setAviso] = useState<{ title: string; canal: string } | null>(null);
-  const jaVistos = useRef<Set<number>>(new Set());
+  const [aviso, setAviso] = useState<{
+    id: number;
+    title: string;
+    canal: string;
+    atrasado?: boolean;
+  } | null>(null);
+  const jaVistos = useRef<Set<number>>(new Set(lidos()));
+
+  /// R44 — **o aviso que chegou enquanto ninguém ouvia.**
+  ///
+  /// Medido, e é o defeito que fazia o agendamento parecer quebrado: o vigia do
+  /// servidor marca `notified_at` e publica no barramento **uma vez**. Se
+  /// naquele instante não havia aba aberta, o evento morre no ar e o lembrete
+  /// nunca mais dispara — quem agendou não recebe nada, e não tem como saber
+  /// por quê. É o §8b: falhar em silêncio.
+  ///
+  /// O conserto não precisa de service worker. Na abertura, o Odeon pergunta o
+  /// que está agendado — uma rota que já existe — e recupera o que começou há
+  /// pouco e ainda está no ar. Quem abre o Odeon cinco minutos depois vê que
+  /// começou; quem abre no dia seguinte não vê nada, que é o certo.
+  useEffect(() => {
+    api
+      .reminders()
+      .then((lista) => {
+        const agora = Date.now();
+        for (const l of lista) {
+          const desde = agora - new Date(l.starts_at).getTime();
+          if (desde < 0 || desde > ATRASO_MAX_MS) continue;
+          if (jaVistos.current.has(l.programme_id)) continue;
+          mostrar({ id: l.programme_id, title: l.title, canal: l.channel_name, atrasado: true });
+          break; // um por vez: dois avisos empilhados viram um só ilegível
+        }
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  /// Põe o aviso na tela — e **só marca como lido quando ele sai dela**.
+  ///
+  /// Marcar na hora de enfileirar parece igual e não é: se a tela fechar antes
+  /// do aviso aparecer, ele fica marcado como visto sem nunca ter sido visto, e
+  /// some pra sempre. É a mesma falha do `notified_at` do servidor, um andar
+  /// acima — e foi assim que este defeito apareceu, num remount do modo estrito
+  /// que engoliu o primeiro aviso.
+  const mostrar = useCallback(
+    (a: { id: number; title: string; canal: string; atrasado?: boolean }) => {
+      setAviso(a);
+      // A notificação do sistema é do momento em que ele começa. Recuperar um
+      // aviso atrasado não dispara caixinha: quem abriu o Odeon já está aqui.
+      if (!a.atrasado && "Notification" in window && Notification.permission === "granted") {
+        new Notification("Começando agora no Odeon", {
+          body: `${a.title} · ${a.canal}`,
+          tag: `odeon-programa-${a.id}`,
+        });
+      }
+      window.setTimeout(() => {
+        marcarLido(jaVistos.current, a.id);
+        setAviso((atual) => (atual?.id === a.id ? null : atual));
+      }, 20_000);
+    },
+    [],
+  );
 
   useEffect(() => {
-    const source = new EventSource(api.eventsUrl());
-    source.onmessage = (msg) => {
-      try {
-        const ev = JSON.parse(msg.data);
-        if (ev.type !== "programme_starting") return;
-        // O evento vai pra todo mundo; cada aparelho descarta o que não é seu.
-        if (ev.user_id !== userId) return;
-        if (jaVistos.current.has(ev.programme_id)) return;
-        jaVistos.current.add(ev.programme_id);
-
-        setAviso({ title: ev.title, canal: ev.channel_name });
-        if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("Começando agora no Odeon", {
-            body: `${ev.title} · ${ev.channel_name}`,
-            tag: `odeon-programa-${ev.programme_id}`,
-          });
-        }
-        window.setTimeout(() => setAviso(null), 20_000);
-      } catch {
-        /* evento malformado não derruba a tela */
-      }
-    };
-    return () => source.close();
-  }, [userId]);
+    return api.ouvirEventos((ev) => {
+      if (ev.type !== "programme_starting") return;
+      // O evento vai pra todo mundo; cada aparelho descarta o que não é seu.
+      if (ev.user_id !== userId) return;
+      if (jaVistos.current.has(ev.programme_id as number)) return;
+      mostrar({
+        id: ev.programme_id as number,
+        title: ev.title as string,
+        canal: ev.channel_name as string,
+      });
+    });
+  }, [userId, mostrar]);
 
   if (!aviso) return null;
 
   return (
-    <div className="aviso-programa" onClick={() => setAviso(null)}>
-      <span className="selo-vivo">● COMEÇANDO</span>
+    <div
+      className="aviso-programa"
+      onClick={() => {
+        // Fechar na mão também é ter visto.
+        marcarLido(jaVistos.current, aviso.id);
+        setAviso(null);
+      }}
+    >
+      {/* "começando" e "já começou" são fatos diferentes, e dizer o segundo
+          como se fosse o primeiro mandaria a pessoa correr pra pegar o início
+          de um filme que já está na metade. */}
+      <span className="selo-vivo">{aviso.atrasado ? "● JÁ COMEÇOU" : "● COMEÇANDO"}</span>
       <strong>{aviso.title}</strong>
       <span className="muted">{aviso.canal}</span>
     </div>
   );
+}
+
+/// Até quando vale recuperar um aviso perdido.
+///
+/// Quinze minutos: tempo de pegar o filme quase do começo, e curto o bastante
+/// pra não avisar de algo que já vai na metade. Passou disso, o silêncio é a
+/// resposta honesta — o §18 outra vez.
+const ATRASO_MAX_MS = 15 * 60_000;
+
+/// Os avisos que este navegador já mostrou.
+///
+/// No `localStorage` e não em memória: sem isso, recarregar a página traria de
+/// volta o mesmo aviso, e o recado viraria ruído — que é como um aviso deixa de
+/// ser lido (a mesma razão do recado da locadora sumir sozinho, §49).
+const LIDOS = "odeon.avisos-lidos";
+
+function lidos(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(LIDOS) ?? "[]");
+    return Array.isArray(v) ? v.slice(-50) : [];
+  } catch {
+    return [];
+  }
+}
+
+function marcarLido(memoria: Set<number>, id: number) {
+  memoria.add(id);
+  try {
+    // Os últimos 50 bastam: a grade não guarda mais que 38 horas, e uma lista
+    // que só cresce acabaria maior que o dado que ela protege.
+    localStorage.setItem(LIDOS, JSON.stringify([...memoria].slice(-50)));
+  } catch {
+    /* sem localStorage o aviso repete, e repetir é melhor que sumir */
+  }
 }

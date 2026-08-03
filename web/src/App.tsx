@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useLocation, useMatch, useNavigate } from "react-router-dom";
 import AoVivo, { AvisoDePrograma } from "./AoVivo";
 import Collections from "./Collections";
-import Details from "./Details";
+import Details, { paraLista } from "./Details";
 import Admin from "./Admin";
 import Gerenciar from "./Gerenciar";
 import Guia from "./Guia";
@@ -12,6 +13,7 @@ import ForYou from "./ForYou";
 import Libraries from "./Libraries";
 import Login from "./Login";
 import FilterBar from "./FilterBar";
+import Junto from "./Junto";
 import Player from "./Player";
 import Review from "./Review";
 import Scopes from "./Scopes";
@@ -32,6 +34,7 @@ import {
   type LibraryEntry,
   type Filters,
   type MatchStatus,
+  type Sala,
   type ScanStatus,
   type ScrubStatus,
   type WorkListItem,
@@ -59,6 +62,32 @@ type Tab =
   | "review"
   | "settings"
   | "admin";
+
+/// O endereço de cada tela (R43).
+///
+/// Em português, como todo o resto do projeto — as rotas da API já são
+/// `/api/locadora/prateleira` e `/api/guia/revista`, e um `/library` no meio
+/// disso seria a única palavra em inglês que alguém lê em voz alta.
+///
+/// A raiz é o "para você" porque é onde se entra: quem abre o Odeon sem
+/// endereço nenhum cai na tela que responde *"o que eu assisto agora"*.
+const CAMINHO_DE: Record<Tab, string> = {
+  foryou: "/",
+  library: "/biblioteca",
+  collections: "/colecoes",
+  locadora: "/locadora",
+  guia: "/guia",
+  live: "/ao-vivo",
+  mural: "/mural",
+  perfil: "/perfil",
+  review: "/revisao",
+  settings: "/pastas",
+  admin: "/admin",
+};
+
+const ABA_DE: Record<string, Tab> = Object.fromEntries(
+  Object.entries(CAMINHO_DE).map(([aba, caminho]) => [caminho, aba as Tab]),
+);
 
 /// O que fica na barra, à esquerda. **Sete**, e a ordem é de "onde você entra"
 /// pra "onde você vai depois".
@@ -345,7 +374,26 @@ function BarraDeCima({
 export default function App() {
   const [me, setMe] = useState<AuthUser | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<Tab>("foryou");
+
+  /// R43 — **a aba é o endereço**, e não mais um `useState`.
+  ///
+  /// A troca é pequena de propósito: o corpo continua desenhando por `tab`, e o
+  /// que mudou é de onde `tab` vem. Reescrever as onze telas como `<Routes>`
+  /// aninhadas seria uma reforma num arquivo de mil linhas pra chegar no mesmo
+  /// lugar — e o que foi pedido é que cada tela tenha endereço, não que este
+  /// componente mude de forma.
+  const location = useLocation();
+  const navigate = useNavigate();
+  /// `/p/<quem>` — o perfil de alguém, por nome de usuário ou por id.
+  const noPerfilDeAlguem = useMatch("/p/:quem");
+  const tab: Tab = noPerfilDeAlguem
+    ? "perfil"
+    : (ABA_DE[location.pathname] ?? "foryou");
+  const perfilDe = noPerfilDeAlguem?.params.quem;
+  const setTab = useCallback(
+    (t: Tab) => navigate(CAMINHO_DE[t]),
+    [navigate],
+  );
   const [works, setWorks] = useState<WorkListItem[]>([]);
   /// A biblioteca agrupada. `works` continua existindo pro modo plano —
   /// dentro de uma série o que se quer é a lista de episódios.
@@ -358,11 +406,62 @@ export default function App() {
   const [match, setMatch] = useState<MatchStatus | null>(null);
   const [scrub, setScrub] = useState<ScrubStatus | null>(null);
   const [playing, setPlaying] = useState<WorkListItem | null>(null);
+  /// R46 — a sala de assistir junto, quando há uma.
+  ///
+  /// Mora no App e não no player porque ela **sobrevive ao player**: quem
+  /// fecha o vídeo continua na sala, e quem entra numa sala pelo convite
+  /// precisa que o vídeo abra sozinho.
+  const [sala, setSala] = useState<Sala | null>(null);
   const [detailsOf, setDetailsOf] = useState<string | null>(null);
   const [managing, setManaging] = useState<string | null>(null);
   const [serverOpen, setServerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  /// A sala, e o barramento que a mantém viva.
+  ///
+  /// O evento **não carrega estado** — ele diz qual sala mexeu, e a tela relê
+  /// (§46). É o que faz quem entra atrasado chegar no ponto certo em vez de
+  /// depender de ter ouvido o evento anterior.
+  const recarregarSala = useCallback(() => {
+    api.junto().then(setSala).catch(() => {});
+  }, []);
+
+  /// **Entrar numa sala abre o filme.**
+  ///
+  /// Sem isto, aceitar o convite deixava a pessoa numa sala invisível: o
+  /// estado existia, o vídeo não. E o filme é o motivo da sala — é o §8b outra
+  /// vez, um clique que parece não fazer nada.
+  ///
+  /// A obra é buscada inteira, e não montada do que a sala manda: o player
+  /// precisa da **duração da obra** pra barra não crescer sozinha (R39), e
+  /// improvisar um item de lista aqui repetiria aquele defeito por outro
+  /// caminho.
+  useEffect(() => {
+    if (!sala?.media_file_id || playing) return;
+    let vivo = true;
+    api
+      .detail(sala.work_id)
+      .then((w) => {
+        if (!vivo) return;
+        const arquivo = w.files.find((f) => f.id === sala.media_file_id) ?? w.files[0];
+        setPlaying(paraLista(w, arquivo, null));
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [sala?.id, sala?.media_file_id, sala?.work_id, playing, sala]);
+
+  useEffect(() => {
+    if (!me) return;
+    recarregarSala();
+    return api.ouvirEventos((e) => {
+      if (e.type !== "junto") return;
+      if (e.o_que === "fim") return void api.junto().then(setSala).catch(() => setSala(null));
+      recarregarSala();
+    });
+  }, [me, recarregarSala]);
 
   useEffect(() => {
     if (!auth.token()) {
@@ -427,19 +526,12 @@ export default function App() {
 
   // Sync ao vivo. Sem isto, dois aparelhos só se falam quando um recarrega.
   useEffect(() => {
-    const source = new EventSource(api.eventsUrl());
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data);
-        if (event.type === "progress" && event.device_id === DEVICE_ID) return;
-        refresh(filtersRef.current);
-        if (event.type === "match_finished") api.matchStatus().then(setMatch).catch(() => {});
-        if (event.type === "scrub_finished") api.scrubStatus().then(setScrub).catch(() => {});
-      } catch {
-        /* evento malformado não derruba a tela */
-      }
-    };
-    return () => source.close();
+    return api.ouvirEventos((event) => {
+      if (event.type === "progress" && event.device_id === DEVICE_ID) return;
+      refresh(filtersRef.current);
+      if (event.type === "match_finished") api.matchStatus().then(setMatch).catch(() => {});
+      if (event.type === "scrub_finished") api.scrubStatus().then(setScrub).catch(() => {});
+    });
   }, [refresh]);
 
   useEffect(() => {
@@ -508,6 +600,9 @@ export default function App() {
     <div className="app">
       <BarraDeCima
         aba={tab}
+        // Ir pro perfil PELA BARRA é sempre ir pro seu (R42) — e agora isso
+        // sai de graça, porque `/perfil` e `/p/rudney` são endereços
+        // diferentes.
         aoTrocar={setTab}
         eu={me}
         isAdmin={isAdmin}
@@ -614,12 +709,15 @@ export default function App() {
           />
         )}
 
-        {tab === "perfil" && <Perfil />}
+        {/* A `key` troca o componente quando a pessoa olhada muda: `Perfil`
+            guarda quem está olhando em estado próprio, semeado pela prop, e sem
+            isto o segundo clique num amigo diferente não mudaria nada. */}
+        {tab === "perfil" && <Perfil key={perfilDe ?? "eu"} quem={perfilDe} />}
         {tab === "admin" && isAdmin && <Admin eu={me?.username ?? ""} />}
-        {tab === "mural" && <Mural />}
+        {tab === "mural" && <Mural aoVerPerfil={(quem) => navigate(`/p/${quem}`)} />}
         {tab === "collections" && <Collections onPlay={setPlaying} />}
 
-        {tab === "live" && <AoVivo isAdmin={isAdmin} />}
+        {tab === "live" && <AoVivo isAdmin={isAdmin} onDetails={setDetailsOf} />}
 
         {tab === "library" && (
           <>
@@ -750,6 +848,19 @@ export default function App() {
             setDetailsOf(null);
             setPlaying(w);
           }}
+          /// R46 — abrir a sala e cair dentro dela. O convite não é um segundo
+          /// gesto: a sala aberta já aparece pros amigos (§4.6), porque a
+          /// amizade é o aceite e não há convite a inventar (§44).
+          onJunto={(w) => {
+            setDetailsOf(null);
+            api
+              .criarJunto({ work_id: w.id, media_file_id: w.media_file_id })
+              .then((s) => {
+                setSala(s);
+                setPlaying(w);
+              })
+              .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+          }}
           onPickPerson={(id, name) => {
             setDetailsOf(null);
             setTab("library");
@@ -769,6 +880,21 @@ export default function App() {
       {playing && (
         <Player
           work={playing}
+          sala={sala && sala.work_id === playing.id ? sala : null}
+          aoMudarSala={setSala}
+          aoLado={
+            sala && sala.work_id === playing.id ? (
+              <Junto
+                sala={sala}
+                aoMudar={setSala}
+                aoSair={() => {
+                  void api.sairJunto(sala.id).catch(() => {});
+                  setSala(null);
+                  setPlaying(null);
+                }}
+              />
+            ) : undefined
+          }
           onClose={() => {
             setPlaying(null);
             refresh(filters);

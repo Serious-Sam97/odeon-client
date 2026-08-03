@@ -28,6 +28,7 @@ export default function Details({
   onChanged,
   onPickPerson,
   onPlay,
+  onJunto,
   isAdmin = false,
 }: {
   workId: string;
@@ -35,6 +36,8 @@ export default function Details({
   onChanged: () => void;
   onPickPerson?: (id: string, name: string) => void;
   onPlay?: (w: WorkListItem) => void;
+  /// R46 — abrir uma sala de assistir junto com esta obra.
+  onJunto?: (w: WorkListItem) => void;
   /// R37: a **edição do grafo** — tag e relação — é de administrador.
   ///
   /// O backend passou a recusar (403), e a tela precisa parar de oferecer:
@@ -128,6 +131,7 @@ export default function Details({
           editando={editando}
           onEditar={isAdmin ? () => setEditando((v) => !v) : undefined}
           onPlay={onPlay}
+          onJunto={onJunto}
           onClose={onClose}
           onChanged={touched}
         />
@@ -580,6 +584,7 @@ function Cabeca({
   editando,
   onEditar,
   onPlay,
+  onJunto,
   onClose,
   onChanged,
 }: {
@@ -589,6 +594,8 @@ function Cabeca({
   /// `undefined` quando quem olha não é administrador — e aí o botão nem nasce.
   onEditar?: () => void;
   onPlay?: (w: WorkListItem) => void;
+  /// R46 — abrir uma sala de assistir junto com esta obra.
+  onJunto?: (w: WorkListItem) => void;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -656,6 +663,18 @@ function Cabeca({
             <button className="cartaz-play" onClick={tocar} disabled={!arquivo}>
               {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
             </button>
+            {/* R46 — a porta do assistir junto. Ela fica ao lado do assistir
+                porque é a mesma decisão vista de outro jeito: "isto agora, e
+                com gente". Só aparece com arquivo, como o play. */}
+            {onJunto && arquivo && (
+              <button
+                className="cartaz-junto"
+                title="abre uma sala e avisa seus amigos"
+                onClick={() => onJunto(paraLista(work, arquivo, serie))}
+              >
+                ⧉ assistir junto
+              </button>
+            )}
             <Veredito work={work} onChanged={onChanged} />
             {/* R37: só nasce pra administrador. Tag e relação são metadado do
                 acervo — mudam o que todo mundo vê, e a curadoria (§8f) e o guia

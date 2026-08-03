@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Avatar from "./Avatar";
+import Desafios from "./Desafios";
 import Retrospectiva from "./Retrospectiva";
 import {
   api,
-  type Cadencia,
   type CamadaDaConquista,
   type ConquistaNaTela,
-  type MeusDesafios,
+  type EnfeiteNaTela,
+  type NaVitrine,
   type PerfilCompleto,
+  type WorkListItem,
 } from "./api";
 
 /// R32 — o perfil.
@@ -46,18 +50,18 @@ const NOME_DA_CAMADA: Record<CamadaDaConquista, string> = {
 /// ninguém vai ter — que é a ordem em que se lê uma lista de conquistas.
 const ORDEM: CamadaDaConquista[] = ["facil", "media", "saga", "dificil", "impossivel", "nivel"];
 
-export default function Perfil({ userId }: { userId?: string }) {
+export default function Perfil({ quem }: { quem?: string }) {
   const [p, setP] = useState<PerfilCompleto | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [editando, setEditando] = useState(false);
-  const [olhando, setOlhando] = useState<string | undefined>(userId);
+  const navegar = useNavigate();
 
   const carregar = useCallback(() => {
     api
-      .perfil(olhando)
+      .perfil(quem)
       .then(setP)
       .catch((e) => setErro(String(e)));
-  }, [olhando]);
+  }, [quem]);
 
   useEffect(carregar, [carregar]);
 
@@ -83,8 +87,35 @@ export default function Perfil({ userId }: { userId?: string }) {
   );
 
   return (
-    <div className="perfil">
-      <header className="perfil-topo">
+    /* A moldura tinge o perfil inteiro por uma variável, e não por classe: são
+       quatro cores hoje e uma quinta é uma linha no `enfeites.rs` — uma classe
+       por cor faria a lista existir em dois lugares. */
+    <div className="perfil" style={{ ["--perfil-cor" as string]: p.moldura ?? "var(--accent)" }}>
+      {/* A CAPA. Ela é a arte de um filme do acervo, e o degradê no pé é o que
+          deixa o nome legível em cima de qualquer imagem — sem ele, um backdrop
+          claro engole o texto branco. */}
+      {p.capa?.arte && (
+        <div
+          className="perfil-capa"
+          style={{ backgroundImage: `url(${api.artworkUrl(p.capa.arte)})` }}
+          title={p.capa.rotulo}
+        />
+      )}
+
+      <header className={p.capa?.arte ? "perfil-topo com-capa" : "perfil-topo"}>
+        {/* O ROSTO. Quem não escolheu cai na marca derivada do nome (R42) — e
+            ela nunca é um buraco. */}
+        {p.avatar?.arte ? (
+          <img
+            className="perfil-rosto"
+            src={api.artworkUrl(p.avatar.arte)}
+            alt={p.avatar.rotulo}
+            title={p.avatar.rotulo}
+          />
+        ) : (
+          <Avatar nome={p.display_name} tamanho={84} />
+        )}
+
         <div className="perfil-quem">
           <h2>{p.display_name}</h2>
           {p.titulo_nome && <span className="perfil-titulo">{p.titulo_nome}</span>}
@@ -119,9 +150,12 @@ export default function Perfil({ userId }: { userId?: string }) {
       </p>
 
       {p.meu && (
-        <button className="perfil-editar" onClick={() => setEditando((e) => !e)}>
-          {editando ? "fechar" : "editar perfil"}
-        </button>
+        <div className="perfil-acoes">
+          <button className="perfil-editar" onClick={() => setEditando((e) => !e)}>
+            {editando ? "fechar" : "editar perfil"}
+          </button>
+          <Link username={p.username} />
+        </div>
       )}
 
       {editando && p.meu && <Editor p={p} aoSalvar={() => (setEditando(false), carregar())} />}
@@ -132,9 +166,14 @@ export default function Perfil({ userId }: { userId?: string }) {
           desafios de outra pessoa não são assunto de ninguém. */}
       {p.meu && <Desafios />}
 
-      {p.vitrine.length > 0 && (
+      {(p.vitrine.length > 0 || p.meu) && (
         <section className="perfil-vitrine">
           <h3>Vitrine</h3>
+          {p.vitrine.length === 0 && p.meu && (
+            <p className="muted small">
+              Seis caixas suas, na sua ordem. Monte em <b>editar perfil</b>.
+            </p>
+          )}
           <div className="vitrine-caixas">
             {p.vitrine.map((v) => (
               <div key={v.id} className="vitrine-caixa" title={v.titulo}>
@@ -174,7 +213,10 @@ export default function Perfil({ userId }: { userId?: string }) {
             {p.amigos.map((a, i) => (
               <li key={a.id} className={a.eu ? "eu" : ""}>
                 <span className="placar-pos">{i + 1}</span>
-                <button className="placar-nome" onClick={() => setOlhando(a.eu ? undefined : a.id)}>
+                <button
+                  className="placar-nome"
+                  onClick={() => navegar(a.eu ? "/perfil" : `/p/${a.username}`)}
+                >
                   {a.display_name}
                 </button>
                 {a.titulo && <i className="placar-titulo">{a.titulo}</i>}
@@ -218,83 +260,6 @@ export default function Perfil({ userId }: { userId?: string }) {
   );
 }
 
-/// Os desafios da janela.
-///
-/// **Três, e eles fazem trabalhos diferentes**: um fácil, um de tema e um que
-/// empurra pra fora do seu gosto — que é o único dos três que faz o desafio
-/// servir ao terceiro pilar (§1).
-///
-/// **Falhar não custa nada.** A janela fecha, o desafio some, outro é sorteado.
-/// Sem perda de XP, sem sequência quebrada, sem aviso — este projeto tem uma
-/// punição só e ela é social (a fita mal devolvida), porque funciona entre
-/// pessoas. Punir alguém por não ter assistido um filme é o placar do §40
-/// voltando com outra roupa.
-function Desafios() {
-  const [d, setD] = useState<MeusDesafios | null>(null);
-
-  const carregar = useCallback(() => {
-    api.desafios().then(setD).catch(() => {});
-  }, []);
-
-  useEffect(carregar, [carregar]);
-
-  const trocar = (c: Cadencia) =>
-    void api.salvarCadencia(c).then(carregar).catch(() => {});
-
-  if (!d || d.desafios.length === 0) return null;
-
-  const feitos = d.desafios.filter((x) => x.cumprido_em).length;
-
-  return (
-    <section className="desafios">
-      <header>
-        <h3>Seus desafios</h3>
-        <span className="desafios-prazo">até {vence(d.desafios[0].vence_em)}</span>
-        {/* A cadência é escolhida pela pessoa, entre opções definidas. Três, e
-            não cinco: a diferença entre "a cada 4 dias" e "a cada 5" não é uma
-            escolha, é um número. */}
-        <div className="desafios-cadencia">
-          {(
-            [
-              ["diaria", "todo dia"],
-              ["tres_dias", "3 em 3 dias"],
-              ["semanal", "toda semana"],
-            ] as const
-          ).map(([v, r]) => (
-            <button key={v} className={d.cadencia === v ? "on" : ""} onClick={() => trocar(v)}>
-              {r}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      <ul className="desafio-lista">
-        {d.desafios.map((x) => (
-          <li key={x.id} className={x.cumprido_em ? "feito" : ""}>
-            <span className="desafio-marca">{x.cumprido_em ? "✓" : "□"}</span>
-            <b>{x.rotulo}</b>
-            <i>+{x.xp} XP</i>
-          </li>
-        ))}
-      </ul>
-
-      {feitos === d.desafios.length && (
-        <p className="desafios-fim">Você limpou a janela. A próxima vem {vence(d.desafios[0].vence_em)}.</p>
-      )}
-    </section>
-  );
-}
-
-/// "domingo", "amanhã". Um prazo em data absoluta faz contar nos dedos.
-function vence(iso: string): string {
-  const ms = new Date(iso).getTime() - Date.now();
-  const dias = Math.ceil(ms / 86_400_000);
-  if (dias <= 1) return "amanhã";
-  if (dias <= 7)
-    return new Date(iso).toLocaleDateString("pt-BR", { weekday: "long" });
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
-}
-
 /// A edição.
 ///
 /// Título e tags saem **do que foi desbloqueado** — o servidor manda a lista
@@ -305,6 +270,12 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
   const [titulo, setTitulo] = useState(p.titulo ?? "");
   const [tags, setTags] = useState<string[]>(p.tags);
   const [bio, setBio] = useState(p.bio ?? "");
+  const [avatar, setAvatar] = useState(p.avatar?.chave ?? "");
+  const [capa, setCapa] = useState(p.capa?.chave ?? "");
+  const [moldura, setMoldura] = useState(
+    p.molduras.find((m) => m.cor === p.moldura)?.chave ?? "",
+  );
+  const [vitrine, setVitrine] = useState<NaVitrine[]>(p.vitrine);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -321,7 +292,10 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
         titulo: titulo || null,
         tags,
         bio: bio.trim() || null,
-        vitrine: p.vitrine.map((v) => v.id),
+        vitrine: vitrine.map((v) => v.id),
+        avatar: avatar || null,
+        capa: capa || null,
+        moldura: moldura || null,
       });
       aoSalvar();
     } catch (e) {
@@ -366,6 +340,39 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
         {p.tags_disponiveis.length === 0 && <i>nenhuma tag desbloqueada ainda</i>}
       </div>
 
+      {/* AS TRÊS GALERIAS.
+
+          O trancado **aparece**, e não é contradição com o §48. A regra de lá é
+          que a tela nunca deixe escolher o que a validação vai recusar — e é o
+          que acontece: a opção trancada não é clicável. Escondê-la seria outra
+          coisa, e seria o erro que a própria lista de conquistas não comete ao
+          mostrar as 80 com descrição: *"uma conquista secreta é uma conquista
+          que ninguém persegue"*. Um rosto secreto é a mesma perda. */}
+      <Galeria
+        titulo="Rosto"
+        dica="o padrão é a marca do seu nome"
+        itens={p.rostos}
+        escolhido={avatar}
+        aoEscolher={setAvatar}
+      />
+      <Galeria
+        titulo="Capa"
+        dica="a arte de um filme daqui"
+        larga
+        itens={p.capas}
+        escolhido={capa}
+        aoEscolher={setCapa}
+      />
+      <Galeria
+        titulo="Cor"
+        dica="tinge o perfil inteiro"
+        itens={p.molduras}
+        escolhido={moldura}
+        aoEscolher={setMoldura}
+      />
+
+      <VitrineEditor lista={vitrine} aoMudar={setVitrine} />
+
       <label className="editor-campo">
         <span>Uma linha sua · até 140</span>
         <input
@@ -380,5 +387,223 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
         {salvando ? "salvando…" : "salvar"}
       </button>
     </div>
+  );
+}
+
+/// Uma galeria de enfeites.
+///
+/// Serve às três porque as três são a mesma pergunta — *"qual destes?"* — com
+/// desenhos diferentes: rosto é quadrado, capa é larga, cor é um disco. Três
+/// componentes seriam a mesma lógica de seleção escrita três vezes.
+function Galeria({
+  titulo,
+  dica,
+  itens,
+  escolhido,
+  aoEscolher,
+  larga = false,
+}: {
+  titulo: string;
+  dica: string;
+  itens: EnfeiteNaTela[];
+  escolhido: string;
+  aoEscolher: (chave: string) => void;
+  larga?: boolean;
+}) {
+  if (itens.length === 0) return null;
+  return (
+    <div className="editor-campo">
+      <span>
+        {titulo} <i className="editor-dica">· {dica}</i>
+      </span>
+      <div className={larga ? "galeria larga" : "galeria"}>
+        {/* "nenhum" é uma escolha de verdade, e por isso é um item da galeria e
+            não um botão de limpar em outro canto. */}
+        <button
+          className={`enfeite nenhum${escolhido === "" ? " on" : ""}`}
+          onClick={() => aoEscolher("")}
+          title="nenhum"
+        >
+          —
+        </button>
+        {itens.map((x) => (
+          <button
+            key={x.chave}
+            className={[
+              "enfeite",
+              escolhido === x.chave ? "on" : "",
+              x.aberto ? "" : "trancado",
+              x.cor ? "cor" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            disabled={!x.aberto}
+            onClick={() => aoEscolher(x.chave)}
+            title={
+              x.aberto
+                ? x.rotulo
+                : `${x.rotulo} — abre com a conquista "${x.exige_nome ?? x.exige}"`
+            }
+            style={x.cor ? { background: x.cor } : undefined}
+          >
+            {x.arte && <img src={api.artworkUrl(x.arte)} alt="" loading="lazy" />}
+            {/* Na cor o nome fica fora do disco: dentro dele, sobre a própria
+                cor, nenhuma tinta é legível nas quatro. */}
+            {x.cor && <b className="enfeite-nome">{x.aberto ? x.rotulo : "🔒"}</b>}
+            {/* O nome só aparece no que está aberto. Numa opção trancada o que
+                interessa é **o que falta fazer**, não como ela se chama. */}
+            <span>{x.aberto ? x.rotulo : (x.exige_nome ?? "trancado")}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/// A vitrine: seis caixas, e **a ordem é o conteúdo**.
+///
+/// A coluna existe desde o §17 e a tela de escolher nunca existiu — a vitrine
+/// de todo mundo estava vazia porque não havia como enchê-la. As setas movem;
+/// arrastar seria mais bonito e é o que a tela de coleções faz, mas ali a lista
+/// tem dezenas de itens e aqui tem seis: um alvo de arrastar de 90px por 130px
+/// numa lista de seis não é um ganho, é uma chance de errar.
+function VitrineEditor({
+  lista,
+  aoMudar,
+}: {
+  lista: NaVitrine[];
+  aoMudar: (l: NaVitrine[]) => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [achados, setAchados] = useState<WorkListItem[]>([]);
+
+  useEffect(() => {
+    if (busca.trim().length < 2) return setAchados([]);
+    const t = window.setTimeout(() => {
+      api
+        .works({ q: busca.trim(), sort: "featured" })
+        .then((r) => setAchados(r.slice(0, 6)))
+        .catch(() => {});
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [busca]);
+
+  const mover = (i: number, passo: number) => {
+    const j = i + passo;
+    if (j < 0 || j >= lista.length) return;
+    const l = [...lista];
+    [l[i], l[j]] = [l[j], l[i]];
+    aoMudar(l);
+  };
+
+  return (
+    <div className="editor-campo">
+      <span>
+        Vitrine <i className="editor-dica">· até 6, e a ordem é sua</i>
+      </span>
+
+      <div className="vitrine-edit">
+        {lista.map((v, i) => (
+          <div key={v.id} className="vitrine-caixa" title={v.titulo}>
+            {v.poster ? (
+              <img src={api.artworkUrl(v.poster)} alt={v.titulo} loading="lazy" />
+            ) : (
+              <span className="vitrine-sem-arte">{v.titulo}</span>
+            )}
+            <div className="vitrine-mexer">
+              <button disabled={i === 0} onClick={() => mover(i, -1)} title="pra esquerda">
+                ‹
+              </button>
+              <button
+                className="tirar"
+                onClick={() => aoMudar(lista.filter((x) => x.id !== v.id))}
+                title="tirar da vitrine"
+              >
+                ✕
+              </button>
+              <button
+                disabled={i === lista.length - 1}
+                onClick={() => mover(i, 1)}
+                title="pra direita"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        ))}
+        {lista.length < 6 && <span className="vitrine-vaga">{6 - lista.length} vagas</span>}
+      </div>
+
+      {lista.length < 6 && (
+        <>
+          <input
+            className="campo"
+            value={busca}
+            placeholder="buscar uma obra pra pôr na vitrine…"
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          {achados.length > 0 && (
+            <ul className="resultados">
+              {achados.map((w) => (
+                <li key={w.id}>
+                  <button
+                    disabled={lista.some((v) => v.id === w.id)}
+                    onClick={() => {
+                      aoMudar([
+                        ...lista,
+                        { id: w.id, titulo: w.title, ano: w.year, poster: w.poster },
+                      ]);
+                      setBusca("");
+                    }}
+                  >
+                    {w.poster ? (
+                      <img src={api.artworkUrl(w.poster)} alt="" />
+                    ) : (
+                      <span className="item-noart" />
+                    )}
+                    <span>
+                      {w.title}
+                      {w.year && <span className="muted"> · {w.year}</span>}
+                    </span>
+                    <span className="muted">
+                      {lista.some((v) => v.id === w.id) ? "já está" : "+"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/// O link do perfil.
+///
+/// **É o endereço da barra**, e não um segundo formato: o botão copia o que já
+/// está escrito ali quando você abre o seu perfil por `/p/<nome>`. Inventar uma
+/// URL "de compartilhar" diferente da que o produto usa daria duas verdades
+/// sobre o mesmo lugar.
+function Link({ username }: { username: string }) {
+  const [copiado, setCopiado] = useState(false);
+  const url = `${window.location.origin}/p/${username}`;
+
+  return (
+    <button
+      className="perfil-link"
+      title={url}
+      onClick={() => {
+        void navigator.clipboard
+          ?.writeText(url)
+          .then(() => {
+            setCopiado(true);
+            window.setTimeout(() => setCopiado(false), 2500);
+          })
+          .catch(() => {});
+      }}
+    >
+      {copiado ? "copiado" : `copiar link · /p/${username}`}
+    </button>
   );
 }

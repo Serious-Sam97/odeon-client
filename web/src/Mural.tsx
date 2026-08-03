@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Avatar from "./Avatar";
 import {
   api,
   type Achado,
@@ -10,6 +11,7 @@ import {
   type MinhasAmizades,
   type Mural as Dados,
   type Presente,
+  type SalaAberta,
 } from "./api";
 
 /// R25 — o mural. R28 — de quem ele é. **R33 — a rede social.**
@@ -36,8 +38,12 @@ import {
 /// ela pronta pra um dia sair daqui sem arrastar a locadora junto.
 type Sala = "mural" | "conversas" | "gente";
 
-export default function Mural() {
+export default function Mural({ aoVerPerfil }: { aoVerPerfil: (id: string) => void }) {
   const [sala, setSala] = useState<Sala>("mural");
+  /// Com quem a sala de conversas deve abrir. Vem do atalho da sala de gente
+  /// (R42) — quem clica em "falar" já disse com quem, e chegar na aba de
+  /// conversas pra escolher de novo seria perder o gesto no meio.
+  const [falarCom, setFalarCom] = useState<string | null>(null);
   const [dados, setDados] = useState<Dados | null>(null);
   const [presenca, setPresenca] = useState<Presente[]>([]);
   const [conversas, setConversas] = useState<Conversa[]>([]);
@@ -64,17 +70,10 @@ export default function Mural() {
   /// O barramento do M3: o que acontece na loja e a mensagem que chega entram
   /// aqui sem recarregar. É o que separa uma rede social de um relatório.
   useEffect(() => {
-    const source = new EventSource(api.eventsUrl());
-    source.onmessage = (m) => {
-      try {
-        const e = JSON.parse(m.data);
-        if (e.type === "locadora") carregar();
-        if (e.type === "mensagem") api.conversas().then(setConversas).catch(() => {});
-      } catch {
-        /* evento malformado não derruba a aba */
-      }
-    };
-    return () => source.close();
+    return api.ouvirEventos((e) => {
+      if (e.type === "locadora") carregar();
+      if (e.type === "mensagem") api.conversas().then(setConversas).catch(() => {});
+    });
   }, [carregar]);
 
   const naoLidas = conversas.reduce((n, c) => n + c.nao_lidas, 0);
@@ -102,6 +101,7 @@ export default function Mural() {
       {sala === "mural" && (
         <div className="social-corpo">
           <div className="social-coluna">
+            <SalasAbertas />
             <CaixaDePost aoPostar={carregar} />
             {dados ? <Feed dados={dados} aoMexer={carregar} /> : <p className="muted small">olhando o mural…</p>}
           </div>
@@ -111,8 +111,79 @@ export default function Mural() {
         </div>
       )}
 
-      {sala === "conversas" && <Conversas lista={conversas} aoMexer={carregar} />}
-      {sala === "gente" && <Gente aoMexer={carregar} />}
+      {sala === "conversas" && (
+        <Conversas
+          lista={conversas}
+          aoMexer={carregar}
+          comecarCom={falarCom}
+          aoComecar={() => setFalarCom(null)}
+        />
+      )}
+      {sala === "gente" && (
+        <Gente
+          aoMexer={carregar}
+          presenca={presenca}
+          aoFalar={(id) => {
+            setFalarCom(id);
+            setSala("conversas");
+          }}
+          aoVerPerfil={aoVerPerfil}
+        />
+      )}
+    </div>
+  );
+}
+
+/// R46 — as salas de assistir junto que estão abertas.
+///
+/// **É o convite, e não há tabela de convite**: a amizade já é o aceite (§44),
+/// então uma sala aberta aparece pra quem foi aceito e pra mais ninguém. Um
+/// convite individual seria uma segunda permissão em cima de uma que já existe.
+///
+/// Mora no topo do mural porque é o lugar de "o que está acontecendo na casa
+/// agora" — e uma sala aberta é a coisa mais viva que pode estar acontecendo.
+function SalasAbertas() {
+  const [lista, setLista] = useState<SalaAberta[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const carregar = useCallback(() => {
+    api.juntoAbertas().then(setLista).catch(() => {});
+  }, []);
+
+  useEffect(carregar, [carregar]);
+
+  // O barramento avisa quando uma sala abre ou fecha (§46).
+  useEffect(() => api.ouvirEventos((e) => e.type === "junto" && carregar()), [carregar]);
+
+  // Some quando não há nada: uma faixa dizendo "nenhuma sala aberta" é a linha
+  // que o §24 manda sumir.
+  if (lista.length === 0) return null;
+
+  return (
+    <div className="salas-abertas">
+      {erro && <p className="error small">{erro}</p>}
+      {lista.map((s) => (
+        <div key={s.id} className="sala-aberta">
+          {s.poster && <img src={api.artworkUrl(s.poster)} alt="" loading="lazy" />}
+          <div>
+            <b>{s.host_nome} está assistindo junto</b>
+            <span className="muted small">
+              {s.titulo} · {s.gente} {s.gente === 1 ? "pessoa" : "pessoas"}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              api
+                .entrarJunto(s.id)
+                // A sala entra pelo barramento: o App relê e abre o filme.
+                .then(() => carregar())
+                .catch((e) => setErro(e instanceof Error ? e.message : String(e)));
+            }}
+          >
+            entrar
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -316,7 +387,9 @@ function Bloco({ titulo, gente }: { titulo: string; gente: Presente[] }) {
       <h4>{titulo}</h4>
       {gente.map((p) => (
         <div key={p.id} className={`presente${p.assistindo ? " vendo" : ""}`}>
-          <span className="presente-luz" />
+          {/* A mesma marca da sala de gente (R42). As duas listas são as mesmas
+              pessoas, e uma com retrato e outra sem leria como defeito. */}
+          <Avatar nome={p.display_name} arte={p.rosto} tamanho={22} />
           <b>{p.display_name}</b>
           {/* O que está vendo, quando está. Sem frase inventada pro contrário —
               "online" já é o que a luz diz. */}
@@ -329,7 +402,23 @@ function Bloco({ titulo, gente }: { titulo: string; gente: Presente[] }) {
 
 // -------------------------------------------------------------- as conversas
 
-function Conversas({ lista, aoMexer }: { lista: Conversa[]; aoMexer: () => void }) {
+function Conversas({
+  lista,
+  aoMexer,
+  comecarCom,
+  aoComecar,
+}: {
+  lista: Conversa[];
+  aoMexer: () => void;
+  /// Com quem abrir de saída, quando se chegou aqui pelo atalho da sala de
+  /// gente (R42).
+  comecarCom?: string | null;
+  /// Avisa que o atalho foi cumprido. **É de uma vez só**: sem isto, entrar em
+  /// "conversas" pela aba, dias depois, reabriria a conversa de quem foi
+  /// atalhado uma vez — a sala remonta e o efeito rodaria de novo com o mesmo
+  /// valor. Um atalho que se repete sozinho deixou de ser atalho.
+  aoComecar?: () => void;
+}) {
   const [com, setCom] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Mensagem[]>([]);
   const [texto, setTexto] = useState("");
@@ -352,6 +441,14 @@ function Conversas({ lista, aoMexer }: { lista: Conversa[]; aoMexer: () => void 
   useEffect(() => {
     fim.current?.scrollIntoView({ block: "end" });
   }, [msgs]);
+
+  /// O atalho abrindo a conversa. Depende de `abrir`, e não do primeiro render:
+  /// quem entrou aqui sozinho continua escolhendo com quem falar.
+  useEffect(() => {
+    if (!comecarCom) return;
+    abrir(comecarCom);
+    aoComecar?.();
+  }, [comecarCom, abrir, aoComecar]);
 
   const enviar = async () => {
     if (!texto.trim() || !com) return;
@@ -417,7 +514,33 @@ function Conversas({ lista, aoMexer }: { lista: Conversa[]; aoMexer: () => void 
 
 /// Amigos, pedidos e busca — tudo que era o painel de cima do mural, agora com
 /// espaço pra ser uma tela.
-function Gente({ aoMexer }: { aoMexer: () => void }) {
+///
+/// ## R42 — o que faltava aqui
+///
+/// A sala listava **nome e um botão**, e era tudo. Quatro coisas entraram, e
+/// nenhuma é dado novo: as quatro já existiam em algum lugar do produto e não
+/// chegavam nesta tela.
+///
+/// | | de onde vem |
+/// |---|---|
+/// | a marca da pessoa | desenhada do nome (`Avatar`) — §12, zero bytes |
+/// | o que está vendo agora | a **presença**, que o mural já busca de 30 em 30s |
+/// | falar com ela | a sala de conversas, que já existe ao lado |
+/// | o perfil dela | a aba perfil, que já sabe abrir o de outra conta (§48) |
+///
+/// **Sem aba nova e sem painel lateral**, como foi decidido: o que muda é o que
+/// cada linha diz, não onde ela mora.
+function Gente({
+  aoMexer,
+  presenca,
+  aoFalar,
+  aoVerPerfil,
+}: {
+  aoMexer: () => void;
+  presenca: Presente[];
+  aoFalar: (id: string) => void;
+  aoVerPerfil: (id: string) => void;
+}) {
   const [amizades, setAmizades] = useState<MinhasAmizades | null>(null);
   const [busca, setBusca] = useState("");
   const [achados, setAchados] = useState<Achado[] | null>(null);
@@ -455,6 +578,11 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
 
   if (!amizades) return <p className="muted small">…</p>;
 
+  /// Quem está no ar, por id. A presença é **uma consulta que já acontece** —
+  /// o mural a busca de 30 em 30 segundos pro painel lateral —, então a sala
+  /// de gente não abre uma segunda: ela recebe a mesma lista e cruza aqui.
+  const noAr = new Map(presenca.map((p) => [p.id, p]));
+
   return (
     <div className="gente">
       <input
@@ -471,12 +599,17 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
           <h4>encontrados</h4>
           {achados.length === 0 && <p className="muted small">ninguém com esse nome.</p>}
           {achados.map((a) => (
-            <div key={a.id} className="gente-linha">
-              <b>{a.display_name}</b>
-              <span className="muted small">@{a.username}</span>
-              {a.relacao === "nenhuma" && (
-                <button onClick={() => pedir(a.id)}>adicionar</button>
-              )}
+            <LinhaDeGente
+              key={a.id}
+              nome={a.display_name}
+              arroba={a.username}
+              presente={noAr.get(a.id) ?? null}
+              /* Na busca não há atalho pra conversa: falar é entre amigos (§49),
+                 e oferecer o botão pra quem vai levar recusa é o produto
+                 mentindo pra si mesmo — a mesma regra do §53. */
+              aoVerPerfil={() => aoVerPerfil(a.username)}
+            >
+              {a.relacao === "nenhuma" && <button onClick={() => pedir(a.id)}>adicionar</button>}
               {a.relacao === "enviado" && <i>esperando</i>}
               {a.relacao === "recebido" && (
                 <button className="sim" onClick={() => pedir(a.id)}>
@@ -484,7 +617,7 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
                 </button>
               )}
               {a.relacao === "amigo" && <i>amigo</i>}
-            </div>
+            </LinhaDeGente>
           ))}
         </div>
       ) : (
@@ -493,15 +626,20 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
             <div className="gente-grupo">
               <h4>querem ser seus amigos</h4>
               {amizades.recebidos.map((p: Alguem) => (
-                <div key={p.id} className="gente-linha">
-                  <b>{p.display_name}</b>
+                <LinhaDeGente
+                  key={p.id}
+                  nome={p.display_name}
+                  rosto={p.rosto}
+                  presente={noAr.get(p.id) ?? null}
+                  aoVerPerfil={() => aoVerPerfil(p.username)}
+                >
                   <button className="sim" onClick={() => pedir(p.id)}>
                     aceitar
                   </button>
                   <button onClick={() => desfazer(p.id, `você recusou ${p.display_name}`)}>
                     recusar
                   </button>
-                </div>
+                </LinhaDeGente>
               ))}
             </div>
           )}
@@ -510,16 +648,20 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
             <div className="gente-grupo">
               <h4>seus amigos</h4>
               {amizades.amigos.map((p: Alguem) => (
-                <div key={p.id} className="gente-linha">
-                  <b>{p.display_name}</b>
+                <LinhaDeGente
+                  key={p.id}
+                  nome={p.display_name}
+                  rosto={p.rosto}
+                  presente={noAr.get(p.id) ?? null}
+                  aoFalar={() => aoFalar(p.id)}
+                  aoVerPerfil={() => aoVerPerfil(p.username)}
+                >
                   <button
-                    onClick={() =>
-                      desfazer(p.id, `você e ${p.display_name} não são mais amigos`)
-                    }
+                    onClick={() => desfazer(p.id, `você e ${p.display_name} não são mais amigos`)}
                   >
                     desfazer
                   </button>
-                </div>
+                </LinhaDeGente>
               ))}
             </div>
           )}
@@ -528,12 +670,17 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
             <div className="gente-grupo">
               <h4>esperando resposta</h4>
               {amizades.enviados.map((p: Alguem) => (
-                <div key={p.id} className="gente-linha">
-                  <b>{p.display_name}</b>
+                <LinhaDeGente
+                  key={p.id}
+                  nome={p.display_name}
+                  rosto={p.rosto}
+                  presente={noAr.get(p.id) ?? null}
+                  aoVerPerfil={() => aoVerPerfil(p.username)}
+                >
                   <button onClick={() => desfazer(p.id, `pedido pra ${p.display_name} cancelado`)}>
                     cancelar
                   </button>
-                </div>
+                </LinhaDeGente>
               ))}
             </div>
           )}
@@ -542,15 +689,74 @@ function Gente({ aoMexer }: { aoMexer: () => void }) {
             <div className="gente-grupo">
               <h4>também estão aqui</h4>
               {amizades.no_servidor.map((p: Alguem) => (
-                <div key={p.id} className="gente-linha">
-                  <b>{p.display_name}</b>
+                <LinhaDeGente
+                  key={p.id}
+                  nome={p.display_name}
+                  rosto={p.rosto}
+                  presente={noAr.get(p.id) ?? null}
+                  aoVerPerfil={() => aoVerPerfil(p.username)}
+                >
                   <button onClick={() => pedir(p.id)}>adicionar</button>
-                </div>
+                </LinhaDeGente>
               ))}
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/// Uma pessoa na sala, com o que se sabe dela e o que dá pra fazer com ela.
+///
+/// A ação de amizade continua vindo de fora, como `children`: ela é diferente
+/// em cada grupo — adicionar, aceitar, recusar, cancelar, desfazer — e essa é a
+/// razão de os grupos existirem. O que a linha padroniza é a **identidade**:
+/// marca, nome, o que está vendo, e as duas portas.
+function LinhaDeGente({
+  nome,
+  rosto,
+  arroba,
+  presente,
+  aoFalar,
+  aoVerPerfil,
+  children,
+}: {
+  nome: string;
+  rosto?: string | null;
+  arroba?: string;
+  presente: Presente | null;
+  aoFalar?: () => void;
+  aoVerPerfil: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className={presente ? "gente-linha no-ar" : "gente-linha"}>
+      <Avatar nome={nome} arte={rosto ?? presente?.rosto} tamanho={34} vendo={!!presente?.assistindo} />
+
+      <div className="gente-quem">
+        <b>{nome}</b>
+        {/* O que está vendo, quando está vendo. Sem frase pro contrário: quem
+            está online e parado já é dito pelo anel, e "não está vendo nada" é
+            a linha que o §24 manda sumir. */}
+        {presente?.assistindo ? (
+          <span className="gente-vendo">vendo {presente.assistindo}</span>
+        ) : (
+          arroba && <span className="muted small">@{arroba}</span>
+        )}
+      </div>
+
+      <div className="gente-acoes">
+        {aoFalar && (
+          <button className="gente-atalho" onClick={aoFalar} title={`falar com ${nome}`}>
+            falar
+          </button>
+        )}
+        <button className="gente-atalho" onClick={aoVerPerfil} title={`o perfil de ${nome}`}>
+          perfil
+        </button>
+        {children}
+      </div>
     </div>
   );
 }

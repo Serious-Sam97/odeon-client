@@ -3,6 +3,7 @@ import {
   api,
   DEVICE_ID,
   type PlaybackPlan,
+  type Sala,
   type SpriteInfo,
   type TranscodeSession,
   type WorkListItem,
@@ -47,9 +48,23 @@ function clock(seconds: number): string {
 export default function Player({
   work,
   onClose,
+  sala,
+  aoMudarSala,
+  aoLado,
 }: {
   work: WorkListItem;
   onClose: () => void;
+  /// R46 — a sala de assistir junto, quando é uma sessão junta.
+  ///
+  /// **Quem manda é o host** (§4.6): pro membro o player vira um espelho — ele
+  /// obedece `rodando` e `posicao_segundos`, e os controles somem. Não é
+  /// desabilitar botão: é não oferecer o que a regra não permite, que é a
+  /// mesma linha do §53.
+  sala?: Sala | null;
+  aoMudarSala?: (s: Sala) => void;
+  /// A conversa, montada por quem chamou. O player não sabe o que é uma sala —
+  /// ele sabe onde ela cabe.
+  aoLado?: React.ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -73,7 +88,13 @@ export default function Player({
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
-  const resumeFrom = work.position_seconds ?? 0;
+  /// Numa sala, o ponto de partida é o da sala — e não o "continuar de onde
+  /// parou" de quem entrou. Entrar numa sessão junta e cair vinte minutos à
+  /// frente dos outros seria a sessão nascendo dessincronizada.
+  const emSala = !!sala;
+  const souHost = sala?.sou_host ?? false;
+  const mando = !emSala || souHost;
+  const resumeFrom = emSala ? (sala?.posicao_segundos ?? 0) : (work.position_seconds ?? 0);
   const accent = work.dominant_color ?? "#e0b062";
 
   // Onde esta sessão começou, em tempo de arquivo. Direct Play é sempre 0.
@@ -91,6 +112,8 @@ export default function Player({
 
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
+  const sessionRef = useRef<TranscodeSession | null>(null);
+  sessionRef.current = session;
 
   // A folha de sprites pode não existir ainda — o player só perde o preview.
   useEffect(() => {
@@ -174,25 +197,116 @@ export default function Player({
   // Outro aparelho mexeu nesta mesma obra: acompanha, se a diferença justificar.
   // O eco do próprio device é descartado pelo DEVICE_ID.
   useEffect(() => {
-    const source = new EventSource(api.eventsUrl());
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data);
-        if (event.type !== "progress") return;
-        if (event.device_id === DEVICE_ID) return;
-        if (event.work_id !== work.id) return;
-        const video = videoRef.current;
-        if (!video) return;
-        // O evento vem em tempo de arquivo; o `<video>` vive em tempo de sessão.
-        const alvo = event.position_seconds - offsetRef.current;
-        if (alvo < 0 || (video.duration && alvo > video.duration)) return;
-        if (Math.abs(video.currentTime - alvo) > 5) video.currentTime = alvo;
-      } catch {
-        /* mensagem malformada não derruba o player */
-      }
-    };
-    return () => source.close();
+    return api.ouvirEventos((event) => {
+      if (event.type !== "progress") return;
+      if (event.device_id === DEVICE_ID) return;
+      if (event.work_id !== work.id) return;
+      const video = videoRef.current;
+      if (!video) return;
+      // O evento vem em tempo de arquivo; o `<video>` vive em tempo de sessão.
+      const alvo = (event.position_seconds as number) - offsetRef.current;
+      if (alvo < 0 || (video.duration && alvo > video.duration)) return;
+      if (Math.abs(video.currentTime - alvo) > 5) video.currentTime = alvo;
+    });
   }, [work.id]);
+
+  /// **A sala mandando no vídeo.**
+  ///
+  /// Três coisas, e as três vêm do servidor: tocar, parar, e estar no ponto.
+  /// `rodando` já é `tocando && todo mundo pronto` — a tela não recalcula a
+  /// regra, ela obedece o número que o servidor deu (§46).
+  ///
+  /// A tolerância de 1,5s existe porque `currentTime` não é exato e porque
+  /// perseguir o último décimo faria o vídeo pular pra sempre. Acima disso é
+  /// dessincronia de verdade, e aí vale o solavanco.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !sala) return;
+
+    const alvo = sala.posicao_segundos - offsetRef.current;
+    if (alvo >= 0 && Math.abs(video.currentTime - alvo) > 1.5) {
+      video.currentTime = alvo;
+    }
+
+    if (sala.rodando && video.paused) void video.play().catch(() => {});
+    if (!sala.rodando && !video.paused) video.pause();
+    // Sem o objeto `sala` nas dependências: ele muda de identidade a cada
+    // batimento de qualquer participante, e reexecutar isto a cada batimento
+    // faria o vídeo ser recolocado no lugar dezenas de vezes por minuto.
+  }, [sala?.rodando, sala?.posicao_segundos, sala?.atualizado_em]);
+
+  /// **Eu, dizendo se estou pronto.**
+  ///
+  /// É este sinal que faz "quando um trava, todo mundo para" ser um fato e não
+  /// um acordo: a tela avisa quando está esperando dado e quando voltou, e o
+  /// servidor soma. O batimento de 20s serve de sinal de vida — quem fecha a
+  /// aba não avisa, e uma sala que espera pra sempre é uma sala travada.
+  ///
+  /// ## O laço que isto quase virou
+  ///
+  /// A primeira versão dependia do objeto `sala` inteiro e mandava o estado a
+  /// cada execução. Só que `prontoJunto` **devolve a sala** — então cada aviso
+  /// trocava a identidade do objeto, o efeito rodava de novo e avisava outra
+  /// vez. Medido no segundo participante: uma fila de `/api/junto/…/pronto` sem
+  /// fim, o pool de conexões do navegador saturado, e **o vídeo dele nunca
+  /// carregava** — o que fazia a sala inteira esperar por ele pra sempre.
+  ///
+  /// ## E o impasse do "pronto" alto demais
+  ///
+  /// A régua era `readyState >= 3` (HAVE_FUTURE_DATA). Numa sala isso **trava
+  /// sozinho**: a sala nasce parada, o vídeo de todo mundo começa pausado, e um
+  /// vídeo pausado pode nunca passar de `HAVE_CURRENT_DATA` porque o navegador
+  /// não vê motivo pra encher o buffer. Ninguém fica pronto, nada toca, e nada
+  /// tocar é o que impede de encher o buffer — o impasse se alimenta.
+  ///
+  /// A régua passou a ser `>= 2`: **tenho o quadro deste ponto**. É a promessa
+  /// honesta pra sincronia — "estou onde você está" —, e quem travar de
+  /// verdade no meio avisa pelo `waiting`, que é o evento que existe pra isso.
+  ///
+  /// Dois consertos, e os dois importam: as dependências são só o `id` da sala
+  /// (o resto do objeto muda o tempo todo por natureza), e o aviso só sai
+  /// quando o valor **muda**. O batimento continua saindo sempre, porque o
+  /// silêncio é que é o sinal de morte.
+  const ultimoPronto = useRef<boolean | null>(null);
+  useEffect(() => {
+    const salaId = sala?.id;
+    const video = videoRef.current;
+    if (!salaId || !video) return;
+
+    const dizer = (pronto: boolean, forcar = false) => {
+      if (!forcar && ultimoPronto.current === pronto) return;
+      ultimoPronto.current = pronto;
+      api.prontoJunto(salaId, pronto).then((s) => aoMudarSala?.(s)).catch(() => {});
+    };
+
+    const carregando = () => dizer(false);
+    const voltou = () => dizer(true);
+
+    video.addEventListener("waiting", carregando);
+    video.addEventListener("stalled", carregando);
+    video.addEventListener("canplay", voltou);
+    video.addEventListener("playing", voltou);
+    video.addEventListener("loadeddata", voltou);
+
+    // `>= 2` é HAVE_CURRENT_DATA: **tenho o quadro deste ponto**. Ver o porquê
+    // no cabeçalho — com `>= 3` a sala trava sozinha.
+    const carregado = () => video.readyState >= 2;
+
+    // O primeiro aviso sai na hora: sem ele, um membro que ainda nem carregou
+    // conta como pronto e a sala começa sem ele.
+    dizer(carregado(), true);
+
+    const batida = window.setInterval(() => dizer(carregado(), true), 20_000);
+
+    return () => {
+      video.removeEventListener("waiting", carregando);
+      video.removeEventListener("stalled", carregando);
+      video.removeEventListener("canplay", voltou);
+      video.removeEventListener("playing", voltou);
+      video.removeEventListener("loadeddata", voltou);
+      window.clearInterval(batida);
+    };
+  }, [sala?.id, aoMudarSala]);
 
   const wake = useCallback(() => {
     setChrome(true);
@@ -203,11 +317,32 @@ export default function Player({
     hideTimer.current = window.setTimeout(() => setChrome(false), CONTROLS_HIDE_MS);
   }, []);
 
+  /// O play/pausa. **Numa sala, quem não é host não mexe** — e o gesto não
+  /// falha em silêncio: a tela nem mostra o botão (ver o cromo lá embaixo).
   const toggle = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !mando) return;
     video.paused ? video.play() : video.pause();
-  }, []);
+  }, [mando]);
+
+  /// O host publicando o que fez. A sala inteira lê isto e obedece.
+  const publicar = useCallback(
+    (tocando: boolean) => {
+      if (!sala || !souHost) return;
+      const video = videoRef.current;
+      const posicao = offsetRef.current + (video?.currentTime ?? 0);
+      api
+        .estadoJunto(sala.id, {
+          tocando,
+          posicao_segundos: posicao,
+          // No modo compartilhado é a sessão do host que a sala inteira lê.
+          transcode_id: sala.modo === "compartilhado" ? (sessionRef.current?.id ?? null) : null,
+        })
+        .then((s) => aoMudarSala?.(s))
+        .catch(() => {});
+    },
+    [sala, souHost, aoMudarSala],
+  );
 
   /// Pula pra um instante do ARQUIVO.
   ///
@@ -302,13 +437,20 @@ export default function Player({
   return (
     <div
       ref={shellRef}
-      className={chrome ? "player" : "player idle"}
+      className={[chrome ? "player" : "player idle", aoLado ? "com-sala" : ""]
+        .filter(Boolean)
+        .join(" ")}
       style={{ "--accent-work": accent } as React.CSSProperties}
       onMouseMove={wake}
     >
       {/* A cor dominante da obra vive AQUI e em nenhum outro lugar do player:
           controle é sistema, e sistema é amarelo. Ver docs/DESIGN.md §12. */}
       <div className="player-halo" />
+
+      {/* A conversa da sala. Ao LADO do filme, e não por cima: o §4.6 pediu
+          "conversa ao lado durante a sessão", e uma caixa flutuando sobre a
+          imagem seria a conversa disputando espaço com o que se veio ver. */}
+      {aoLado}
 
       <div className="player-stage" onClick={toggle}>
         <video
@@ -317,6 +459,11 @@ export default function Player({
           src={plan?.mode === "direct_play" ? api.streamUrl(work.media_file_id) : undefined}
           crossOrigin="anonymous"
           autoPlay
+          /* R46: numa sala o vídeo nasce PAUSADO (a sala manda), e um vídeo
+             pausado sem `preload` pode nunca carregar quadro nenhum — o que
+             trava a sala esperando por quem não vai ficar pronto nunca. Pedir o
+             dado desde já é o que quebra esse impasse. */
+          preload="auto"
           onLoadedMetadata={(e) => {
             setStreamDuration(e.currentTarget.duration);
             // Só no Direct Play. Com sessão, o ffmpeg JÁ começou no ponto de
@@ -337,14 +484,21 @@ export default function Player({
           onPlay={() => {
             setPlaying(true);
             report("start");
+            publicar(true);
             wake();
           }}
           onPause={() => {
             setPlaying(false);
             report("pause");
+            publicar(false);
             wake();
           }}
-          onSeeked={() => report("seek")}
+          onSeeked={() => {
+            report("seek");
+            // O pulo do host arrasta a sala. O do membro não existe — ele não
+            // tem timeline clicável.
+            publicar(!videoRef.current?.paused);
+          }}
           onEnded={() => report("finish")}
           onVolumeChange={(e) => setVolume(e.currentTarget.muted ? 0 : e.currentTarget.volume)}
           onError={() => {
@@ -492,7 +646,7 @@ export default function Player({
           className="timeline"
           onMouseMove={(e) => setHover({ x: e.clientX, time: timeAt(e.clientX) })}
           onMouseLeave={() => setHover(null)}
-          onClick={(e) => seekToFile(timeAt(e.clientX))}
+          onClick={(e) => mando && seekToFile(timeAt(e.clientX))}
         >
           <div className="track" />
           {/* O que esta sessão NÃO entrega, marcado em vez de escondido: a
@@ -515,15 +669,24 @@ export default function Player({
         </div>
 
         <div className="control-row">
-          <button className="icon" onClick={() => seekBy(-SKIP_SECONDS)} title="voltar 10s">
-            ↺
-          </button>
-          <button className="icon big" onClick={toggle} title={playing ? "pausar" : "tocar"}>
-            {playing ? "❚❚" : "▶"}
-          </button>
-          <button className="icon" onClick={() => seekBy(SKIP_SECONDS)} title="avançar 10s">
-            ↻
-          </button>
+          {/* R46 — **numa sala, quem não é host não comanda.** Os botões não
+              ficam desabilitados: eles somem. Um controle apagado convida a
+              tentar, e tentar aqui é levar um "não" que a tela já sabia. */}
+          {mando ? (
+            <>
+              <button className="icon" onClick={() => seekBy(-SKIP_SECONDS)} title="voltar 10s">
+                ↺
+              </button>
+              <button className="icon big" onClick={toggle} title={playing ? "pausar" : "tocar"}>
+                {playing ? "❚❚" : "▶"}
+              </button>
+              <button className="icon" onClick={() => seekBy(SKIP_SECONDS)} title="avançar 10s">
+                ↻
+              </button>
+            </>
+          ) : (
+            <span className="quem-manda">quem manda é {sala?.host_nome}</span>
+          )}
 
           <span className="timecode">
             {clock(fileTime)} <span className="muted">/ {clock(total)}</span>

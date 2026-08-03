@@ -12,4 +12,6 @@ COPY . .
 RUN npm run build
 
 FROM nginx:alpine AS runtime
+# R43: sem este arquivo, `/p/rudney` devolve 404 em produção — ver nginx.conf.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Desafios from "./Desafios";
 import {
   api,
   formatDuration,
@@ -138,6 +139,19 @@ export default function ForYou({ onPlay }: { onPlay: (w: WorkListItem) => void }
           ))}
         </Faixa>
       )}
+
+      {/* R41 — os desafios também aqui.
+
+          Eles moram no perfil desde a R35, e o perfil é **onde se vai de
+          propósito**; o "para você" é onde se cai. Um desafio que só existe na
+          tela que se visita de propósito é um desafio que se esquece.
+
+          Abaixo do "continue de onde parou" e acima do que a curadoria sugere:
+          o que você já começou vem antes do que alguém propôs, e o que você se
+          comprometeu a fazer vem antes do que a máquina achou. E fora do
+          `conhecimento < 1` que envolve a faixa acima — o desafio não é
+          conteúdo de estado frio, ele vale igual depois de mil filmes. */}
+      <Desafios compacto />
 
       {conhecimento < 1 && calib.length > 0 && (
         <Calibragem

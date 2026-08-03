@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   type AlvoDaCaixa,
@@ -10,6 +10,7 @@ import {
   type WorkListItem,
 } from "./api";
 import { duracao, ficha, paraLista } from "./Details";
+import { RuidoDeFita } from "./RuidoDeFita";
 import MenuDVD from "./MenuDVD";
 
 /// A locadora: a biblioteca vista como uma loja de aluguel.
@@ -213,26 +214,19 @@ export default function Locadora({
   /// Todas as quatro ações levam ao mesmo `fetch`, e é por isso que o backend
   /// manda um evento só com um campo `acao` em vez de quatro variantes.
   useEffect(() => {
-    const source = new EventSource(api.eventsUrl());
-    source.onmessage = (message) => {
-      try {
-        const d = JSON.parse(message.data);
-        if (d.type !== "locadora") return;
-        recarregarLoja();
-        setRecado(
-          d.acao === "pediu"
-            ? `${d.quem_nome} pediu uma fita de volta`
-            : d.acao === "pegou"
-              ? `${d.quem_nome} pegou ${d.titulo ?? "uma caixa"}`
-              : d.acao === "venceu"
-                ? "uma fita venceu e voltou pra prateleira"
-                : `${d.quem_nome} devolveu uma fita`,
-        );
-      } catch {
-        /* evento malformado não derruba a loja */
-      }
-    };
-    return () => source.close();
+    return api.ouvirEventos((d) => {
+      if (d.type !== "locadora") return;
+      recarregarLoja();
+      setRecado(
+        d.acao === "pediu"
+          ? `${d.quem_nome} pediu uma fita de volta`
+          : d.acao === "pegou"
+            ? `${d.quem_nome} pegou ${d.titulo ?? "uma caixa"}`
+            : d.acao === "venceu"
+              ? "uma fita venceu e voltou pra prateleira"
+              : `${d.quem_nome} devolveu uma fita`,
+      );
+    });
   }, [recarregarLoja]);
 
   // O recado some sozinho. Um aviso que fica pra sempre vira parte da moldura
@@ -442,9 +436,16 @@ export default function Locadora({
         </div>
       )}
 
-      {expostas.map((p) => (
+      {/* A loja abrindo (R41). Quatro prateleiras vazias com a madeira já
+          desenhada — o que cabe na primeira tela —, e elas ocupam desde o
+          primeiro quadro a altura que vão ter. Quando as caixas chegam, elas
+          caem dentro do espaço que já estava lá em vez de empurrar a página. */}
+      {carregando && [0, 1, 2, 3].map((i) => <EstanteVazia key={i} atrasoBase={i * 120} />)}
+
+      {expostas.map((p, i) => (
         <Estante
           key={p.nome}
+          atrasoBase={Math.min(i, TETO_ESTANTES) * PASSO_ESTANTE_MS}
           nome={p.nome}
           /* "16 de 113", e não "16". Um número que esconde o total é o
              "Biblioteca 300" que a R3 (§14) corrigiu: sem o segundo número a
@@ -586,6 +587,7 @@ function Estante({
   fora,
   ehVhs,
   onPegar,
+  atrasoBase = 0,
 }: {
   nome: string;
   legenda: string;
@@ -593,6 +595,9 @@ function Estante({
   fora: Map<string, Emprestada>;
   ehVhs: (c: Caixa) => boolean;
   onPegar: (c: Caixa, origem: DOMRect) => void;
+  /// De quanto tempo esta estante começa a ser abastecida (R41). Zero pras
+  /// estantes do balcão, que já estão na tela quando as outras chegam.
+  atrasoBase?: number;
 }) {
   return (
     <section className="estante">
@@ -602,16 +607,57 @@ function Estante({
       </div>
       <div className="prateleira">
         <div className="fileira">
-          {caixas.map((c) => (
+          {caixas.map((c, i) => (
             <CaixaNaEstante
               key={c.id}
               caixa={c}
               vhs={ehVhs(c)}
               emprestimo={fora.get(c.id) ?? null}
               onPegar={(r) => onPegar(c, r)}
+              atraso={atrasoBase + i * PASSO_MS}
             />
           ))}
         </div>
+        <div className="tabua" />
+      </div>
+    </section>
+  );
+}
+
+/// Quanto uma caixa espera depois da anterior da mesma estante.
+///
+/// 34ms é o que faz quarenta caixas lerem como **abastecimento** e não como
+/// lista aparecendo: abaixo disso vira um piscar só, e acima a última fica
+/// esperando o suficiente pra alguém notar que está esperando.
+const PASSO_MS = 34;
+
+/// E de quanto em quanto uma estante começa depois da de cima.
+///
+/// Somado, o teto é `TETO_ESTANTES` estantes: a cascata inteira não pode ser
+/// mais longa que a paciência de quem só quer pegar um filme, e as estantes de
+/// baixo já nascem fora da tela.
+const PASSO_ESTANTE_MS = 90;
+const TETO_ESTANTES = 8;
+
+/// A loja abrindo, no lugar do spinner.
+///
+/// **A prateleira nasce com a madeira desenhada e vazia.** É a mesma escolha da
+/// grade de capítulos do §47 — moldura vazia em vez da palavra "carregando" —,
+/// e ela resolve o defeito que a versão anterior tinha: as quarenta caixas
+/// chegavam de uma vez, e a página inteira saltava quando chegavam.
+///
+/// A altura é a de uma estante de verdade desde o primeiro quadro, então nada
+/// se move quando as caixas caem: elas caem **dentro** do espaço que já estava
+/// lá.
+function EstanteVazia({ atrasoBase }: { atrasoBase: number }) {
+  return (
+    <section className="estante vazia" style={{ ["--atraso" as string]: `${atrasoBase}ms` }}>
+      <div className="placa">
+        <span />
+        <i />
+      </div>
+      <div className="prateleira">
+        <div className="fileira" />
         <div className="tabua" />
       </div>
     </section>
@@ -631,11 +677,15 @@ function CaixaNaEstante({
   vhs,
   emprestimo,
   onPegar,
+  atraso = 0,
 }: {
   caixa: Caixa;
   vhs: boolean;
   emprestimo: Emprestada | null;
   onPegar: (origem: DOMRect) => void;
+  /// Quando esta caixa cai na prateleira (R41). A animação roda na montagem e
+  /// só nela: devolver uma fita não faz a loja inteira cair de novo.
+  atraso?: number;
 }) {
   const classe = [
     "caixa",
@@ -653,7 +703,7 @@ function CaixaNaEstante({
   return (
     <button
       className={classe}
-      style={{ ["--cor" as string]: caixa.cor }}
+      style={{ ["--cor" as string]: caixa.cor, ["--atraso" as string]: `${atraso}ms` }}
       // O retângulo de onde a caixa saiu: é dele que o voo até o centro parte.
       // Sem isto ela apareceria pronta no meio da tela, que é o que se queria
       // justamente evitar.
@@ -799,7 +849,18 @@ function NaMao({
   /// um erro em vez de silêncio.
   const [ocupado, setOcupado] = useState(false);
   /// Quanto a fita ainda tem no ponteiro, durante a animação. `null` = parada.
+  ///
+  /// **Só o segundo inteiro mora aqui.** O giro dos carretéis é escrito direto
+  /// no elemento, como propriedade CSS — pôr o ângulo em estado repintaria a
+  /// tela sessenta vezes por segundo pra mover dois discos, que é a mesma conta
+  /// que a agulha do "ao vivo" já tinha feito (§25).
   const [rebobinando, setRebobinando] = useState<number | null>(null);
+  const rebobinadorRef = useRef<HTMLDivElement>(null);
+  const ruido = useRef<RuidoDeFita | null>(null);
+
+  // A tela pode fechar no meio do gesto — e um oscilador vivo depois disso é um
+  // aparelho ligado numa sala vazia.
+  useEffect(() => () => ruido.current?.cortar(), []);
   const [aviso, setAviso] = useState<string | null>(null);
 
   /// **Onde a fita está** (R30).
@@ -877,18 +938,72 @@ function NaMao({
     const inicio = performance.now();
     const total = duracaoDoRebobinar(de);
 
+    // Os ângulos dos dois carretéis, acumulados quadro a quadro. Acumular em
+    // vez de calcular do tempo é o que permite a velocidade variar sem o disco
+    // dar um salto quando ela muda.
+    let anguloA = 0;
+    let anguloB = 0;
+    let ultimo = inicio;
+
+    ruido.current = new RuidoDeFita();
+    ruido.current.comecar();
+
+    // *"Alma não pode custar enjoo"* — a mesma linha da barra de cima (§52). A
+    // regra global do CSS mata `animation` e `transition`, e não alcança um
+    // ângulo escrito por JS: quem pediu menos movimento continua vendo os dois
+    // discos girarem por dez segundos. Aqui eles ficam parados, e a espera —
+    // que é o conteúdo do gesto — continua igual.
+    const parado = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
     const quadro = (agora: number) => {
       const t = Math.min(1, (agora - inicio) / total);
-      setRebobinando(Math.round(de * (1 - t)));
+      const dt = Math.min(0.05, (agora - ultimo) / 1000);
+      ultimo = agora;
+
+      // **A velocidade é proporcional ao que falta** (§4.5): a fita sai
+      // rápido e vai perdendo força até parar. Um mínimo de 0,25 existe pra
+      // ela não parecer travada no último segundo.
+      const velocidade = Math.max(0.25, 1 - t);
+      // Sentidos opostos, que é o que os dois carretéis de um VHS fazem: um
+      // entrega a fita e o outro recolhe.
+      anguloA -= dt * velocidade * 1000;
+      anguloB += dt * velocidade * 640;
+
+      const el = rebobinadorRef.current;
+      if (el) {
+        if (!parado) {
+          el.style.setProperty("--giro-a", `${anguloA}deg`);
+          el.style.setProperty("--giro-b", `${anguloB}deg`);
+        }
+        // Quanta fita ainda está no carretel da DIREITA — o mesmo número do
+        // ponteiro, normalizado. Vai de 1 a 0, e é ele que faz o rolo da
+        // esquerda engordar enquanto o da direita afina: a fita voltando pro
+        // lugar de onde saiu, que é o que "rebobinar" quer dizer.
+        el.style.setProperty("--restante", `${1 - t}`);
+      }
+      ruido.current?.velocidade(velocidade);
+
+      const segundos = Math.round(de * (1 - t));
+      setRebobinando((atual) => (atual === segundos ? atual : segundos));
+
       if (t < 1) return requestAnimationFrame(quadro);
 
-      setRebobinando(null);
-      void balcao(async () => {
-        const { rebobinadas } = await api.rebobinar(alvoDe(caixa));
-        setFita((f) => (f ? { ...f, posicao_segundos: 0, minha: true } : f));
-        depois?.();
-        return rebobinadas > 0 ? "fita rebobinada" : "já estava no começo";
-      });
+      // O TRANCO. A classe fica no elemento os 160ms da animação, e é ela que
+      // dá o pulo de um quadro — o mecanismo batendo no fim de curso. Sem ele o
+      // movimento simplesmente para, e parar não é chegar.
+      rebobinadorRef.current?.classList.add("trancou");
+      ruido.current?.parar();
+      ruido.current = null;
+
+      window.setTimeout(() => {
+        setRebobinando(null);
+        void balcao(async () => {
+          const { rebobinadas } = await api.rebobinar(alvoDe(caixa));
+          setFita((f) => (f ? { ...f, posicao_segundos: 0, minha: true } : f));
+          depois?.();
+          return rebobinadas > 0 ? "fita rebobinada" : "já estava no começo";
+        });
+      }, 260);
     };
     requestAnimationFrame(quadro);
   };
@@ -1347,11 +1462,7 @@ function NaMao({
           a fita está sendo rebobinada, e o número que desce é o progresso
           real sendo apagado. */}
       {rebobinando !== null && (
-        <div className="rebobinando">
-          <span className="rebo-carretel" />
-          <b>{ponteiro(rebobinando)}</b>
-          <i>rebobinando…</i>
-        </div>
+        <Rebobinando ref={rebobinadorRef} ponteiro={ponteiro(rebobinando)} />
       )}
 
       {(fase === "na-mao" || fase === "midia") && (
@@ -1554,6 +1665,54 @@ function Disco({ caixa }: { caixa: Caixa }) {
     </>
   );
 }
+
+/// R45 — o rebobinar como objeto.
+///
+/// ## O que havia
+///
+/// Um anel girando ao contrário e um número descendo. O §46 já tinha anotado a
+/// dívida com todas as letras: *"falta o objeto girando, o ruído e o tranco no
+/// fim"*.
+///
+/// ## O que ele é agora
+///
+/// A janela de um VHS, com os dois carretéis — os mesmos que a caixa já
+/// desenhava na estante, na mesma linguagem. E três coisas que o anel não
+/// tinha:
+///
+/// | | e por que importa |
+/// |---|---|
+/// | **os dois giram, em sentidos opostos** | é o que os carretéis de uma fita fazem: um entrega, o outro recolhe |
+/// | **a velocidade cai com o que falta** | a fita sai rápido e vai perdendo força — é o dado do ponteiro virando movimento |
+/// | **o rolo da esquerda engorda** | a fita voltando pro lugar, que é literalmente o que "rebobinar" quer dizer |
+///
+/// O giro não vem de `@keyframes`: ele é escrito como propriedade CSS a cada
+/// quadro, porque uma animação de velocidade constante não sabe desacelerar
+/// junto com um número que vem do banco.
+const Rebobinando = forwardRef<HTMLDivElement, { ponteiro: string }>(function Rebobinando(
+  { ponteiro },
+  ref,
+) {
+  return (
+    <div className="rebobinando" ref={ref}>
+      <div className="rebo-fita">
+        <span className="rebo-janela">
+          <span className="rebo-carretel a">
+            <span className="rebo-rolo" />
+            <span className="rebo-dentes" />
+          </span>
+          <span className="rebo-carretel b">
+            <span className="rebo-rolo" />
+            <span className="rebo-dentes" />
+          </span>
+          <span className="rebo-vidro" />
+        </span>
+      </div>
+      <b>{ponteiro}</b>
+      <i>rebobinando…</i>
+    </div>
+  );
+});
 
 /// A fita: uma caixa de verdade, seis faces. A espessura é 13% da largura,
 /// que é a proporção de um VHS (187 × 103 × 25 mm) — sem ela o objeto vira

@@ -2,71 +2,102 @@
 
 [![build](https://github.com/Serious-Sam97/odeon-client/actions/workflows/build.yml/badge.svg)](https://github.com/Serious-Sam97/odeon-client/actions/workflows/build.yml)
 
-A interface do [Odeon](https://github.com/Serious-Sam97/odeon-server): React +
-TypeScript + Vite, mais os clientes Kotlin Multiplatform de celular, TV e iOS.
+> 🇧🇷 **Versão em português: [README.pt-BR.md](README.pt-BR.md)** — and that one
+> is the original. The project is written in Portuguese: code comments, function
+> names, screen addresses (`/biblioteca`, `/ao-vivo`, `/locadora`) and the design
+> document. This README is the front door, translated.
 
-**Ela não é um servidor.** Não fala com banco, não identifica filme, não enxerga
-mídia — consome `/api/...` e mais nada. Pra ter um Odeon rodando você precisa do
-repositório do servidor; este aqui é um cliente dele, como qualquer outro.
+The interface for [Odeon](https://github.com/Serious-Sam97/odeon-server): React
++ TypeScript + Vite, plus the Kotlin Multiplatform clients for phone, TV and iOS.
+
+**This is not a server.** It doesn't talk to a database, it doesn't identify
+films, it can't see your media — it consumes `/api/…` and nothing else. To have
+Odeon running you need the server repository; this is a client of it, like any
+other.
 
 ---
 
-## Subir
+## Two repositories
 
-Pré-requisitos: Docker, e **um servidor Odeon já rodando** em algum lugar.
+| | | |
+|---|---|---|
+| **[odeon-server](https://github.com/Serious-Sam97/odeon-server)** | the server | Rust · axum + sqlx + Postgres/pgvector · and the whole `docs/DESIGN.md` |
+| **[odeon-client](https://github.com/Serious-Sam97/odeon-client)** | **you are here** | the web interface and the Kotlin clients |
+
+They talk over HTTP and nothing else: no shared types, no generated code, no
+cross imports. Splitting them cost one `docker-compose` service on each side.
+
+**`web/src/api.ts` is the only copy of the contract that exists** — and it was
+already a copy before the repositories split. That is the debt the separation
+buys: a route that changes shape on the server has nothing left to warn this
+side. It was bought knowingly, and it's written down in `DESIGN.md` §67.
+
+---
+
+## Running it
+
+Prerequisites: Docker, and **an Odeon server already running** somewhere.
 
 ```bash
 cp .env.example .env
 ```
 
-Aponte `VITE_API_URL` pro seu servidor. Vazio também funciona quando a interface
-é servida pela mesma máquina: aí ela deduz da própria página (mesmo host, mesmo
-esquema, porta 8080 ou 8443).
+Point `VITE_API_URL` at your server. Leaving it empty also works when the
+interface is served from the same machine: it then derives the API from the page
+itself — same host, same scheme, port 8080 (or 8443 under HTTPS).
 
 ```bash
 docker compose up -d --build
 ```
 
-A interface fica em `http://localhost:5174`. E mesmo sem configurar nada, a tela
-de login deixa trocar de servidor à mão.
+The interface lands on `http://localhost:5174`. And even with nothing
+configured it stays usable: the login screen lets you type a server by hand.
+
+One detail that bites: **an HTTPS page cannot call an HTTP API** — the browser
+blocks it as mixed content, and that includes `<video>`. This interface detects
+that combination and explains it, instead of looking like the server went down.
 
 ---
 
-## O que tem aqui
+## What's here
 
 ```
-web/              React + TS + Vite — as onze telas
-  src/api.ts      o contrato com o servidor, escrito à mão
-clients/          Kotlin Multiplatform (ver clients/README.md)
-  shared/         modelos + Ktor + repositório, sem UI
-  composeApp/     Compose MP: celular Android + iOS
-  tv/             Android TV, foco por D-pad
+web/              React + TS + Vite — the eleven screens
+  src/api.ts      the contract with the server, written by hand
+clients/          Kotlin Multiplatform (see clients/README.md)
+  shared/         models + Ktor + repository, no UI
+  composeApp/     Compose MP: Android phone + iOS
+  tv/             Android TV, D-pad focus
 ```
 
-**`web/src/api.ts` é a única cópia de contrato que existe** — e ela já era uma
-cópia antes de os repositórios se separarem. Não há tipo compartilhado, não há
-código gerado, não há import cruzado: a separação custou um arquivo de
-`docker-compose`.
+Each of the eleven screens has an address, in Portuguese like the rest of the
+project — `/biblioteca`, `/colecoes`, `/locadora`, `/guia`, `/ao-vivo`,
+`/mural`, `/perfil`, `/revisao`, `/pastas`, `/admin`, plus `/p/<name>` for
+someone's profile. The root is "para você", the screen that answers *what do I
+watch now*.
 
-Os clientes Kotlin estão parados no M2 e consomem 10 das ~90 rotas.
+The Kotlin clients are parked at M2 and consume 10 of roughly 90 routes. That is
+why CI doesn't build them — when they start moving again, they go in.
 
 ---
 
-## O porquê de cada escolha
+## The why behind every choice
 
-Não está aqui. O `docs/DESIGN.md` do repositório do servidor tem 7.900 linhas
-registrando o que foi medido, o que foi decidido e os defeitos que apareceram —
-**inclusive os desta interface**: a estante 3D da locadora, o menu de DVD, o
-player, o assistir junto, a barra de cima.
+It isn't here. The server repository's `docs/DESIGN.md` is 7,900 lines recording
+what was measured, what was decided and the defects found along the way —
+**including this interface's**: the 3D video-store shelf, the DVD menu, the
+player, watch-together, the top bar.
 
-Ele ficou inteiro de um lado de propósito. O documento vale pela costura — as
-seções argumentam sobre as duas metades ao mesmo tempo —, e rachá-lo perderia
-exatamente isso.
+It stayed whole on one side on purpose. The document's value is the seam — its
+sections argue about both halves at once — and splitting it by subject would
+have destroyed exactly that.
 
 → https://github.com/Serious-Sam97/odeon-server/blob/main/docs/DESIGN.md
 
+It is in Portuguese.
+
 ---
 
-## Licença
+## Licence
 
-**AGPL-3.0**, a mesma do servidor. Ver `LICENSE`.
+**AGPL-3.0**, the same as the server. See `LICENSE`.

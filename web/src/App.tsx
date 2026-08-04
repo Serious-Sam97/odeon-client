@@ -387,7 +387,7 @@ function BarraDeCima({
           )}
         </div>
 
-        {/* VOCÊ. Três coisas no mesmo lugar de 28px: o rosto no miolo, o arco
+        {/* VOCÊ. Três coisas no mesmo lugar de 38px: o rosto no miolo, o arco
             contando quanto falta pro próximo nível, e o número num selo — a
             fase 5 na barra, sem ocupar uma entrada. */}
         <div className="gaveta-caixa">
@@ -406,7 +406,7 @@ function BarraDeCima({
                 ...(insignia?.cor ? { ["--anel-cor" as string]: insignia.cor } : {}),
               }}
             >
-              <Avatar nome={eu.display_name} arte={insignia?.rosto} tamanho={23} />
+              <Avatar nome={eu.display_name} arte={insignia?.rosto} tamanho={33} />
               <b>{insignia?.n ?? "·"}</b>
             </span>
             <span className="eu-nome">{eu.display_name}</span>

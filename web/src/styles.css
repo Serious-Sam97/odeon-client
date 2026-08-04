@@ -283,7 +283,8 @@ code {
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--fg-muted);
-  padding: 6px 10px;
+  /* 4px e não 6: os dois que sobravam viraram rosto (R53). */
+  padding: 4px 10px;
   font: 400 13px/1 system-ui, sans-serif;
   cursor: pointer;
   transition: border-color 0.2s, color 0.2s, background 0.2s;
@@ -355,17 +356,28 @@ code {
   initial-value: 0deg;
 }
 
-/* R47: o rosto entrou no miolo. 28px e não 26: o furo do anel tem 23px, e é o
-   menor círculo em que um rosto de ator ainda se reconhece — abaixo disso ele
-   vira uma mancha de cor, que é a marca derivada com mais bytes.
+/* R47: o rosto entrou no miolo. R53: e cresceu.
+
+   Começou em 28px porque 23px de furo é o MENOR círculo em que um rosto de ator
+   ainda se reconhece. Reconhecer não é o mesmo que ver: a 23px o rosto é uma
+   miniatura que se identifica de perto e some de longe. 38px de anel dão 33px de
+   rosto, e aí ele é retrato.
+
+   O que segurava o tamanho era a altura da barra, e a medição mostrou onde: a
+   busca tem 43px e é ela quem manda; o botão do "eu" tinha 42, a UM pixel do
+   teto. Crescer o anel empurrava a barra 1 para 1.
+
+   Metade do crescimento saiu do próprio botão — o respiro vertical foi de 6px
+   para 4px, que é o que ele tinha de folga sobrando. A barra sobe uns poucos
+   pixels em vez de dez.
 
    A cor sai de `--anel-cor` quando a pessoa escolheu moldura (R43), e cai no
    âmbar da casa quando não escolheu. */
 .anel {
   animation: odeon-anel 1.1s 0.35s cubic-bezier(0.2, 0.9, 0.25, 1) both;
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   display: grid;
   place-content: center;
@@ -406,11 +418,11 @@ code {
    diferentes que sempre estiveram nesse mesmo lugar. */
 .anel b {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
+  right: -2px;
+  bottom: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
   box-sizing: border-box;
   border-radius: 999px;
   /* O selo encosta no rosto, e rosto é foto: sem o anel da cor do fundo ele
@@ -418,7 +430,7 @@ code {
   border: 2px solid var(--bg);
   background: var(--anel-cor, var(--accent));
   color: var(--bg);
-  font: 700 9px/11px system-ui, sans-serif;
+  font: 700 11px/14px system-ui, sans-serif;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }

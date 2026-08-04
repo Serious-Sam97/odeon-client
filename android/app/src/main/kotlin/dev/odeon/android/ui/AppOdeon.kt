@@ -1,6 +1,9 @@
 package dev.odeon.android.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -147,6 +150,7 @@ private val Onde.aba: Aba?
 /// segura o `DownloadManager` do Media3, que fica **abaixo** da fronteira que o
 /// Media3 chama de estável. É opt-in de montagem, não de uso da UI.
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppOdeon() {
     val app = LocalContext.current.applicationContext as OdeonApp
@@ -172,7 +176,16 @@ fun AppOdeon() {
     /// `when` escrito duas vezes, um destino novo entraria num lugar e não no
     /// outro, e o sintoma seria uma tela em branco em vez de um erro de
     /// compilação.
-    val corpo: @Composable () -> Unit = {
+    /// O corpo recebe a **moldura** do pôster como parâmetro, e não a lê de uma
+    /// variável de fora.
+    ///
+    /// A moldura é o elemento compartilhado da R7, e ela só pode ser construída
+    /// lá dentro do `AnimatedContent`, que é o único lugar onde os dois escopos
+    /// — o do `SharedTransitionLayout` e o da transição em curso — existem ao
+    /// mesmo tempo. Guardá-la num `var` de fora e atribuí-la durante a
+    /// composição seria escrever estado no meio do desenho, que é a receita da
+    /// recomposição infinita.
+    val corpo: @Composable (MolduraDoCartaz) -> Unit = { molduraDoCartaz ->
         when (onde) {
                 Onde.Decidindo -> Box(
                     Modifier.fillMaxSize().safeDrawingPadding(),
@@ -205,6 +218,7 @@ fun AppOdeon() {
                         TelaDaBiblioteca(
                             modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
+                            moldura = molduraDoCartaz,
                         )
                     }
                 }
@@ -255,6 +269,7 @@ fun AppOdeon() {
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         TelaDaObra(
                             modelo = modelo,
+                            moldura = molduraDoCartaz,
                             aoVoltar = { onde = Onde.Biblioteca },
                             aoBaixar = { arquivoId -> app.baixarArquivo(arquivoId, alvo.obraId) },
                             aoTocar = { arquivoId, titulo, ondeParou, duracao ->
@@ -307,15 +322,79 @@ fun AppOdeon() {
             /// Login, ficha e player devolvem `null` no `.aba` e caem no ramo de
             /// baixo, sem esqueleto nenhum. É o que faz o player ser tela cheia
             /// de verdade e não tela cheia com 80dp de abas por cima.
-            val abaAtual = onde.aba
-            if (abaAtual != null) {
-                EsqueletoComAbas(
-                    atual = abaAtual,
-                    aoTrocar = { onde = it.destino },
-                    conteudo = corpo,
-                )
-            } else {
-                corpo()
+            /// ## O player fica **fora** da transição, e é decisão
+            ///
+            /// Ele desenha vídeo num `SurfaceView` de verdade, dentro de um
+            /// `AndroidView`. Pôr isso dentro de um `AnimatedContent` faria a
+            /// superfície ser criada e destruída junto com a animação de
+            /// entrada — e o sintoma disso é um piscão preto no começo do filme,
+            /// ou pior, o PiP perdendo a superfície na hora de encolher.
+            ///
+            /// Nada se ganharia em troca: o player entra em tela cheia vindo de
+            /// um botão, e não há elemento compartilhado entre a ficha e um
+            /// vídeo.
+            if (onde is Onde.Assistindo) {
+                corpo(MolduraDoCartaz.Nenhuma)
+                return@Surface
+            }
+
+            SharedTransitionLayout {
+                /// A transição da grade pra ficha — R7.
+                ///
+                /// ## O que ela responde
+                ///
+                /// «De onde essa tela veio». O pôster tocado **cresce e vira** o
+                /// pôster da ficha, em vez de a ficha aparecer por cima. É a
+                /// regra 5 do redesenho — movimento tem que significar — e é a
+                /// coisa que mais separa um app nativo de uma página.
+                ///
+                /// ## O `contentKey` é o que evita a animação boba
+                ///
+                /// Sem ele, `AnimatedContent` compara os estados inteiros: abrir
+                /// a ficha da obra A e depois a da obra B seria uma transição, e
+                /// as duas fichas fariam cross-fade uma na outra. Com a chave
+                /// reduzida ao **tipo** de tela, trocar de obra dentro da ficha
+                /// não anima — e trocar de aba também não, porque as quatro abas
+                /// já têm a barra pra dizer o que mudou.
+                AnimatedContent(
+                    targetState = onde,
+                    contentKey = { alvo ->
+                        when (alvo) {
+                            is Onde.Ficha -> "ficha"
+                            else -> "abas"
+                        }
+                    },
+                    label = "tela",
+                ) { alvo ->
+                    /// ⚠️ O conteúdo lê `alvo`, e não `onde`.
+                    ///
+                    /// Durante a transição os dois existem ao mesmo tempo, e é
+                    /// justamente isso que faz a animação. Ler `onde` aqui
+                    /// desenharia as duas telas com o estado **novo** — a de
+                    /// saída viraria a de entrada antes de sair, e não haveria
+                    /// pôster de origem pra crescer.
+                    /// A moldura, construída aqui porque é aqui que os dois
+                    /// escopos existem. A chave é o id da obra: é ela que faz o
+                    /// Compose entender que o cartaz da grade e o pôster da
+                    /// ficha são **a mesma coisa em dois lugares**.
+                    val moldura = MolduraDoCartaz { id ->
+                        Modifier.sharedElement(
+                            sharedContentState = rememberSharedContentState(key = "cartaz-$id"),
+                            animatedVisibilityScope = this@AnimatedContent,
+                        )
+                    }
+
+                    val abaAtual = alvo.aba
+                    if (abaAtual != null) {
+                        EsqueletoComAbas(
+                            atual = abaAtual,
+                            aoTrocar = { onde = it.destino },
+                            conteudo = { corpo(moldura) },
+                        )
+                    } else {
+                        corpo(moldura)
+                    }
+                }
             }
         }
     }

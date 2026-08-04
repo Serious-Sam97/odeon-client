@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.MolduraDoCartaz
 import dev.odeon.android.ui.RotuloDeSecao
 import dev.odeon.android.ui.corDeHex
 import kotlin.math.max
@@ -65,6 +66,8 @@ import androidx.compose.foundation.layout.width
 fun TelaDaBiblioteca(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit = {},
+    /// Como marcar o pôster pra transição compartilhada — ver `MolduraDoCartaz`.
+    moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
     val grade = rememberLazyGridState()
@@ -174,6 +177,7 @@ fun TelaDaBiblioteca(
                     item = item,
                     capa = modelo.capa(item),
                     aoTocar = { aoAbrirObra(item.id) },
+                    moldura = moldura,
                 )
             }
         }
@@ -385,7 +389,12 @@ private fun segundaLinhaDeContinuar(item: ItemPraContinuar): String? {
 /// O que aparece no lugar é o título, sobre a cor da obra quando o servidor a
 /// extraiu. É o §18: quando o dado não existe, a tela mostra o que existe.
 @Composable
-private fun Cartaz(item: ItemDaBiblioteca, capa: String?, aoTocar: () -> Unit) {
+private fun Cartaz(
+    item: ItemDaBiblioteca,
+    capa: String?,
+    aoTocar: () -> Unit,
+    moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
+) {
     val fundoDoCartaz = corDaObra(item.corDominante) ?: Cores.fundoElevado
 
     /// O clicável é a **coluna inteira**, não só o pôster.
@@ -483,6 +492,10 @@ private fun Cartaz(item: ItemDaBiblioteca, capa: String?, aoTocar: () -> Unit) {
                 /// 2:3 é a proporção de cartaz de cinema, e é a que o servidor
                 /// baixa. Qualquer outra recortaria o rosto de alguém.
                 .aspectRatio(2f / 3f)
+                /// A moldura entra **antes** do `clip`: é o pôster que viaja pra
+                /// ficha, e ele tem que levar o próprio recorte junto. Depois do
+                /// clip, o elemento compartilhado seria o retângulo sem cantos.
+                .then(moldura.de(item.id))
                 .clip(RoundedCornerShape(6.dp))
                 .background(fundoDoCartaz),
             contentAlignment = Alignment.Center,

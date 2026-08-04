@@ -27,6 +27,8 @@ Depois delas entrou a **leva 1 do [`docs/REDESENHO.md`](docs/REDESENHO.md)**:
 | R2 | o **rótulo de seção** com versalete espaçado e régua em gradiente, medido no `.strip` da web |
 | R3 | as **pílulas** — o filtro de tempo do para-você e as etiquetas da ficha |
 | R4 | o cartaz vira **objeto**: barra de progresso dentro do pôster, linha de metadados, e afundar ao toque |
+| R5 | a **fita vira coisa**: caixa em três quartos com lombada e verniz, e o háptico com dois pesos |
+| R7 | a **transição compartilhada** — o pôster tocado cresce e vira o pôster da ficha |
 
 ⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
 rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade

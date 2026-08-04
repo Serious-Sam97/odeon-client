@@ -26,6 +26,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,7 @@ import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ArquivoDeMidia
 import dev.odeon.android.dados.PlanoDeReproducao
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.MolduraDoCartaz
 import dev.odeon.android.ui.PilulaDeEtiqueta
 import dev.odeon.android.ui.corDeHex
 
@@ -56,6 +59,8 @@ fun TelaDaObra(
     aoVoltar: () -> Unit,
     aoTocar: (arquivoId: String, titulo: String, ondeParou: Double, duracao: Double?) -> Unit,
     aoBaixar: (arquivoId: String) -> Unit = {},
+    /// A outra ponta da transição compartilhada — ver `MolduraDoCartaz`.
+    moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
@@ -103,6 +108,7 @@ fun TelaDaObra(
                 modifier = Modifier
                     .width(120.dp)
                     .aspectRatio(2f / 3f)
+                    .then(moldura.de(obra.id))
                     .clip(RoundedCornerShape(6.dp)),
             ) {
                 val poster = modelo.capa(obra.artwork["poster"])
@@ -208,8 +214,20 @@ fun TelaDaObra(
         /// gesto **da locadora** — tirar a caixa da estante, com prazo e com
         /// escassez, que é a parte de jogo do produto. Quem pega quer a fita, não
         /// a permissão.
+        /// O toque de pegar a fita — R5, e é a primeira vez que o app usa o
+        /// corpo do aparelho.
+        ///
+        /// `LongPress` é o mais encorpado dos dois tipos que o Compose expõe, e
+        /// é o certo aqui: pegar uma fita **escreve no acervo de três pessoas**
+        /// — com a escassez ligada, a caixa sai da estante de todo mundo. A mão
+        /// deve sentir que isto não é o mesmo que virar uma caixa pra ler o
+        /// verso, que leva o tique seco (`TextHandleMove`, em `TelaDaLocadora`).
+        val haptico = LocalHapticFeedback.current
         TextButton(
-            onClick = modelo::pegarAFita,
+            onClick = {
+                haptico.performHapticFeedback(HapticFeedbackType.LongPress)
+                modelo.pegarAFita()
+            },
             enabled = !estado.pegando,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         ) {

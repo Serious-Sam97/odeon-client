@@ -22,9 +22,9 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 | onde ficam os destinos (§6) | **barra inferior adaptativa** — e não a opção 3, que era a preferência escrita abaixo |
 | a fonte serifada (R1) | **embutir no APK** |
 
-E as **levas 1 e 2 estão feitas e vistas em aparelho**: a decisão da §6, a R1, a
-R2, a R3 e a R4. As fases R5 a R9 continuam sendo proposta, e a §6 abaixo fica
-como registro do que se pesou.
+E as **levas 1, 2 e 3 estão feitas e vistas em aparelho**: a decisão da §6, e as
+fases R1, R2, R3, R4, R5 e R7. As R6, R8 e R9 continuam sendo proposta, e a §6
+abaixo fica como registro do que se pesou.
 
 > ### ⚠️ A régua de fps da R4 não é aplicável no emulador — e isso precisa ser
 > ### resolvido antes da leva 3
@@ -303,6 +303,35 @@ fita é um gesto físico na metáfora.
 Ela é CSS 3D e o Compose não compõe hierarquia em Z. O caminho seria uma
 superfície OpenGL, e isso é um projeto dentro do projeto. **Continua em aberto.**
 
+> ### ✅ Feito — e a pose importava mais que a lombada
+>
+> O item dizia «ganha lombada e fica de pé». Medindo a folha, o que faz a caixa
+> ser caixa é a **pose**: a web nunca a desenha chapada, ela repousa em
+> `rotateX(3deg) rotateY(22deg)` (`styles.css:4256`), e é isso que revela a
+> lateral. Lombada sem pose seria uma tarja colada ao lado de uma capa.
+>
+> Espessura de 27% da largura, tirada do `.caixa.vhs` (28 de 104). E entrou o
+> `.brilho` (`:4385`), o verniz diagonal — o comentário da folha diz que ele «é
+> o que faz o olho ler objeto em vez de imagem», e é o item de melhor retorno
+> por linha desta fase inteira.
+>
+> **O limite honesto:** o Compose não tem `preserve-3d`, então as duas faces são
+> camadas separadas encostadas por conta. A junta só fecha **na pose de
+> repouso** — por isso a pose é fixa e não acompanha o dedo. Animar o ângulo
+> abriria uma fresta no meio do caminho, e caixa com fresta é pior que caixa
+> chapada.
+>
+> **Dois defeitos que o screenshot pegou:** a lombada mostrava `007 C…` porque
+> `graphicsLayer` gira o que já foi medido, e o texto era medido nos 38dp da
+> lombada antes de girar (`requiredWidth` conserta); e virar a caixa a espremia
+> numa tira, porque o giro estava na capa, que já girava sobre a **aresta
+> esquerda** — girar 158° ali é abrir uma porta, não virar um objeto. O giro
+> passou pro objeto inteiro, com a pose por dentro.
+>
+> **O háptico entrou com dois pesos**, e a diferença é semântica: tique seco
+> (`TextHandleMove`) pra virar a caixa, batida (`LongPress`) pra pegar e pra
+> devolver — que são os gestos que escrevem no acervo de três pessoas.
+
 ---
 
 ### R6 — O filme como filme
@@ -328,6 +357,32 @@ página.
 aparece, a fileira que se atualiza ao voltar do player — hoje tudo isso troca
 sem transição. São três lugares onde um `AnimatedContent` responde "o que
 mudou".
+
+> ### ✅ Feito — a transição grade → ficha
+>
+> `SharedTransitionLayout` + `AnimatedContent` no `AppOdeon`, com o pôster
+> marcado pela chave `cartaz-{obraId}`. Verificado com o
+> `animator_duration_scale` do sistema em 10×: no meio do voo o pôster aparece
+> **opaco** enquanto a ficha e a barra de abas fazem cross-fade por baixo, que é
+> a assinatura de um elemento compartilhado desenhado na camada de cima.
+>
+> **⚠️ O player fica de fora do `AnimatedContent`, e é decisão.** Ele desenha
+> vídeo num `SurfaceView` dentro de um `AndroidView`; animar a entrada dele faria
+> a superfície nascer e morrer junto com a animação. O sintoma seria um piscão
+> preto no começo do filme — ou o PiP perdendo a superfície ao encolher. E não
+> se ganharia nada: não há elemento compartilhado entre uma ficha e um vídeo.
+>
+> **As três trocas menores da segunda metade deste item não entraram** — o botão
+> que vira "continuar", o selo, a fileira que se atualiza. Ficam pra quando
+> houver quem peça.
+>
+> Os outros dois itens da fase 4 (`R6` película e grão, `R8` giroscópio e
+> háptico no seek) continuam proposta. Vale registrar uma coisa que veio de
+> graça e que a R8 exigia: **o Compose já respeita o
+> `ANIMATOR_DURATION_SCALE = 0` do sistema** em `animate*AsState` e
+> `AnimatedContent`, então tanto o afundar do cartaz quanto esta transição já
+> somem pra quem desligou animação. A chave que a R8 pede é só pro giroscópio,
+> que não passa por esse caminho.
 
 ---
 
@@ -438,7 +493,7 @@ desfazer isso:
 |---|---|---|
 | **1** ✅ | decisão da §6 + R1 + R2 | o app **parece** o Odeon, sem nada se mexer |
 | **2** ✅ | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
-| **3** | R5 + R7 | as coisas viram objetos, e as telas se ligam |
+| **3** ✅ | R5 + R7 | as coisas viram objetos, e as telas se ligam |
 | **4** | R6 + R8 | o experimental — película, giroscópio, háptico |
 | **5** | R9 | o app sai do app |
 

@@ -36,4 +36,33 @@
         <ignore path="src/main/res/mipmap-anydpi-v26" />
     </issue>
 
+    <!--
+      ## `ModifierFactoryExtensionFunction` no `Moldura.kt`
+
+      A regra diz que função que devolve `Modifier` deve ser extensão de
+      `Modifier`, e ela está certa **pro que ela mira**: fábricas encadeáveis, do
+      tipo `Modifier.padding()`, onde ser extensão é o que permite encadear e o
+      que deixa claro que a função **acrescenta** a uma cadeia existente.
+
+      `MolduraDoCartaz.de()` não é isso. Ela é um método de uma `fun interface`
+      que a tela recebe pronta e não sabe montar — o `AppOdeon` decide o que ela
+      devolve, porque só lá existem os escopos da transição compartilhada. Não há
+      cadeia pra acrescentar: quem encadeia é o chamador, com `.then(...)`.
+
+      Transformá-la em extensão pra calar o aviso deixaria a chamada assim:
+
+          with(moldura) { Modifier.de(item.id) }
+
+      — que é mais peça pra dizer a mesma coisa, e esconde que `moldura` é o
+      sujeito. O aviso está calado **por caminho**, e só neste arquivo: qualquer
+      outra função que devolva `Modifier` continua tendo que responder por si.
+
+      O caminho do meio — passar `Modifier` cru — foi tentado antes e trouxe
+      `ModifierParameter` três vezes, com razão: o que viaja não é o modificador
+      da tela. O comentário do `Moldura.kt` tem esse histórico.
+    -->
+    <issue id="ModifierFactoryExtensionFunction">
+        <ignore path="src/main/kotlin/dev/odeon/android/ui/Moldura.kt" />
+    </issue>
+
 </lint>

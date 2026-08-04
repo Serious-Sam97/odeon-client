@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -143,17 +151,46 @@ private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable ()
     }
 }
 
-/// Uma caixa, com frente e verso.
+/// Uma caixa de fita, **de pé e em três quartos** — R5.
 ///
-/// ## O `flip` é o que sobrou da estante 3D, e basta
+/// ## Ela não fica de frente, e isso é o item inteiro
 ///
-/// `graphicsLayer` com `rotationY` e `cameraDistance` gira **um** elemento em
-/// perspectiva — é o que o Compose dá, e é exatamente o que a §3 propôs no lugar
-/// da cena 3D. A frente é a arte; o verso é o que está escrito na etiqueta:
-/// quem levou, quando vence, e o botão de devolver quando é minha.
+/// A web nunca desenha a caixa chapada: ela repousa em `rotateX(3deg)
+/// rotateY(22deg)` (`styles.css:4256`) e é essa pose que mostra a **lombada**.
+/// Um retângulo de frente é uma capa; um retângulo girado com uma faixa escura
+/// na lateral é uma caixa numa prateleira. A §1.3 do redesenho chama isso de «a
+/// coisa que o Odeon é e o app ainda não».
 ///
-/// A meia-volta troca o que se desenha: passados 90°, a face de trás vira a da
-/// frente, e sem a troca o verso apareceria espelhado.
+/// As medidas saem da folha, não do olho:
+///
+/// | | web (`.caixa.vhs`) | aqui |
+/// |---|---|---|
+/// | largura × altura | 104 × 200 | 140dp × 210dp (2:3) |
+/// | **espessura** | **28px** — 27% da largura | 38dp, a mesma proporção |
+/// | pose | `rotateY(22deg)` | 22° |
+///
+/// ## O que **não** dá pra copiar, e o substituto
+///
+/// A web compõe as cinco faces em `preserve-3d`, num espaço 3D compartilhado. O
+/// Compose não tem isso — a §3 da espec já registrava —, então cada face aqui é
+/// uma camada com transformação própria, e as duas são **encostadas por conta**:
+/// a lombada é posicionada à esquerda da capa e girada sobre a própria aresta
+/// direita, de modo que as arestas coincidam na pose escolhida.
+///
+/// É aproximação, e ela tem um limite honesto: como as camadas não dividem o
+/// mesmo ponto de fuga, a junta só fecha **na pose de repouso**. Por isso a pose
+/// é fixa e não acompanha o dedo — animar o ângulo abriria a junta no meio do
+/// caminho, e uma caixa com fresta é pior que uma caixa chapada.
+///
+/// ## O verniz
+///
+/// A faixa diagonal clara sobre a capa é o `.brilho` (`:4385`), e o comentário
+/// da folha diz o que ela faz: «é o que faz o olho ler objeto em vez de
+/// imagem». Custa um gradiente e é o item de melhor retorno desta fase.
+///
+/// ⚠️ Ela é decoração e **não pode parecer dado** (§18). Por isso é branco a
+/// 24% sobre a arte, na diagonal, e não uma faixa colorida na horizontal — que
+/// é a forma que a barra de progresso tem em toda outra tela deste app.
 @Composable
 private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, devolvendo: Boolean) {
     var virada by remember { mutableStateOf(false) }
@@ -162,78 +199,218 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
         animationSpec = tween(durationMillis = 400),
         label = "giro da caixa",
     )
+    val haptico = LocalHapticFeedback.current
+
+    /// A espessura da caixa, na proporção da web: 28 de 104 é 27%.
+    val espessura = 38.dp
 
     Column(
-        modifier = Modifier.width(140.dp),
+        modifier = Modifier.width(140.dp + espessura),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .width(140.dp + espessura)
+                .aspectRatio((140f + 38f) / 210f)
+                /// ⚠️ **O giro é do objeto inteiro, e mora aqui — não na capa.**
+                ///
+                /// A primeira versão punha o `giro` na `rotationY` da capa, que
+                /// já girava −22° sobre a **aresta esquerda** pra encostar na
+                /// lombada. O screenshot mostrou o resultado: virar a caixa a
+                /// espremia numa tira escura de dois dedos. Girar 158° em torno
+                /// da aresta esquerda não vira o objeto — **joga ele pra fora**,
+                /// como uma porta abrindo.
+                ///
+                /// Aqui a origem é o centro (o padrão), então a caixa gira sobre
+                /// o próprio eixo. A pose de −22° da capa fica **dentro** desta
+                /// camada e é somada a ela, que é o que o `preserve-3d` da web
+                /// faz de graça e o Compose faz por aninhamento.
                 .graphicsLayer {
                     rotationY = giro
-                    /// Sem isto a rotação é ortográfica e a caixa parece
-                    /// achatar em vez de girar. O número é distância de câmera
-                    /// em múltiplos da densidade — 12 dá perspectiva sem a
-                    /// deformação de grande-angular.
                     cameraDistance = 12f * density
                 }
-                .clip(RoundedCornerShape(6.dp))
-                .background(Cores.fundoElevado)
-                .clickable { virada = !virada },
-            contentAlignment = Alignment.Center,
+                .clickable {
+                    /// Girar a caixa é mexer num objeto, e a mão avisa.
+                    ///
+                    /// `TextHandleMove` é o mais **seco** dos dois tipos que o
+                    /// Compose expõe — um tique, não uma batida. Virar a caixa é
+                    /// gesto leve; a batida fica pra devolver, que é o que muda
+                    /// o acervo de todo mundo.
+                    haptico.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    virada = !virada
+                },
         ) {
             if (giro <= 90f) {
-                if (arte != null) {
-                    AsyncImage(
-                        model = arte,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
+                /// A lombada.
+                ///
+                /// Girada sobre a **própria aresta direita** (`TransformOrigin(1f,
+                /// .5f)`) pra encostar na aresta esquerda da capa. O ângulo é
+                /// 90° − 22° = 68°: a capa está a 22° do plano da tela, e a
+                /// lombada é perpendicular a ela.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .width(espessura)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            rotationY = 68f
+                            transformOrigin = TransformOrigin(1f, 0.5f)
+                            cameraDistance = 12f * density
+                        }
+                        .background(
+                            /// Escurece do meio pras bordas: é a curvatura do
+                            /// plástico pegando luz de cima. Chapada, a lombada
+                            /// lê como um retângulo colado ao lado da capa.
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Cores.fundoAfundado,
+                                    Cores.fundoElevado,
+                                    Cores.fundoAfundado,
+                                ),
+                            ),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    /// O título na vertical, como em toda lombada de fita.
+                    ///
+                    /// `rotationZ` e não uma fonte vertical: o Compose não tem
+                    /// `writing-mode`. O texto é medido deitado e girado depois,
+                    /// então a largura dele vira a altura da lombada.
+                    ///
+                    /// ⚠️ `requiredWidth` e **não** `width`, e o screenshot é que
+                    /// denunciou: com `width(190.dp)` o título saía `007 C…`.
+                    /// `graphicsLayer` gira o que já foi desenhado e não mexe em
+                    /// medição — então o texto era medido dentro dos 38dp da
+                    /// lombada, cortava ali, e só depois girava. O `required` é o
+                    /// que ignora a restrição do pai; sem ele toda lombada
+                    /// mostraria três letras.
                     Text(
                         text = fita.titulo,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Cores.texto,
-                        textAlign = TextAlign.Center,
-                        maxLines = 4,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Cores.textoApagado,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier
+                            .requiredWidth(190.dp)
+                            .graphicsLayer { rotationZ = 90f },
+                    )
+                }
+
+                /// A capa, girada 22° sobre a aresta esquerda — o mesmo eixo em
+                /// que a lombada encosta.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(140.dp)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            rotationY = -22f
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                            /// Sem isto a rotação é ortográfica e a caixa parece
+                            /// achatar em vez de girar. O número é distância de
+                            /// câmera em múltiplos da densidade — 12 dá
+                            /// perspectiva sem a deformação de grande-angular.
+                            cameraDistance = 12f * density
+                        }
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Cores.fundoElevado),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (arte != null) {
+                        AsyncImage(
+                            model = arte,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Text(
+                            text = fita.titulo,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Cores.texto,
+                            textAlign = TextAlign.Center,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+
+                    /// O verniz — o `.brilho` da web (`styles.css:4385`). Só
+                    /// sobre a frente: o verso de uma caixa de fita é papel, não
+                    /// plástico.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    0.00f to Color.White.copy(alpha = 0.24f),
+                                    0.14f to Color.White.copy(alpha = 0.05f),
+                                    0.32f to Color.Transparent,
+                                    0.74f to Color.Transparent,
+                                    1.00f to Color.White.copy(alpha = 0.10f),
+                                ),
+                            ),
                     )
                 }
             } else {
-                /// O verso é desenhado espelhado de volta: sem este segundo
-                /// `rotationY`, o texto da etiqueta sairia invertido.
-                Column(
+                /// O verso — a etiqueta.
+                ///
+                /// Ele ocupa a caixa inteira, lombada incluída: virada, a caixa
+                /// mostra o papel de trás e não há mais lateral pra ver deste
+                /// lado. E leva `rotationY = 180f` pra desespelhar — sem isso o
+                /// texto sairia invertido, porque o pai já girou meia-volta.
+                Box(
                     modifier = Modifier
+                        .fillMaxSize()
                         .graphicsLayer { rotationY = 180f }
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Cores.fundoElevado),
                 ) {
-                    Text(
-                        text = fita.titulo,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Cores.texto,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "com ${fita.quemNome}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Cores.textoApagado,
-                    )
-                    fita.pedidoPorNome?.let {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text(
-                            text = "$it pediu de volta",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Cores.destaque,
+                            text = fita.titulo,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Cores.texto,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    if (aoDevolver != null) {
-                        TextButton(onClick = aoDevolver, enabled = !devolvendo) {
-                            Text(if (devolvendo) "devolvendo…" else "devolver", color = Cores.destaque)
+                        Text(
+                            text = "com ${fita.quemNome}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Cores.textoApagado,
+                        )
+                        fita.pedidoPorNome?.let {
+                            Text(
+                                text = "$it pediu de volta",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Cores.destaque,
+                            )
+                        }
+                        if (aoDevolver != null) {
+                            TextButton(
+                                onClick = {
+                                    /// A batida de devolver.
+                                    ///
+                                    /// `LongPress` é o mais **encorpado** dos
+                                    /// dois tipos que o Compose expõe —
+                                    /// devolver escreve no acervo de três
+                                    /// pessoas, e a mão sente a diferença entre
+                                    /// isto e virar a caixa, que leva o tique
+                                    /// seco.
+                                    haptico.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    aoDevolver()
+                                },
+                                enabled = !devolvendo,
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Text(
+                                    text = if (devolvendo) "devolvendo…" else "devolver",
+                                    color = Cores.destaque,
+                                )
+                            }
                         }
                     }
                 }

@@ -13,14 +13,8 @@ O app Android foi escrito aqui até a fase 1 e **nunca foi visto rodando**. O
 emulador segfalta nesta máquina, em sete configurações diferentes — o
 diagnóstico completo está em [`../android/README.md`](../android/README.md).
 
-O outro computador já tem emulador funcionando e está na mesma tailnet. Então o
-corte é este:
-
-| `serious-server` (aqui) | o outro computador |
-|---|---|
-| o servidor Odeon, com o acervo de verdade | **rodar o app** |
-| escrever, compilar, testar, lint | screenshot, achar defeito |
-| o CI | reportar e consertar |
+O outro computador já tem emulador funcionando e está na mesma tailnet, e passa a
+ser **o dono do app Android**.
 
 E a razão de o corte valer a pena está na lição mais cara deste projeto: **o
 screenshot achou defeitos que o código não denunciava.** Só numa rodada: um
@@ -29,6 +23,52 @@ que já existia, e uma contagem que só apareceu errada numa foto.
 
 Um app que compila, passa em 10 testes e passa no lint continua sendo um app que
 ninguém viu.
+
+---
+
+## 1b. ⚠️ Quem mexe em quê — leia isto antes de editar qualquer arquivo
+
+O corte é por **pasta**, não por tarefa, e é o que impede as duas máquinas de se
+atropelarem.
+
+| | você (o outro computador) | `serious-server` |
+|---|---|---|
+| `odeon-client/android/` | ✅ **é seu, inteiro** | não toca |
+| `odeon-client/web/` | ❌ | ✅ |
+| `odeon-client/clients/` (KMP) | ❌ parado, não apagar | ✅ |
+| `odeon-server/` | ❌ **nada, nunca** | ✅ |
+| o banco, a identificação, as migrações | ❌ | ✅ |
+
+**Você mexe no app Android e mais nada.** O servidor, a interface web e o KMP
+continuam sendo trabalho do `serious-server` — a máquina onde eles rodam, onde
+está o Postgres com dados reais de três pessoas, e onde as migrações são
+compiladas dentro do binário.
+
+### E quando o app precisar de uma mudança no servidor?
+
+Vai acontecer, e a espec já sabe de duas:
+
+- **o CORS**, quando o Cast chegar — a origem do Chromecast não é o host do
+  servidor, e provavelmente vai precisar de `ODEON_ALLOWED_ORIGINS` (§4c)
+- **a porta padrão**, se decidirem que o app deve tentar 8085 em vez de 8080
+
+Quando isso aparecer: **descreva o que precisa e devolva o pedido pro
+`serious-server`.** Não abra o `odeon-server` pra "só ajustar uma linha" — as
+migrações são embutidas no binário em tempo de compilação, o servidor está no ar
+servindo três pessoas, e a identificação leva ~1h e morre se o processo
+reiniciar.
+
+Isso não é burocracia: é a regra 4 da casa aplicada a duas máquinas — **não
+corrija sozinho, pergunte ou faça o que foi pedido.**
+
+### O fluxo de trabalho
+
+1. `git pull` antes de começar. O `serious-server` empurra `web/`, `clients/` e
+   documentação pro mesmo `main`.
+2. Trabalhe só dentro de `android/`.
+3. Commite em português, sem atribuição a assistente, e **só quando o dono
+   pedir** (ver §7).
+4. Conflito em `android/` não deveria existir. Se aparecer, alguém saiu da raia.
 
 ---
 
@@ -364,16 +404,33 @@ cheia de cartão sem capa, é isso, e não um defeito seu. Terminar a identifica
 
 ## 11. ⚠️ Cuidado com dados de teste
 
-O banco tem **dados reais de três pessoas de verdade**. Empréstimos, notas,
-resenhas, posts, mensagens, conquistas e enfeites de perfil criados pra testar
-**devem ser removidos depois**.
+**Você vai testar contra o banco de produção.** Não há cópia, não há ambiente de
+teste: o `100.77.253.18:8085` é o Odeon que três pessoas de verdade usam, com os
+empréstimos, notas, resenhas, posts e conquistas delas dentro.
 
-O padrão que funciona: conta descartável (`r47teste`), fazer tudo com ela, e no
-fim `DELETE FROM app_user WHERE username = '…'` — o cascade limpa o resto.
+E você **não alcança o banco** — só a API. Então a limpeza não é sua: ela é feita
+no `serious-server`, e o padrão que funciona é conta descartável (`r47teste`),
+fazer tudo com ela, e no fim `DELETE FROM app_user WHERE username = '…'`, que
+pelo cascade limpa o resto.
 
-E o susto real: um backup `.env.antes-do-SAM` entrou num `git add` a caminho de um
-repositório **público**, com a chave do TMDB, a do Groq e a senha do Postgres
-dentro. Foi pego no crivo antes do push. **Confira o que vai no commit.**
+Na prática, pra você:
+
+- **peça uma conta descartável** antes de começar a testar coisa que escreve.
+  Pra fase 1 — que só lê — entrar com uma conta real não deixa rastro além de um
+  `last_login_at` e uma sessão nova.
+- **anote o que você criou.** Todo empréstimo, nota ou post feito pra testar
+  precisa ser dito, ou ele fica no perfil de alguém pra sempre.
+- **não apague nada pela API achando que está limpando.** Apagar o empréstimo
+  errado é apagar o empréstimo de uma pessoa.
+
+Isso morde de verdade a partir da fase 5 (a locadora), onde pegar uma fita
+emprestada é escrever no acervo de todo mundo — e já morde na fase 2, porque a
+escassez (§66) exige um empréstimo em aberto pra assistir.
+
+E o susto real do projeto: um backup `.env.antes-do-SAM` entrou num `git add` a
+caminho de um repositório **público**, com a chave do TMDB, a do Groq e a senha
+do Postgres dentro. Foi pego no crivo antes do push. **Confira o que vai no
+commit.**
 
 ---
 

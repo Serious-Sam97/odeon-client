@@ -42,8 +42,23 @@ android {
             /// feita no celular do dono, isso é apagar o app que ele usa.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+
+            /// O id do app, como **recurso** — pros atalhos da R9.
+            ///
+            /// O `res/xml/atalhos.xml` precisa apontar o `targetPackage` da
+            /// intenção, e recurso não enxerga `${'$'}{applicationId}`: os
+            /// espaços reservados do Gradle valem no manifesto, não em `res/`.
+            ///
+            /// Com um valor fixo, o atalho do debug apontaria pro pacote de
+            /// produção — e como os dois **convivem** no mesmo aparelho (é o
+            /// motivo do sufixo logo acima), segurar o ícone do debug abriria o
+            /// app de verdade. Silenciosamente.
+            resValue("string", "id_do_app", "dev.odeon.android.debug")
         }
         release {
+            /// O par do `id_do_app` do debug — ver o comentário lá em cima.
+            resValue("string", "id_do_app", "dev.odeon.android")
+
             /// Desligado, e é decisão consciente pra fase 0.
             ///
             /// O R8 sem regras é o caminho mais curto pra um APK que compila,
@@ -64,6 +79,17 @@ android {
 
     buildFeatures {
         compose = true
+
+        /// ⚠️ **No AGP 9 o `resValue` não funciona sem esta linha**, e o erro é
+        /// de configuração e não de compilação:
+        ///
+        ///     Build Type debug contains custom resource values,
+        ///     but the feature is disabled.
+        ///
+        /// É a mesma família das outras surpresas do AGP 9 anotadas no
+        /// `libs.versions.toml`: coisas que vinham ligadas de fábrica passaram a
+        /// ser declaradas. Um exemplo de internet de 2024 não traz esta linha.
+        resValues = true
     }
 
     compileOptions {

@@ -32,10 +32,10 @@ Depois delas entraram as **levas 1 a 4 do [`docs/REDESENHO.md`](docs/REDESENHO.m
 | R6 | o **herói** do para-você, com as lâmpadas da marquise. O grão foi testado e **reprovou** |
 | R8 | o **corpo do aparelho**: paralaxe por acelerômetro na ficha, ficha borda a borda, e o detente háptico no seek |
 
-⚠️ **Um item do redesenho está escrito e não foi visto rodando**: o gesto de
-arrastar a caixa pra baixo pra devolver a fita (R8). Exercitá-lo exige uma fita
-emprestada na tela, e uma tentativa de pegar voltou HTTP 403 do servidor. Todo o
-resto foi percorrido em aparelho.
+| R9 | a **arte e o título** no controle de mídia, e os **atalhos** ao segurar o ícone |
+
+⚠️ **O widget de "continuar assistindo" não entrou** — é a única parte da R9 que
+falta, e ela precisa do Glance, que é um artefato e um ciclo de vida novos.
 
 ⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
 rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade

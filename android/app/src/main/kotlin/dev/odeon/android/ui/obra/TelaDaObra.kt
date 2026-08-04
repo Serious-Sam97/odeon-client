@@ -68,7 +68,7 @@ import dev.odeon.android.ui.corDeHex
 fun TelaDaObra(
     modelo: ModeloDaObra,
     aoVoltar: () -> Unit,
-    aoTocar: (arquivoId: String, titulo: String, ondeParou: Double, duracao: Double?) -> Unit,
+    aoTocar: (arquivoId: String, titulo: String, ondeParou: Double, duracao: Double?, capa: String?) -> Unit,
     aoBaixar: (arquivoId: String) -> Unit = {},
     /// A outra ponta da transição compartilhada — ver `MolduraDoCartaz`.
     moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
@@ -297,6 +297,13 @@ fun TelaDaObra(
                     obra.title,
                     obra.ondeParou,
                     arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
+                    /// A capa viaja daqui pro controle de mídia — R9.
+                    ///
+                    /// A ficha é o único lugar da pilha que **tem** a arte da
+                    /// obra: o player recebe um arquivo, e arquivo não sabe de
+                    /// pôster. Sem este parâmetro, a notificação teria que
+                    /// reperguntar a ficha só pra saber que imagem desenhar.
+                    modelo.capa(obra.artwork["poster"]),
                 )
             },
         )

@@ -32,6 +32,9 @@ data class EstadoDoPlayer(
     /// achar no disco o que o download escreveu. Ver `TelaDoPlayer`.
     val arquivoId: String = "",
     val titulo: String = "",
+    /// A capa da obra, pro controle de mídia — R9. `null` é o caso comum e a
+    /// notificação simplesmente sobe sem arte, em vez de com um quadrado vazio.
+    val capaUrl: String? = null,
     /// A URL final, com o token pendurado. `null` enquanto não se sabe.
     val url: String? = null,
     /// `true` quando a fonte é HLS — o player precisa saber pra montar a fonte
@@ -117,6 +120,7 @@ class ModeloDoPlayer(
     titulo: String,
     ondeParou: Double,
     duracaoEmSegundos: Double?,
+    capaUrl: String?,
 ) : ViewModel() {
 
     /// A sessão de HLS aberta por este player, se houve.
@@ -144,6 +148,7 @@ class ModeloDoPlayer(
         EstadoDoPlayer(
             arquivoId = arquivoId,
             titulo = titulo,
+            capaUrl = capaUrl,
             comecarEm = (ondeParou * 1000).toLong(),
             duracaoConhecidaMs = ((duracaoEmSegundos ?: 0.0) * 1000).toLong(),
         ),

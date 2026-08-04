@@ -129,6 +129,8 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
         eHls = estado.eHls,
         comecarEm = estado.comecarEm,
         legendas = estado.legendas,
+        titulo = estado.titulo,
+        capaUrl = estado.capaUrl,
     )
     val player = cast.player ?: controleLocal
 
@@ -253,6 +255,8 @@ private fun lembrarControle(
     eHls: Boolean,
     comecarEm: Long,
     legendas: List<LegendaOferecida>,
+    titulo: String,
+    capaUrl: String?,
 ): Player? {
     val contexto = LocalContext.current
     var controle by remember(url) { mutableStateOf<MediaController?>(null) }
@@ -272,6 +276,36 @@ private fun lembrarControle(
             /// fosse um arquivo de vídeo.
             val item = MediaItem.Builder()
                 .setUri(url)
+                /// Os metadados que a **notificação** e o controle do carro leem
+                /// — R9.
+                ///
+                /// ## Sem isto a sessão sobe muda, e era o que acontecia
+                ///
+                /// O `MediaItem` não declarava `MediaMetadata` nenhuma, então a
+                /// notificação de mídia mostrava o que o sistema conseguisse
+                /// deduzir da URL — que aqui é `/api/stream/{id}?token=…`, ou
+                /// seja, nada. Título e arte estavam na tela do app e em lugar
+                /// nenhum fora dele.
+                ///
+                /// O `MediaSession` do Media3 lê os metadados **do item que está
+                /// tocando**, e é por isso que o lugar certo é aqui e não no
+                /// `ServicoDeMidia`: o serviço não sabe qual obra é.
+                ///
+                /// ⚠️ `setArtworkUri` e não `setArtworkData`: passar bytes
+                /// obrigaria o app a baixar e decodificar o pôster **de novo**,
+                /// numa segunda cópia, só pra entregar ao sistema. Com a URI
+                /// quem busca é o carregador de mídia do Android, e ela é a mesma
+                /// URL que o Coil já tem em cache.
+                ///
+                /// A capa é nula em 8.598 das 17.930 obras, e aí a notificação
+                /// sobe **sem arte** em vez de com um quadrado vazio — §24 fora
+                /// do app.
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(titulo)
+                        .setArtworkUri(capaUrl?.let(android.net.Uri::parse))
+                        .build(),
+                )
                 /// A **mesma** chave que o download usou.
                 ///
                 /// Sem ela o cache indexa pela URL — e a URL carrega o token de

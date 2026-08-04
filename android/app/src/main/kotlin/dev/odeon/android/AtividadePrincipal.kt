@@ -46,7 +46,14 @@ class AtividadePrincipal : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            AppOdeon()
+            /// O atalho pede uma aba, e ela chega como extra da intenção — R9.
+            ///
+            /// `intent` e não `savedInstanceState`: quem toca num atalho com o
+            /// app já aberto cai no `onNewIntent`, e não aqui. Está anotado como
+            /// pendência no `AppOdeon` — trocar de aba **com o app em segundo
+            /// plano** ainda não funciona, e o conserto é um `onNewIntent` que
+            /// empurre o valor pra um fluxo.
+            AppOdeon(abaPedida = intent?.getStringExtra("aba"))
         }
     }
 }

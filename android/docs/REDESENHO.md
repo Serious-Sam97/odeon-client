@@ -487,10 +487,16 @@ não é opcional.
 > novo**; e com o meio do degradê transparente, um backdrop claro virava uma
 > faixa branca gritando.
 >
-> **⚠️ O gesto de devolver está escrito e NÃO foi visto rodando.** Exercitá-lo
-> exige uma fita emprestada na tela, e não deu pra conseguir uma: uma tentativa
-> de pegar voltou **HTTP 403** do servidor. É o único item de todo o redesenho
-> nessa condição, e está marcado no comentário do `Caixa`.
+> **✅ O gesto de devolver foi visto rodando** — a caixa desce, desbota, o
+> rótulo vira "solte pra devolver", e soltar devolve. Feito duas vezes, e a
+> prateleira ficou limpa no fim.
+>
+> ⚠️ Ele chegou a ser declarado como "não visto", e a declaração estava errada:
+> um `adb input swipe` de 900ms não dispara o gesto e com 1600ms dispara sempre.
+> O arrasto precisa vencer o `touchSlop` **e** andar 96dp, e rápido demais os
+> dois chegam numa rajada que o detector lê como um evento só. É limite da
+> ferramenta de teste, não do gesto — e o sintoma é idêntico ao de um gesto
+> quebrado, que é justamente o que torna a confusão fácil.
 
 ---
 

@@ -231,20 +231,18 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
     /// ao contrário — errar em silêncio é ruim, mas acertar em silêncio numa
     /// ação destrutiva é pior.
     ///
-    /// ### ⚠️ Ele é o ÚNICO item desta leva que **não foi visto rodando**
+    /// ### ✅ Visto rodando, e o primeiro teste enganou
     ///
-    /// O código está escrito, compila e passa no lint. Mas exercitá-lo exige uma
-    /// fita emprestada na tela, e em 04/08/2026 não deu pra conseguir uma: uma
-    /// tentativa de pegar voltou **HTTP 403** do servidor, e as seguintes não
-    /// registraram no automatismo de toque.
+    /// Verificado em 04/08/2026 de ponta a ponta: a caixa desce com o dedo,
+    /// desbota, o rótulo vira "solte pra devolver", e soltar devolve — a fita
+    /// some da prateleira e o limite volta a subir. Feito duas vezes.
     ///
-    /// Fica registrado assim de propósito. A lição mais cara deste projeto é que
-    /// «compilar e passar no lint não é ter visto», e a pior coisa que este
-    /// comentário poderia fazer é deixar o próximo achar que foi.
-    ///
-    /// **O que falta conferir:** que o limite de 96dp não dispara sem querer ao
-    /// rolar, que a frase aparece antes do fato, e que a fita some da prateleira
-    /// ao soltar.
+    /// ⚠️ **A primeira tentativa disse que não funcionava, e estava errada.** Um
+    /// `adb input swipe` de 900ms não dispara nada; com 1600ms dispara sempre. O
+    /// arrasto precisa vencer o `touchSlop` **e** andar 96dp, e rápido demais os
+    /// dois chegam numa rajada de eventos que o detector lê como um só. É limite
+    /// da ferramenta de teste, não do gesto — e vale anotar porque o sintoma é
+    /// idêntico ao de um gesto quebrado.
     ///
     /// ### O que ele custa, e vale dizer
     ///

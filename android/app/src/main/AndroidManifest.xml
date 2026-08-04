@@ -129,6 +129,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Os atalhos ao segurar o ícone — R9. Ver `res/xml/atalhos.xml`. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/atalhos" />
         </activity>
 
         <!--

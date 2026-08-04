@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Os atalhos que aparecem ao segurar o ícone do app — R9.
+
+  ## Por que estáticos, e não dinâmicos
+
+  Atalho dinâmico é o que muda com o uso: "continuar assistindo *Drive*", com o
+  nome do filme e a capa dele. Seria melhor, e custa um serviço que os atualize
+  toda vez que o progresso muda — via SSE, ou a cada volta do player.
+
+  Estes três não mudam: eles levam a **lugares**, não a obras. Um atalho que só
+  abre uma aba não precisa saber de nada, e é o que dá pra entregar sem inventar
+  um caminho de atualização que ninguém pediu.
+
+  ⚠️ O atalho dinâmico de "continuar assistindo *Drive*" fica em aberto, e é o
+  que a §4b da espec chama de «segurar o ícone → continuar assistindo». Este
+  arquivo é a metade barata dele.
+
+  ## O limite é quatro, e três é de propósito
+
+  O Android mostra até 4 (ou 5, em alguns launchers), e a lista some se passar.
+  Sobra espaço pro dinâmico entrar depois sem empurrar nenhum destes pra fora.
+
+  ## `android:enabled` e o alvo
+
+  Todos apontam pra `AtividadePrincipal`, que é a única do app, com um extra
+  dizendo em que aba abrir. **Não** são deep links `odeon://` — o app não os
+  tem, e o comentário do `AppOdeon` diz por quê: eles são o gatilho que faria o
+  `navigation-compose` finalmente valer a pena. Extra de intenção resolve isto
+  aqui sem antecipar aquela decisão.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="continuar"
+        android:enabled="true"
+        android:icon="@drawable/ic_aba_biblioteca"
+        android:shortcutShortLabel="@string/atalho_continuar_curto"
+        android:shortcutLongLabel="@string/atalho_continuar_longo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="@string/id_do_app"
+            android:targetClass="dev.odeon.android.AtividadePrincipal">
+            <extra
+                android:name="aba"
+                android:value="biblioteca" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="locadora"
+        android:enabled="true"
+        android:icon="@drawable/ic_aba_locadora"
+        android:shortcutShortLabel="@string/atalho_locadora_curto"
+        android:shortcutLongLabel="@string/atalho_locadora_longo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="@string/id_do_app"
+            android:targetClass="dev.odeon.android.AtividadePrincipal">
+            <extra
+                android:name="aba"
+                android:value="locadora" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="baixados"
+        android:enabled="true"
+        android:icon="@drawable/ic_aba_baixados"
+        android:shortcutShortLabel="@string/atalho_baixados_curto"
+        android:shortcutLongLabel="@string/atalho_baixados_longo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="@string/id_do_app"
+            android:targetClass="dev.odeon.android.AtividadePrincipal">
+            <extra
+                android:name="aba"
+                android:value="baixados" />
+        </intent>
+    </shortcut>
+
+</shortcuts>

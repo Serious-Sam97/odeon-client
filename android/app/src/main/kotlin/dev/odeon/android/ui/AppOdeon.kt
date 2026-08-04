@@ -102,6 +102,10 @@ private sealed interface Onde {
         val arquivoId: String,
         val titulo: String,
         val ondeParou: Double,
+        /// A capa, pra o controle de mídia — R9. `null` é normal: 8.598 obras
+        /// não têm pôster, e a notificação some com a arte em vez de desenhar um
+        /// quadrado vazio.
+        val capaUrl: String?,
         /// A duração **de verdade**, vinda do probe do arquivo.
         ///
         /// Ela viaja daqui porque o player não pode perguntá-la a si mesmo
@@ -152,7 +156,7 @@ private val Onde.aba: Aba?
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun AppOdeon() {
+fun AppOdeon(abaPedida: String? = null) {
     val app = LocalContext.current.applicationContext as OdeonApp
     var onde: Onde by remember { mutableStateOf(Onde.Decidindo) }
 
@@ -166,7 +170,19 @@ fun AppOdeon() {
     /// por um instante e depois trocar pra biblioteca seria piscar uma pergunta
     /// já respondida.
     LaunchedEffect(Unit) {
-        onde = if (app.odeon.retomar()) Onde.Biblioteca else Onde.Login
+        onde = if (app.odeon.retomar()) {
+            /// O atalho da R9 escolhe a aba de chegada.
+            ///
+            /// ⚠️ Só **se já houver sessão**. Um atalho de "baixados" que caísse
+            /// direto na tela de login pareceria que o app esqueceu o que ele
+            /// mesmo ofereceu — e o §53 vale aqui do lado de fora: não oferecer
+            /// o que a validação vai negar.
+            Aba.entries.firstOrNull { it.name.equals(abaPedida, ignoreCase = true) }
+                ?.destino
+                ?: Onde.Biblioteca
+        } else {
+            Onde.Login
+        }
     }
 
     /// O corpo, separado do esqueleto que o envolve.
@@ -283,12 +299,13 @@ fun AppOdeon() {
                             moldura = molduraDoCartaz,
                             aoVoltar = { onde = Onde.Biblioteca },
                             aoBaixar = { arquivoId -> app.baixarArquivo(arquivoId, alvo.obraId) },
-                            aoTocar = { arquivoId, titulo, ondeParou, duracao ->
+                            aoTocar = { arquivoId, titulo, ondeParou, duracao, capa ->
                                 onde = Onde.Assistindo(
                                     obraId = alvo.obraId,
                                     arquivoId = arquivoId,
                                     titulo = titulo,
                                     ondeParou = ondeParou,
+                                    capaUrl = capa,
                                     duracaoEmSegundos = duracao,
                                 )
                             },
@@ -540,6 +557,7 @@ private fun fabricaDoPlayer(odeon: RepositorioOdeon, alvo: Onde.Assistindo) = vi
             titulo = alvo.titulo,
             ondeParou = alvo.ondeParou,
             duracaoEmSegundos = alvo.duracaoEmSegundos,
+            capaUrl = alvo.capaUrl,
         )
     }
 }

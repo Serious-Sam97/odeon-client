@@ -24,4 +24,14 @@
       a exceção que a nota acima previa.
     -->
     <string name="canal_de_downloads">Downloads</string>
+    <!-- Os atalhos ao segurar o ícone — R9.
+         O curto aparece no ícone da tela inicial e cabe ~10 caracteres; o longo
+         é o que o launcher mostra na lista, com ~25. Escrevê-los iguais é
+         desperdiçar o espaço do segundo. -->
+    <string name="atalho_continuar_curto">continuar</string>
+    <string name="atalho_continuar_longo">continuar assistindo</string>
+    <string name="atalho_locadora_curto">locadora</string>
+    <string name="atalho_locadora_longo">ir à locadora</string>
+    <string name="atalho_baixados_curto">baixados</string>
+    <string name="atalho_baixados_longo">o que está no aparelho</string>
 </resources>

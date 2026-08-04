@@ -6,6 +6,10 @@ de `web/` e `clients/`.
 > **A espec está em [`../docs/APP-ANDROID.md`](../docs/APP-ANDROID.md).** Ela tem
 > as decisões todas, com o porquê de cada uma e a sequência em sete fases. Este
 > arquivo é só como rodar.
+>
+> **O redesenho está em [`docs/REDESENHO.md`](docs/REDESENHO.md)** — a proposta
+> de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
+> Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
 **Estado: fase 1 escrita, não rodada em aparelho.** Entrar e ver a biblioteca:
 tela de login em dois tempos (endereço, depois conta) e grade de pôsteres

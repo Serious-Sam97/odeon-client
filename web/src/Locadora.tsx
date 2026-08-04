@@ -12,11 +12,13 @@ import {
 import { duracao, ficha, paraLista } from "./Details";
 import { RuidoDeFita } from "./RuidoDeFita";
 import MenuDVD from "./MenuDVD";
+import { useArrastoDeFileira } from "./arrasto";
+import { POR_QUE_PEGAR } from "./liberadas";
 
 /// A locadora: a biblioteca vista como uma loja de aluguel.
 ///
 /// A unidade aqui **não é a obra, é a caixa**. Um acervo de 17.498 registros
-/// vira 600 caixas, e a conta de por que é assim está em `docs/DESIGN.md` §20:
+/// vira 600 caixas, e a conta de por que é assim está em `DESIGN.md` (repositório do servidor) §20:
 /// uma série é uma caixa de coleção e não 21 fitas, e o que não tem capa não
 /// entra numa estante — uma estante é feita de capas.
 ///
@@ -599,6 +601,7 @@ function Estante({
   /// estantes do balcão, que já estão na tela quando as outras chegam.
   atrasoBase?: number;
 }) {
+  const arrastar = useArrastoDeFileira();
   return (
     <section className="estante">
       <div className="placa">
@@ -606,7 +609,7 @@ function Estante({
         <i>{legenda}</i>
       </div>
       <div className="prateleira">
-        <div className="fileira">
+        <div className="fileira" ref={arrastar}>
           {caixas.map((c, i) => (
             <CaixaNaEstante
               key={c.id}
@@ -1119,7 +1122,17 @@ function NaMao({
     };
   }, [caixa]);
 
-  const podeAbrir = caixa.temArquivo;
+  /// R50 — com a escassez ligada, a caixa só abre pra quem está com ela.
+  ///
+  /// **É a consequência da própria escassez**, e não uma regra ao lado: "uma
+  /// cópia por caixa, e quem pegou tirou da prateleira" só quer dizer alguma
+  /// coisa se quem não pegou também não assiste. Com a escassez desligada, nada
+  /// aqui muda — a locadora volta a ser um tema.
+  ///
+  /// E o "não" tem a saída ao lado: o botão de pegar emprestado está no balcão,
+  /// a dois centímetros, na mesma tela. Não é uma parede, é uma fila.
+  const comigo = !loja?.opcoes.escassez || !!emprestimo?.meu;
+  const podeAbrir = caixa.temArquivo && comigo;
 
   // O `abrir` roda fora do render e precisa do verso mais recente, não do que
   // existia quando ele foi criado.
@@ -1420,12 +1433,21 @@ function NaMao({
             <div className="verso-acao">
               <CodigoDeBarras semente={caixa.id} />
               {caixa.serie ? (
-                <button className="cartaz-play" onClick={abrir}>
-                  ▸ ver a série
+                <button className="cartaz-play" disabled={!comigo} onClick={abrir}>
+                  {comigo ? "▸ ver a série" : "▸ pegue emprestado"}
                 </button>
               ) : (
-                <button className="cartaz-play" disabled={!podeAbrir} onClick={abrir}>
-                  {caixa.posicao > 30 ? "▸ continuar" : "▸ assistir"}
+                <button
+                  className="cartaz-play"
+                  disabled={!podeAbrir}
+                  onClick={abrir}
+                  title={comigo ? undefined : POR_QUE_PEGAR}
+                >
+                  {!comigo
+                    ? "▸ pegue emprestado"
+                    : caixa.posicao > 30
+                      ? "▸ continuar"
+                      : "▸ assistir"}
                 </button>
               )}
             </div>
@@ -1470,7 +1492,9 @@ function NaMao({
           <span className="mao-dica">
             {fase === "midia"
               ? `arraste pra girar · centro ${caixa.serie ? "abre a série" : "toca"} · fora, guarda`
-              : "arraste pra girar · clique na abertura pra abrir a caixa"}
+              : comigo
+                ? "arraste pra girar · clique na abertura pra abrir a caixa"
+                : "arraste pra girar · pegue emprestado pra abrir"}
           </span>
 
           {/* O BALCÃO. Aqui, e não na contracapa, porque é a única parte do

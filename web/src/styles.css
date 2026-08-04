@@ -12,7 +12,7 @@
   /* acentos — --accent-work é sobrescrito pela cor dominante da obra,
      extraída do pôster no M1. É o que dá identidade a cada tela.
 
-     A era do redesenho fixou a divisão (ver docs/DESIGN.md §12): o AMARELO é o
+     A era do redesenho fixou a divisão (ver DESIGN.md (repositório do servidor) §12): o AMARELO é o
      sistema — ação, foco, estado ativo, score. A cor da obra fica na ARTE:
      halo do herói e borda do pôster. Antes ela tingia rótulo e número, e a
      identidade preto-e-amarelo se dissolvia numa tela por obra. */
@@ -355,19 +355,32 @@ code {
   initial-value: 0deg;
 }
 
+/* R47: o rosto entrou no miolo. 28px e não 26: o furo do anel tem 23px, e é o
+   menor círculo em que um rosto de ator ainda se reconhece — abaixo disso ele
+   vira uma mancha de cor, que é a marca derivada com mais bytes.
+
+   A cor sai de `--anel-cor` quando a pessoa escolheu moldura (R43), e cai no
+   âmbar da casa quando não escolheu. */
 .anel {
   animation: odeon-anel 1.1s 0.35s cubic-bezier(0.2, 0.9, 0.25, 1) both;
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: grid;
   place-content: center;
   background: conic-gradient(
-    var(--accent) var(--fatia, 0deg),
+    var(--anel-cor, var(--accent)) var(--fatia, 0deg),
     color-mix(in oklab, var(--fg) 14%, transparent) 0
   );
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* O rosto fica ACIMA do miolo (`::before`), que continua existindo pro momento
+   em que a imagem ainda não chegou — sem ele o arco viraria um disco cheio por
+   uma fração de segundo a cada carregamento. */
+.anel .avatar {
+  position: relative;
 }
 
 @keyframes odeon-anel {
@@ -387,10 +400,26 @@ code {
   background: var(--bg);
 }
 
+/* O SELO DO NÍVEL. O número morava no miolo, e o miolo agora é o rosto — ele
+   desce pro canto, como o contador de uma notificação. O anel de fora continua
+   dizendo *quanto falta*; o selo diz *onde você está*, e são duas perguntas
+   diferentes que sempre estiveram nesse mesmo lugar. */
 .anel b {
-  position: relative;
-  font: 600 11px/1 system-ui, sans-serif;
-  color: var(--accent);
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  /* O selo encosta no rosto, e rosto é foto: sem o anel da cor do fundo ele
+     encostaria numa pele clara e sumiria. */
+  border: 2px solid var(--bg);
+  background: var(--anel-cor, var(--accent));
+  color: var(--bg);
+  font: 700 9px/11px system-ui, sans-serif;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1462,7 +1491,7 @@ main.troca {
 
 /* A sala escura. Tela cheia e preta de verdade: o painel não fica espiando
    por trás, porque player translúcido sobre catálogo lê como modal, não como
-   cinema. Ver docs/DESIGN.md §13. */
+   cinema. Ver DESIGN.md (repositório do servidor) §13. */
 .player {
   position: fixed;
   inset: 0;
@@ -2698,6 +2727,50 @@ main.troca {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ------------------------------------ R49: o que a pasta é, antes de escolher
+
+   A linha era nome e "N vídeos · subpastas" — e numa pasta de séries os dois
+   sumiam, porque episódio mora em pasta de temporada e a contagem só olhava um
+   nível. Agora ela carrega o total de verdade, o palpite do tipo e a biblioteca
+   que já tomou aquele caminho. */
+.browse-sinais {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* O palpite é um palpite, e a cor diz isso: contorno em vez de preenchimento —
+   ele **não** é um fato do acervo, é uma leitura de nome de arquivo (§18). */
+.chip-palpite {
+  font: 500 10px/1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+/* Já é do acervo. Âmbar preenchido porque isto é fato, e não leitura. */
+.chip-coberta {
+  font: 600 10px/1 system-ui, sans-serif;
+  color: var(--bg);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+/* A pasta coberta continua clicável — navegar por dentro de uma biblioteca é
+   como se chega numa subpasta livre. Ela só não é mais um destino. */
+.browse-row.coberta .browse-name {
+  color: var(--fg-muted);
+}
+
+.aviso-cobertura {
+  color: var(--accent-dim);
 }
 
 label.stacked {
@@ -5866,7 +5939,7 @@ label.stacked input {
 
    A aba ao vivo deixou de ser uma lista e virou a mesa de quem opera a
    emissora: NO AR (o que você vê) → Sintonia (para onde mudar) → linha do
-   tempo (o que vem). Ver docs/DESIGN.md §25. */
+   tempo (o que vem). Ver DESIGN.md (repositório do servidor) §25. */
 
 .ilha {
   margin: calc(var(--s5) * -1) calc(var(--s5) * -1) 0;
@@ -6682,7 +6755,7 @@ label.stacked input {
    A tela apresentava um ranking construído sobre 0 obras terminadas e 0
    votos: seis itens separados por 0,8% de score, numerados de 2 a 7, com a
    mesma frase embaixo de todos. Agora ela tem três estados e admite o
-   primeiro. Ver docs/DESIGN.md §26. */
+   primeiro. Ver DESIGN.md (repositório do servidor) §26. */
 
 .pv-topo {
   display: flex;
@@ -7081,7 +7154,7 @@ label.stacked input {
 
    Não é funcionalidade nova: é a tela que faltava para um poder que já estava
    no backend. Sete rotas existiam sem cliente, e quatro delas só eram
-   alcançáveis por `curl`. Ver docs/DESIGN.md §27. */
+   alcançáveis por `curl`. Ver DESIGN.md (repositório do servidor) §27. */
 
 .adm-topo {
   display: flex;
@@ -11405,4 +11478,90 @@ a.cur-fonte:focus-visible {
 
 .login-alterna:hover {
   color: var(--accent);
+}
+
+/* ------------------------------------ R48: arrastar uma fileira horizontal
+
+   O gancho (`arrasto.ts`) põe e tira estas duas classes; o CSS aqui é tudo o
+   que o gesto precisa de aparência.
+
+   `.arrastavel` só entra quando a fileira REALMENTE tem pra onde rolar. Um
+   cursor de mão numa lista que cabe inteira na tela é o produto prometendo um
+   gesto que ele sabe que não faz nada — o §8b visto do outro lado. */
+.arrastavel {
+  cursor: grab;
+}
+
+.arrastando {
+  cursor: grabbing;
+  /* Sem isto o gesto vira uma seleção de texto azul atravessando os cartões: o
+     navegador não sabe que aquele movimento com o botão apertado é rolagem. */
+  user-select: none;
+  /* Alguma fileira pode ganhar `scroll-behavior: smooth` um dia. Com ela, cada
+     quadro do arrasto viraria uma animação perseguindo o mouse. */
+  scroll-behavior: auto;
+}
+
+/* NÃO há regra de `prefers-reduced-motion` aqui, e é decisão.
+   Todo o resto da barra desliga com ela porque é animação — alma não pode
+   custar enjoo. Um cursor não é animação, e a rolagem acompanha a mão em vez de
+   se mover sozinha. Apagar a mãozinha esconderia o gesto justamente de quem
+   pediu menos movimento, sem tirar movimento nenhum. */
+
+/* As raízes montadas, quando há mais de uma (R49). Antes desta fase o navegador
+   nascia na primeira e o "subir" parava nela — com dois pontos de montagem,
+   metade do disco não tinha caminho nenhum até aqui. */
+.browse-raizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--s2);
+}
+
+/* ------------------------- R50: o play que virou porta da locadora
+
+   Com a escassez ligada, assistir exige a fita na mão. O botão **não** é
+   desabilitado: ele muda de destino e leva onde se resolve — um botão apagado
+   diz "não" sem dizer onde, que é a parede que o §35 recusou quando desenhou o
+   "pedir de volta".
+
+   A cor é a da locadora, e não a de erro: não há nada errado acontecendo. A
+   caixa está com alguém, e isso é o mecanismo funcionando. */
+.play.pegar,
+.cartaz-play.pegar {
+  background: transparent;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent-dim);
+}
+
+.play.pegar:hover,
+.cartaz-play.pegar:hover {
+  background: color-mix(in oklab, var(--accent-dim) 16%, transparent);
+  color: var(--accent);
+}
+
+/* Nos cartões sem rótulo — o pôster do herói, o numerado, a fila, o "continuar
+   assistindo" — a arte é o botão, e não há texto pra trocar. O sinal é uma
+   moldura âmbar e a arte recuando: ela continua legível (você precisa
+   reconhecer o filme pra querer pegá-lo), mas para de parecer disponível. */
+.pick-art.pegar img,
+.qposter.pegar img,
+.pv-card.pegar .pv-arte img,
+.hero-poster.pegar img {
+  filter: saturate(0.55) brightness(0.72);
+}
+
+.pick-art.pegar,
+.qposter.pegar,
+.pv-card.pegar,
+.hero-poster.pegar {
+  outline: 1px solid var(--accent-dim);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+
+/* Na lista de uma coleção o item continua sendo uma linha de texto, então o
+   sinal é a linha de baixo dizendo "pegar na locadora" — já está no conteúdo. */
+.item-main.pegar strong {
+  color: var(--fg-muted);
 }

@@ -759,8 +759,8 @@ export interface PersonDetail {
 /// qualquer site tem.
 ///
 /// `obras` conta **títulos**, não obras: uma série inteira é um título só. Ver
-/// o cabeçalho de `backend/src/routes/guia.rs` pro que aconteceu antes desse
-/// rollup existir.
+/// o cabeçalho de `src/routes/guia.rs` **no repositório do servidor** pro que
+/// aconteceu antes desse rollup existir — desde a R51 ele mora em outro lugar.
 export interface PessoaDoGuia {
   id: string;
   name: string;
@@ -864,11 +864,29 @@ export interface Library {
   created_at: string;
 }
 
+/// R49 — o que uma pasta **parece** ser, lido dos nomes dos arquivos dentro.
+///
+/// `null` quando os nomes não dizem: a tela omite em vez de chutar (§18).
+export type Palpite = "filme" | "serie" | "mistura";
+
+/// R49 — a pasta já está numa biblioteca, e o servidor recusa as duas direções.
+export interface Cobertura {
+  biblioteca: string;
+  /** `true`: esta pasta está DENTRO da biblioteca. `false`: ela CONTÉM uma. */
+  dentro: boolean;
+}
+
 export interface BrowseEntry {
   name: string;
   path: string;
   video_count: number;
+  /** R49 — e quantos nas subpastas dela, que é onde episódio mora. */
+  videos_abaixo: number;
   has_subdirs: boolean;
+  coberta_por: Cobertura | null;
+  palpite: Palpite | null;
+  /** A contagem parou no teto: a tela mostra "+" em vez de mentir. */
+  truncado: boolean;
 }
 
 export interface BrowseListing {
@@ -878,6 +896,10 @@ export interface BrowseListing {
   roots: string[];
   entries: BrowseEntry[];
   video_count: number;
+  videos_abaixo: number;
+  coberta_por: Cobertura | null;
+  palpite: Palpite | null;
+  truncado: boolean;
 }
 
 export interface Filters {
@@ -1111,6 +1133,29 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Quantas entradas por página. O backend limita em 500. */
 export const PAGE_SIZE = 120;
+
+/// R47 — o perfil mudou **nesta aba**.
+///
+/// Não é o barramento: o barramento (`ouvirEventos`) carrega o que aconteceu no
+/// servidor, e isto é o contrário — quem salvou foi você, aqui, e o cabeçalho
+/// precisa saber sem perguntar de novo. Um `window` event e não um contexto do
+/// React porque quem emite (`Perfil`) é filho de quem ouve (`BarraDeCima`), e um
+/// estado subindo essa distância atravessaria seis telas que não têm nada a ver
+/// com isso.
+///
+/// Sem ele o cabeçalho fica com o rosto velho até um F5, que é o §8b dito de
+/// outro jeito: a tela mostrando o contrário do que acabou de acontecer.
+export const PERFIL_MUDOU = "odeon:perfil";
+
+/// R50 — o que eu posso assistir agora.
+export interface Liberadas {
+  /// A escassez está ligada, e o empréstimo virou condição pra dar play.
+  exige: boolean;
+  /// As obras cobertas pelos meus empréstimos em aberto. Vazia quando `exige`
+  /// é falso — aí tudo é liberado, e mandar 17.498 ids pra dizer "sim" seria
+  /// meio megabyte de nada.
+  works: string[];
+}
 
 function queryString(filters: Filters, limit = PAGE_SIZE, offset = 0): string {
   const p = new URLSearchParams({ limit: String(limit) });
@@ -1765,6 +1810,9 @@ export const api = {
   //
   // Chamada **no play**, não na montagem da estante.
   fita: (workId: string) => json<Fita>(`/api/locadora/fita/${workId}`),
+
+  /// R50 — a lista do que eu posso assistir. Ver `liberadas.ts`.
+  liberadas: () => json<Liberadas>("/api/locadora/liberadas"),
 
   // --- R29: as opções da loja ---
   //

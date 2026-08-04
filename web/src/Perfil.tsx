@@ -5,6 +5,7 @@ import Desafios from "./Desafios";
 import Retrospectiva from "./Retrospectiva";
 import {
   api,
+  PERFIL_MUDOU,
   type CamadaDaConquista,
   type ConquistaNaTela,
   type EnfeiteNaTela,
@@ -297,6 +298,10 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
         capa: capa || null,
         moldura: moldura || null,
       });
+      /// O rosto e a moldura também vivem no cabeçalho (R47). Ele leu o perfil
+      /// uma vez, na montagem, e não tem como saber que você acabou de trocar de
+      /// cara — a não ser que alguém conte.
+      window.dispatchEvent(new Event(PERFIL_MUDOU));
       aoSalvar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));

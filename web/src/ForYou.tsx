@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Desafios from "./Desafios";
+import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useTocarOuPegar } from "./liberadas";
+import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
   formatDuration,
@@ -26,7 +28,7 @@ const DESTAQUES = 6;
 ///
 /// O ranking vem em três pesos (herói, destaque, fila) em vez de uma lista
 /// plana: a curadoria do M5 produz uma ordem, e desenhar todo item igual era
-/// jogar essa ordem fora. Ver docs/DESIGN.md §12.
+/// jogar essa ordem fora. Ver DESIGN.md (repositório do servidor) §12.
 export default function ForYou({ onPlay }: { onPlay: (w: WorkListItem) => void }) {
   const [data, setData] = useState<ForYouData | null>(null);
   const [minutes, setMinutes] = useState<number | undefined>(undefined);
@@ -295,7 +297,7 @@ function TasteInspector({ data }: { data: ForYouData }) {
 
 /// `--hue` alimenta o gradiente de quem não tem arte; `--accent-work` é a cor
 /// dominante da obra, e só toca ARTE (halo, borda do pôster) — nunca texto nem
-/// número. Ver docs/DESIGN.md §12.
+/// número. Ver DESIGN.md (repositório do servidor) §12.
 function tintOf(item: Recommendation): React.CSSProperties {
   const style: Record<string, string | number> = { "--hue": hueFromTitle(item.title) };
   if (item.dominant_color) style["--accent-work"] = item.dominant_color;
@@ -357,6 +359,10 @@ function HeroCard({
   onPlay: (w: WorkListItem) => void;
   onChanged: () => void;
 }) {
+  /// R50 — tocar, ou levar onde a fita se pega.
+  const { pode, aoClicar } = useTocarOuPegar(onPlay);
+  const liberada = pode(item);
+
   const art = wideArt(item);
   const [principal, ...resto] = item.reasons;
 
@@ -368,9 +374,9 @@ function HeroCard({
 
       <div className="hero-inner">
         <button
-          className="hero-poster"
-          onClick={() => item.media_file_id && onPlay(item)}
-          title={item.title}
+          className={liberada ? "hero-poster" : "hero-poster pegar"}
+          onClick={() => aoClicar(item)}
+          title={liberada ? item.title : POR_QUE_PEGAR}
         >
           {item.poster && <img src={api.artworkUrl(item.poster)} alt="" />}
         </button>
@@ -389,13 +395,22 @@ function HeroCard({
           )}
 
           <div className="hero-actions">
+            {/* R50 — com a escassez ligada o botão continua existindo e muda
+                de destino. Desabilitá-lo diria "não" sem dizer onde se resolve,
+                que é a parede que o §35 recusou. */}
             <button
-              className="play"
-              onClick={() => item.media_file_id && onPlay(item)}
-              disabled={!item.media_file_id}
-              title={item.media_file_id ? undefined : "nenhum arquivo tocável nesta obra"}
+              className={liberada ? "play" : "play pegar"}
+              onClick={() => aoClicar(item)}
+              disabled={liberada && !item.media_file_id}
+              title={
+                !liberada
+                  ? POR_QUE_PEGAR
+                  : item.media_file_id
+                    ? undefined
+                    : "nenhum arquivo tocável nesta obra"
+              }
             >
-              ▸ Assistir
+              {liberada ? "▸ Assistir" : `▸ ${PEGAR_NA_LOCADORA}`}
             </button>
             <Feedback id={item.id} onChanged={onChanged} />
           </div>
@@ -421,9 +436,17 @@ function PickCard({
   rank: number;
   onPlay: (w: WorkListItem) => void;
 }) {
+  /// R50 — tocar, ou levar onde a fita se pega.
+  const { pode, aoClicar } = useTocarOuPegar(onPlay);
+  const liberada = pode(item);
+
   return (
     <article className="pick" style={tintOf(item)}>
-      <button className="pick-art" onClick={() => item.media_file_id && onPlay(item)}>
+      <button
+        className={liberada ? "pick-art" : "pick-art pegar"}
+        onClick={() => aoClicar(item)}
+        title={liberada ? undefined : POR_QUE_PEGAR}
+      >
         <span className="pick-rank">{rank}</span>
         {item.poster ? (
           <img src={api.artworkUrl(item.poster)} alt="" loading="lazy" />
@@ -452,10 +475,18 @@ function QueueRow({
   rank: number;
   onPlay: (w: WorkListItem) => void;
 }) {
+  /// R50 — tocar, ou levar onde a fita se pega.
+  const { pode, aoClicar } = useTocarOuPegar(onPlay);
+  const liberada = pode(item);
+
   return (
     <div className="qrow" style={tintOf(item)}>
       <span className="qrank">{String(rank).padStart(2, "0")}</span>
-      <button className="qposter" onClick={() => item.media_file_id && onPlay(item)}>
+      <button
+        className={liberada ? "qposter" : "qposter pegar"}
+        onClick={() => aoClicar(item)}
+        title={liberada ? undefined : POR_QUE_PEGAR}
+      >
         {item.poster ? (
           <img src={api.artworkUrl(item.poster)} alt="" loading="lazy" />
         ) : (
@@ -578,6 +609,10 @@ function CartaoSimples({
   onPlay: (w: WorkListItem) => void;
   progresso?: boolean;
 }) {
+  /// R50 — tocar, ou levar onde a fita se pega.
+  const { pode, aoClicar } = useTocarOuPegar(onPlay);
+  const liberada = pode(work);
+
   const arte = progresso ? (work.still ?? work.backdrop ?? work.poster) : work.poster;
   const feito =
     work.position_seconds && work.duration_seconds
@@ -585,7 +620,11 @@ function CartaoSimples({
       : 0;
 
   return (
-    <button className="pv-card" onClick={() => work.media_file_id && onPlay(work)}>
+    <button
+      className={liberada ? "pv-card" : "pv-card pegar"}
+      onClick={() => aoClicar(work)}
+      title={liberada ? undefined : POR_QUE_PEGAR}
+    >
       <span className="pv-arte">
         {arte && <img src={api.artworkUrl(arte)} alt="" loading="lazy" />}
         {progresso && feito > 0 && (
@@ -621,6 +660,7 @@ function Calibragem({
   onVoto: (id: string, v: "love" | "block") => void;
 }) {
   const acesas = capas.filter((c) => votadas[c.id]).length;
+  const arrastar = useArrastoDeFileira();
 
   return (
     <section className="pv-secao calib">
@@ -643,7 +683,7 @@ function Calibragem({
         Cada ♥ ou ✕ vale mais que uma hora de tela: é o único sinal que ele consegue ler
         antes de você terminar alguma coisa.
       </p>
-      <div className="pv-fila">
+      <div className="pv-fila" ref={arrastar}>
         {capas.map((c) => (
           <div key={c.id} className={`pv-calib${votadas[c.id] === "block" ? " descartada" : ""}`}>
             <p className="pv-calib-t">{c.title}</p>

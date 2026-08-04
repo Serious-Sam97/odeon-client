@@ -13,7 +13,7 @@ import {
 /// Não é funcionalidade nova: é a **tela que faltava** para um poder que já
 /// estava no backend. Sete rotas existiam sem nenhum cliente — usuários,
 /// sessões, histórico de trabalhos e as quatro manutenções —, e quatro delas
-/// só eram alcançáveis por `curl`. Ver docs/DESIGN.md §27.
+/// só eram alcançáveis por `curl`. Ver DESIGN.md (repositório do servidor) §27.
 type Saude = Awaited<ReturnType<typeof api.diagnostico>>;
 
 export default function Admin({ eu }: { eu: string }) {

@@ -444,7 +444,7 @@ export default function Player({
       onMouseMove={wake}
     >
       {/* A cor dominante da obra vive AQUI e em nenhum outro lugar do player:
-          controle é sistema, e sistema é amarelo. Ver docs/DESIGN.md §12. */}
+          controle é sistema, e sistema é amarelo. Ver DESIGN.md (repositório do servidor) §12. */}
       <div className="player-halo" />
 
       {/* A conversa da sala. Ao LADO do filme, e não por cima: o §4.6 pediu

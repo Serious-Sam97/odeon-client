@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
   hueFromTitle,
@@ -171,6 +172,9 @@ export default function Guia({ onDetails, onExplorar }: Props) {
   /// tela parecia quebrada, que é o pior dos casos.
   const [pessoa, setPessoa] = useState<{ p: PessoaDoGuia; papel: string } | null>(null);
   const [lista, setLista] = useState<(typeof EIXOS)[number] | null>(null);
+  /// Um gancho só pras várias fileiras desta tela — uma por eixo. O `ref` é de
+  /// função justamente pra isso (R48).
+  const arrastar = useArrastoDeFileira();
 
   useEffect(() => {
     api
@@ -234,7 +238,7 @@ export default function Guia({ onDetails, onExplorar }: Props) {
                 </button>
               )}
             </div>
-            <div className="guia-fileira">
+            <div className="guia-fileira" ref={arrastar}>
               {pessoas.map((p) => (
                 <CartaoDePessoa
                   key={p.id}

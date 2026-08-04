@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useLiberadas } from "./liberadas";
+import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
   type AvaliacoesDaObra,
@@ -416,7 +419,8 @@ function ComentariosDaReview({ quem, obra }: { quem: string; obra: string }) {
 ///
 /// **Nada aqui é inventado.** Toda frase é derivada do grafo e do seu
 /// histórico — o porquê de não usarmos trivia de terceiro nem texto gerado está
-/// no cabeçalho de `backend/src/routes/curiosidades.rs` e em `IDEIAS.md` §6.3.
+/// no cabeçalho de `src/routes/curiosidades.rs` e no `IDEIAS.md` §6.3 — os
+/// dois **no repositório do servidor**, desde a R51.
 ///
 /// Buscada em separado do resto do cartaz: são sete consultas, e a sinopse não
 /// pode esperar por elas. Enquanto não chegam, **não há esqueleto nem
@@ -630,6 +634,15 @@ function Cabeca({
 
   const tocar = () => onPlay?.(paraLista(work, arquivo, serie));
 
+  /// R50 — esta obra está liberada pra mim agora?
+  const { pode } = useLiberadas();
+  const liberada = pode(work.id);
+  const navegar = useNavigate();
+  const onLocadora = () => {
+    onClose();
+    navegar("/locadora");
+  };
+
   return (
     <>
       <div className="cartaz-topo">
@@ -660,13 +673,25 @@ function Cabeca({
           <p className="cartaz-linha">{linha}</p>
 
           <div className="cartaz-acoes">
-            <button className="cartaz-play" onClick={tocar} disabled={!arquivo}>
-              {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
-            </button>
+            {/* R50 — com a escassez ligada, o ▸ assistir vira a porta da
+                locadora. Não é o mesmo botão desabilitado: um botão apagado
+                convida a tentar, e este **leva onde se resolve** (§53). */}
+            {liberada ? (
+              <button className="cartaz-play" onClick={tocar} disabled={!arquivo}>
+                {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
+              </button>
+            ) : (
+              <button className="cartaz-play pegar" onClick={onLocadora} title={POR_QUE_PEGAR}>
+                ▸ {PEGAR_NA_LOCADORA}
+              </button>
+            )}
             {/* R46 — a porta do assistir junto. Ela fica ao lado do assistir
                 porque é a mesma decisão vista de outro jeito: "isto agora, e
-                com gente". Só aparece com arquivo, como o play. */}
-            {onJunto && arquivo && (
+                com gente". Só aparece com arquivo, como o play.
+
+                R50: e só com a fita na mão — abrir uma sala pra um filme que
+                você não pode tocar convidaria gente pra uma tela preta. */}
+            {onJunto && arquivo && liberada && (
               <button
                 className="cartaz-junto"
                 title="abre uma sala e avisa seus amigos"
@@ -763,12 +788,13 @@ function CreditSection({
     () => work.credits.filter((c) => c.role_label === "Elenco"),
     [work.credits],
   );
+  const arrastar = useArrastoDeFileira();
   if (elenco.length === 0) return null;
 
   return (
     <section className="cartaz-secao">
       <h3>Elenco</h3>
-      <div className="cartaz-fila">
+      <div className="cartaz-fila" ref={arrastar}>
         {elenco.map((credit) => (
           <button
             key={`${credit.person_id}-${credit.role}`}

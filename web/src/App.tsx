@@ -4,6 +4,9 @@ import AoVivo, { AvisoDePrograma } from "./AoVivo";
 import Collections from "./Collections";
 import Details, { paraLista } from "./Details";
 import Admin from "./Admin";
+import Avatar from "./Avatar";
+import { useArrastoDeFileira } from "./arrasto";
+import { conferirLiberada } from "./liberadas";
 import Gerenciar from "./Gerenciar";
 import Guia from "./Guia";
 import Locadora from "./Locadora";
@@ -30,6 +33,7 @@ import {
   formatSize,
   hueFromTitle,
   PAGE_SIZE,
+  PERFIL_MUDOU,
   WORK_KINDS,
   type LibraryEntry,
   type Filters,
@@ -158,11 +162,41 @@ function BarraDeCima({
   aoSair: () => void;
   busca: React.ReactNode;
 }) {
-  const fileira = useRef<HTMLElement>(null);
+  const fileira = useRef<HTMLElement | null>(null);
+  const arrastarFileira = useArrastoDeFileira();
+  /// Dois `ref` no mesmo elemento: o de medir o traço, que já existia, e o de
+  /// arrastar (R48).
+  ///
+  /// **E ele precisa ser estável.** Um `ref` escrito na marca no JSX é uma
+  /// função nova a cada render, e o React desliga e religa o anterior toda vez —
+  /// no meio de um gesto isso apagaria o `pointerdown` que estava em curso, e a
+  /// fileira pararia de responder sem erro nenhum aparecer.
+  const abas = useCallback(
+    (el: HTMLElement | null) => {
+      fileira.current = el;
+      const soltar = arrastarFileira(el);
+      return () => {
+        fileira.current = null;
+        soltar?.();
+      };
+    },
+    [arrastarFileira],
+  );
   const [traco, setTraco] = useState<{ x: number; w: number } | null>(null);
   const [condensada, setCondensada] = useState(false);
   const [menu, setMenu] = useState<"nenhum" | "eu" | "manutencao">("nenhum");
-  const [nivel, setNivel] = useState<{ n: number; fatia: number } | null>(null);
+  /// R47 — o rosto, o nível e a moldura saem da **mesma** resposta do perfil,
+  /// e por isso moram no mesmo estado: pedir três vezes o que vem numa vez só
+  /// seria três chances de a barra mostrar um estado que não existe.
+  const [insignia, setInsignia] = useState<{
+    n: number;
+    fatia: number;
+    /// O rosto escolhido (R43). `null` cai na marca derivada do nome (R42) —
+    /// que é o padrão de quem não escolheu, e não um buraco no cabeçalho.
+    rosto: string | null;
+    /// A cor da moldura, já em hex. `null` mantém o âmbar da casa.
+    cor: string | null;
+  } | null>(null);
 
   /// O traço que desliza.
   ///
@@ -201,18 +235,32 @@ function BarraDeCima({
     return () => window.removeEventListener("scroll", aoRolar);
   }, []);
 
-  /// O anel de nível. Uma requisição, na montagem: o número muda devagar e a
-  /// barra não é lugar de ficar perguntando.
-  useEffect(() => {
+  /// A insígnia. Uma requisição, na montagem: o número muda devagar e a barra
+  /// não é lugar de ficar perguntando.
+  const lerInsignia = useCallback(() => {
     api
       .perfil()
       .then((p) => {
         const g = p.progresso;
         const faixa = Math.max(1, g.xp_do_proximo - g.xp_do_nivel);
-        setNivel({ n: g.nivel, fatia: Math.min(1, (g.xp - g.xp_do_nivel) / faixa) });
+        setInsignia({
+          n: g.nivel,
+          fatia: Math.min(1, (g.xp - g.xp_do_nivel) / faixa),
+          rosto: p.avatar?.arte ?? null,
+          cor: p.moldura,
+        });
       })
       .catch(() => {});
   }, []);
+
+  /// Ela também é relida quando você troca de rosto em `/perfil` — o `PUT` é
+  /// numa tela e o efeito é noutra, e sem este aviso o cabeçalho ficaria com a
+  /// cara velha até um F5.
+  useEffect(() => {
+    lerInsignia();
+    window.addEventListener(PERFIL_MUDOU, lerInsignia);
+    return () => window.removeEventListener(PERFIL_MUDOU, lerInsignia);
+  }, [lerInsignia]);
 
   /// Fechar o menu ao clicar fora e no Escape. Sem isso ele fica aberto atrás
   /// da tela seguinte, que é o defeito que todo menu tem uma vez.
@@ -256,7 +304,11 @@ function BarraDeCima({
         <span className="brand-name">ODEON</span>
       </button>
 
-      <nav className="abas" ref={fileira}>
+      {/* As abas também são uma lista horizontal — só que só rolam em janela
+          estreita, onde elas viram uma linha inteira (o `@media` de 900px). O
+          gancho fica inerte enquanto couberem, e por isso não precisa de
+          condição aqui. */}
+      <nav className="abas" ref={abas}>
         {ABAS.map(({ chave, rotulo }) => (
           <button
             key={chave}
@@ -335,8 +387,9 @@ function BarraDeCima({
           )}
         </div>
 
-        {/* VOCÊ. O anel é o progresso pro próximo nível — a fase 5 na barra,
-            sem ocupar uma entrada. */}
+        {/* VOCÊ. Três coisas no mesmo lugar de 28px: o rosto no miolo, o arco
+            contando quanto falta pro próximo nível, e o número num selo — a
+            fase 5 na barra, sem ocupar uma entrada. */}
         <div className="gaveta-caixa">
           <button
             className={`gaveta-abre eu${menu === "eu" || aba === "perfil" ? " on" : ""}`}
@@ -345,9 +398,16 @@ function BarraDeCima({
           >
             <span
               className="anel"
-              style={{ ["--fatia" as string]: `${(nivel?.fatia ?? 0) * 360}deg` }}
+              style={{
+                ["--fatia" as string]: `${(insignia?.fatia ?? 0) * 360}deg`,
+                /* A moldura escolhida (R43) tinge o arco e o selo. Ela já tinge
+                   o perfil inteiro; aqui a escolha passa a valer em toda tela,
+                   que é o que faz escolher uma cor significar alguma coisa. */
+                ...(insignia?.cor ? { ["--anel-cor" as string]: insignia.cor } : {}),
+              }}
             >
-              <b>{nivel?.n ?? "·"}</b>
+              <Avatar nome={eu.display_name} arte={insignia?.rosto} tamanho={23} />
+              <b>{insignia?.n ?? "·"}</b>
             </span>
             <span className="eu-nome">{eu.display_name}</span>
             {API.startsWith("https://") && <span className="lock">🔒</span>}
@@ -462,6 +522,24 @@ export default function App() {
       recarregarSala();
     });
   }, [me, recarregarSala]);
+
+  /// R50 — o funil de dar play, e ele é a **garantia**.
+  ///
+  /// Os nove botões já não oferecem o que a regra nega (§53) — mas eles decidem
+  /// com o que a loja local sabia no último quadro. Aqui a pergunta é refeita
+  /// antes de abrir o vídeo, e um "não" leva **pra locadora** em vez de virar um
+  /// 403 dentro do player.
+  ///
+  /// Sem isto, a corrida existiria de verdade: alguém devolve a sua fita pelo
+  /// "pedir de volta", o evento ainda não chegou, e o clique abriria um player
+  /// que não recebe bytes — a pior forma de dizer não, porque parece defeito.
+  const tocar = useCallback((w: WorkListItem) => {
+    void conferirLiberada(w.id).then((ok) => {
+      if (ok) return setPlaying(w);
+      setPlaying(null);
+      navigate(CAMINHO_DE.locadora);
+    });
+  }, [navigate]);
 
   useEffect(() => {
     if (!auth.token()) {
@@ -683,7 +761,7 @@ export default function App() {
           <Libraries onChanged={() => refresh(filters)} />
         )}
 
-        {tab === "foryou" && <ForYou onPlay={setPlaying} />}
+        {tab === "foryou" && <ForYou onPlay={tocar} />}
 
         {tab === "review" && (
           <RevisaoTabs onChanged={() => refresh(filters)} />
@@ -691,7 +769,7 @@ export default function App() {
 
         {tab === "locadora" && (
           <Locadora
-            onPlay={setPlaying}
+            onPlay={tocar}
             onAbrirColecao={(id, titulo) => {
               setTab("library");
               setFilters({ collection: id, collectionName: titulo });
@@ -715,7 +793,7 @@ export default function App() {
         {tab === "perfil" && <Perfil key={perfilDe ?? "eu"} quem={perfilDe} />}
         {tab === "admin" && isAdmin && <Admin eu={me?.username ?? ""} />}
         {tab === "mural" && <Mural aoVerPerfil={(quem) => navigate(`/p/${quem}`)} />}
-        {tab === "collections" && <Collections onPlay={setPlaying} />}
+        {tab === "collections" && <Collections onPlay={tocar} />}
 
         {tab === "live" && <AoVivo isAdmin={isAdmin} onDetails={setDetailsOf} />}
 
@@ -846,7 +924,7 @@ export default function App() {
           // A ficha era beco sem saída: mostrava a obra e não deixava tocar.
           onPlay={(w) => {
             setDetailsOf(null);
-            setPlaying(w);
+            tocar(w);
           }}
           /// R46 — abrir a sala e cair dentro dela. O convite não é um segundo
           /// gesto: a sala aberta já aparece pros amigos (§4.6), porque a

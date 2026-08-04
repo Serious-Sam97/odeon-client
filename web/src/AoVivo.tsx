@@ -8,6 +8,7 @@ import {
   type ProgramaDoGuia,
 } from "./api";
 import { ligarHls } from "./hls";
+import { useArrastoDeFileira } from "./arrasto";
 
 const RECARREGA_MS = 60_000;
 /// Quanto o mouse pode ficar parado antes do cromo sumir.
@@ -20,7 +21,7 @@ function hhmm(iso: string): string {
 /// A aba "ao vivo".
 ///
 /// O Odeon **sintoniza**, não programa: uma fonte IPTV publica os canais e a
-/// grade, e daqui pra frente isto é leitura. Ver docs/DESIGN.md §17.
+/// grade, e daqui pra frente isto é leitura. Ver DESIGN.md (repositório do servidor) §17.
 /// A ilha de transmissão.
 ///
 /// A aba deixou de ser uma lista de canais e virou a mesa de quem opera a
@@ -28,7 +29,7 @@ function hhmm(iso: string): string {
 ///
 /// E o Odeon deixou de só sintonizar. Além das fontes IPTV, ele agora programa
 /// canais próprios do seu acervo (`live::emissora`) — que aparecem como pistas
-/// iguais às outras, marcadas em amarelo. Ver docs/DESIGN.md §25.
+/// iguais às outras, marcadas em amarelo. Ver DESIGN.md (repositório do servidor) §25.
 export default function AoVivo({
   isAdmin,
   onDetails,
@@ -39,6 +40,7 @@ export default function AoVivo({
   /// programa de IPTV tem.
   onDetails: (workId: string) => void;
 }) {
+  const arrastar = useArrastoDeFileira();
   const [canais, setCanais] = useState<CanalNoAr[]>([]);
   const [guia, setGuia] = useState<Guia | null>(null);
   const [casa, setCasa] = useState<GradeOdeon | null>(null);
@@ -239,7 +241,7 @@ export default function AoVivo({
           )}
         </header>
         {configurando && <Fontes onMudou={carregar} />}
-        <div className="fileira-canais">
+        <div className="fileira-canais" ref={arrastar}>
           {pistas.map((p, i) => (
             <CartaoCanal
               key={p.chave}

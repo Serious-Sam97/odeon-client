@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useLiberadas } from "./liberadas";
 import {
   api,
   COLLECTION_KINDS,
@@ -238,6 +240,9 @@ function CollectionView({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<number | null>(null);
+  /// R50 — o que dá pra tocar agora.
+  const { pode } = useLiberadas();
+  const navegar = useNavigate();
 
   const load = useCallback(() => {
     api.collection(id).then(setData).catch((e) => setError(String(e)));
@@ -342,7 +347,18 @@ function CollectionView({
               {ordenada && <span className="alca" title="arraste pra reordenar">⠿</span>}
               <span className="position">{index + 1}</span>
 
-              <button className="item-main" onClick={() => work.media_file_id && onPlay(work)}>
+              {/* R50 — a linha inteira continua clicável, e o que muda é o
+                  que ela faz: com a fita na mão ela toca; sem, ela leva onde a
+                  fita se pega. Um item que não faz nada seria o §8b. */}
+              <button
+                className={`item-main${pode(work.id) ? "" : " pegar"}`}
+                title={pode(work.id) ? undefined : POR_QUE_PEGAR}
+                onClick={() =>
+                  pode(work.id)
+                    ? work.media_file_id && onPlay(work)
+                    : navegar("/locadora")
+                }
+              >
                 {work.poster ? (
                   <img src={api.artworkUrl(work.poster)} alt="" />
                 ) : (
@@ -351,7 +367,11 @@ function CollectionView({
                 <div>
                   <strong>{work.title}</strong>
                   <p className="muted small">
-                    {[work.year, formatDuration(work.duration_seconds)]
+                    {[
+                      work.year,
+                      formatDuration(work.duration_seconds),
+                      pode(work.id) ? null : PEGAR_NA_LOCADORA,
+                    ]
                       .filter((p) => p && p !== "—")
                       .join(" · ")}
                   </p>

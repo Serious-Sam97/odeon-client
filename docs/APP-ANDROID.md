@@ -130,8 +130,8 @@ novo: `/api/transcode/capabilities` recebe hoje um formato que a web monta.
 |---|---|
 | **player** | **Media3/ExoPlayer** |
 | **offline** | **entra na v1** |
-| **formato** | **um APK só** — toque primeiro, D-pad suportado |
-| **`minSdk`** | **24** (Android 7.0) |
+| **formato** | **celular e tablet**. Sem TV |
+| **`minSdk`** | **26** (Android 8.0) |
 | **o KMP** | fica parado, e não é apagado |
 
 ### Media3, e a liberdade que a pergunta escondia
@@ -181,41 +181,70 @@ As saídas não são equivalentes, e nenhuma é neutra:
 **Fica pra quem decide.** É a mesma classe da decisão do §66 (a regra vale pro
 admin), e por isso não é minha.
 
-### Um APK, três formatos
+### Sem TV, e é decisão
 
-**Decidido: toque primeiro, D-pad suportado.** Um APK, e a UI se adapta.
+**Decidido: o app é de celular e tablet.** Nada de Android TV, nada de D-pad,
+nada de layout de três metros.
 
-O que isso obriga, e vale saber antes da primeira tela:
+Isso não foi um recuo — foi trocar de alvo. Um app que serve celular e TV ao
+mesmo tempo paga em dois lugares: o Compose de TV é outro conjunto de artefatos
+(`androidx.tv:tv-foundation`, `androidx.tv:tv-material`), com componentes de
+foco próprios, e misturá-lo com Material3 de celular no mesmo módulo é briga
+constante. E toda tela nova sairia duas vezes.
 
-- **todo alvo de clique precisa ser alcançável por foco**, e o foco precisa
-  aparecer. No Compose isso é `Modifier.focusable()` mais um indicador visível —
-  não vem de graça;
-- **três classes de largura** (celular, tablet, TV), e não duas. A TV é
-  paisagem sempre, e a distância de leitura é outra: o que é 13px no celular é
-  ilegível a três metros;
-- **a TV não tem teclado.** Toda tela com digitação — login, busca — precisa
-  funcionar com o teclado da tela, que é lento. O endereço do servidor digitado
-  à mão é o pior caso, e os clientes Kotlin já resolveram isso tentando `https`
-  antes de `http` a partir só do host.
+**O que se ganha:** poder usar o celular como celular. Gesto, PiP, notificação
+de mídia, download, haptics, `Cast` — coisas que ou não existem na TV, ou
+existem de outro jeito.
 
-### `minSdk` 24, e quem decidiu foi a TV
+Se um dia entrar TV, o caminho já está claro e não é este app: `:core`
+compartilhado, mais um módulo `:tv` com UI própria. A separação da R51 mostrou
+o custo de dividir cedo demais; dividir **quando houver alvo** é outra coisa.
 
-Não é o celular nem o tablet — é o aparelho de TV mais velho que ainda importa:
+### `minSdk` 26, e agora quem decide é o que se quer usar
 
-| | |
-|---|---|
-| Fire TV Stick com Fire OS 6 | Android **7.1** (API 25) — entra com 24, **sai com 26** |
-| caixas Android TV de 2016+ | Android 6–7 |
-| Chromecast com Google TV | Android 10/12, folgado |
+Antes o número estava preso ao aparelho de TV mais velho que importava. Sem TV,
+ele passa a ser escolhido pelo que o app quer fazer — e **26 é onde mora o
+Picture-in-Picture**, que num app de vídeo não é enfeite: é assistir enquanto se
+procura a próxima coisa.
 
-De 24 para 26 se ganharia pouco código a menos — canal de notificação, ícone
-adaptativo, coisas que se escreve uma vez — e se perderia aparelho real. Abaixo
-de 24 o Compose começa a pedir remendo.
+Adaptive icon e canal de notificação também são de 26, e os dois entram sem
+alternativa.
 
-> **⚠ E um aviso que o documento precisa carregar:** se a "smart TV" for
-> **Samsung (Tizen)** ou **LG (webOS)**, ela **não instala APK** — não é
-> Android. Nesses casos o app cobre celular e tablet, e a TV se resolve com um
-> Fire Stick / Chromecast, ou com a web pelo navegador dela.
+**E o resto do que é moderno não precisa de `minSdk` alto** — precisa de
+`targetSdk` alto e de degradação por versão:
+
+| | pede | sem ele |
+|---|---|---|
+| cor dinâmica (Material You) | 31 | cai na paleta da casa, que já existe |
+| voltar preditivo | 33 | volta normal |
+| idioma por app | 33 | o do sistema |
+
+Ou seja: `minSdk` **26**, `targetSdk` no mais novo, e o que for de 31+ entra
+atrás de uma checagem. Ninguém fica de fora, e nada moderno fica de fora.
+
+---
+
+## 4b. O que "Android de verdade" quer dizer aqui
+
+**Proposto**, e é a seção que separa este app de um site embrulhado. Cada item
+existe porque **o servidor já dá o dado** — nenhum pede backend novo.
+
+| | o que é | o que já existe pra isso |
+|---|---|---|
+| **PiP** | o filme encolhe pro canto e você continua navegando | `minSdk 26`, e o Media3 entrega o `Player` que o PiP precisa |
+| **sessão de mídia** | controle na tela de bloqueio, no fone, no carro, e áudio seguindo com a tela apagada | `MediaSession` do Media3, de graça |
+| **download de verdade** | fila com retomada, pausa e limite de rede — não um `GET` gigante | `DownloadService` do Media3, e o `/api/stream` já fala Range |
+| **cor da tela sai do pôster** | a interface se tinge com a obra que você está olhando | **9.332 obras já têm `dominant_color` extraída** no servidor (§M3) — a web usa isso desde o redesenho |
+| **preview de seek sem rede** | arrastar a timeline mostra o quadro daquele instante | a folha de sprites do `/api/media/{id}/scrub`: **uma imagem por arquivo**, baixada uma vez |
+| **continuar em qualquer lugar** | parou na TV, continua no ônibus | `/api/continue` e o barramento SSE, que já sincroniza entre aparelhos |
+| **atalhos e widget** | segurar o ícone → "continuar assistindo" | mesma rota, sem tela |
+
+**Proposto: `Cast` fica de fora da v1.** Ele é a resposta certa pra "quero ver na
+TV" — e como não haverá app de TV, ele volta a ser tentador. Mas mandar pro
+Chromecast exige que o servidor seja alcançável pelo Chromecast, e isso é uma
+conversa de rede que merece seção própria.
+
+---
 
 ---
 
@@ -232,6 +261,10 @@ faz que um navegador no sofá não faz*.
 | **4** | **a locadora** | é a alma do produto, e é onde a v1 deixa de ser "um Jellyfin bonito" |
 | **5** | **baixar pra ver sem rede** | decidido pra v1, e é o que mais separa este app da web. Depende da resposta sobre a fita vencida |
 | **6** | **para você** | recomendação com motivo, que é a tese do projeto numa tela só |
+
+Dentro da fase 2 (**assistir**) entram PiP e sessão de mídia. Eles não são
+extras de depois: um player de Android que não faz os dois é um `<video>` com
+mais passos, e é justamente o que este app não é pra ser.
 
 **Proposto:** mural, guia, ao vivo, perfil e admin ficam para depois da v1. Não
 por serem menores — o mural tem 811 linhas — mas porque nenhum deles responde
@@ -263,4 +296,6 @@ Medido, e vale saber antes de escrever a primeira tela:
   APK assinado distribuído por link não exige nada disso.
 - **A fita vencida sem rede** (§4). É a única pergunta do §4 que sobrou, e é a
   que trava a fase 5.
-- **A TV é Android?** Se for Tizen ou webOS, a fase de D-pad muda de alvo.
+- **`Cast`, e a rede que ele exige.** Sem app de TV, é ele que responde "quero
+  ver na sala" — e depende de o servidor ser alcançável pelo aparelho de Cast,
+  que hoje vive numa tailnet.

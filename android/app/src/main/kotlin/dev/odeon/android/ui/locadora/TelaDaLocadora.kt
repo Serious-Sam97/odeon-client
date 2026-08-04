@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.Emprestada
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.RotuloDeSecao
 
 /// A locadora.
 ///
@@ -53,8 +54,16 @@ import dev.odeon.android.ui.Cores
 /// O que se perde é a profundidade da cena, não a metáfora: a caixa continua
 /// sendo objeto, continua tendo frente e verso, e continua saindo da estante
 /// quando alguém a leva.
+/// ## O "‹ biblioteca" saiu daqui, e não foi esquecimento
+///
+/// A locadora virou **aba**, e um destino de primeiro nível não tem pra onde
+/// voltar: ele é raiz tanto quanto a biblioteca. O botão que estava aqui vinha
+/// de quando esta tela só era alcançável por um link no cabeçalho da grade.
+///
+/// O botão físico de voltar continua levando à biblioteca — quem trata disso é o
+/// `BackHandler` no `AppOdeon`, que é onde a navegação mora.
 @Composable
-fun TelaDaLocadora(modelo: ModeloDaLocadora, aoVoltar: () -> Unit) {
+fun TelaDaLocadora(modelo: ModeloDaLocadora) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
     if (estado.carregando && estado.prateleira == null) {
@@ -68,10 +77,6 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoVoltar: () -> Unit) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        TextButton(onClick = aoVoltar, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-            Text("‹ biblioteca", color = Cores.destaque)
-        }
-
         Text("locadora", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
 
         estado.erro?.let {
@@ -88,7 +93,7 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoVoltar: () -> Unit) {
         }
 
         if (estado.minhas.isNotEmpty()) {
-            Secao("comigo") {
+            Secao("comigo", quantos = estado.minhas.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(estado.minhas, key = { it.id }) { fita ->
                         Caixa(
@@ -106,7 +111,7 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoVoltar: () -> Unit) {
         }
 
         if (estado.dosOutros.isNotEmpty()) {
-            Secao("na mão de alguém") {
+            Secao("na mão de alguém", quantos = estado.dosOutros.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(estado.dosOutros, key = { it.id }) { fita ->
                         Caixa(fita = fita, arte = modelo.arte(fita.poster), aoDevolver = null, devolvendo = false)
@@ -131,9 +136,9 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoVoltar: () -> Unit) {
 }
 
 @Composable
-private fun Secao(titulo: String, conteudo: @Composable () -> Unit) {
+private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(titulo, style = MaterialTheme.typography.titleMedium, color = Cores.texto)
+        RotuloDeSecao(texto = titulo, numero = quantos)
         conteudo()
     }
 }

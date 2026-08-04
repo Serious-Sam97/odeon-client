@@ -13,6 +13,36 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 
 ---
 
+## 0. O que já foi decidido e feito — atualizado em 04/08/2026
+
+**As duas decisões que a §6 e a R1 pediam foram tomadas pelo dono:**
+
+| | decidido |
+|---|---|
+| onde ficam os destinos (§6) | **barra inferior adaptativa** — e não a opção 3, que era a preferência escrita abaixo |
+| a fonte serifada (R1) | **embutir no APK** |
+
+E a **leva 1 está feita e vista em aparelho**: a decisão da §6, a R1 e a R2.
+As fases R3 a R9 continuam sendo proposta, e a §6 abaixo fica como registro do
+que se pesou.
+
+> ### O que a leva 1 ensinou, e que muda a régua das próximas
+>
+> **A §7 deste documento manda medir com screenshot, e ele achou um defeito que
+> compilar e passar no lint não achavam** — pela sexta vez neste projeto.
+>
+> O `NavigationSuiteScaffold` do Material escolhe **barra inferior quando a
+> altura é compacta**, que é exatamente o celular deitado. Medido: **230 dos
+> 1080 pixels — 21% da tela — e zero fileiras da grade visíveis**. É o mesmo
+> defeito de 17% que fez o cabeçalho fixo sair deste app, e o conserto foi
+> passar um `layoutType` explícito.
+>
+> A lição pras levas 3 e 4, que são as que mexem em movimento: **o padrão de uma
+> biblioteca não é a decisão do produto.** Aceitar o padrão é uma escolha, e
+> escolha entra medida.
+
+---
+
 ## 1. O diagnóstico, e ele não é o que parecia
 
 A primeira suspeita seria cor. **Está errada.**
@@ -317,6 +347,21 @@ screenshot.
 
 **Isto muda o esqueleto de todas as telas, então vem antes da R1.**
 
+> ### ✅ Decidido: a **1**, na variante adaptativa
+>
+> Barra inferior em retrato, **trilho lateral** em paisagem e em tablet. O trilho
+> é o que responde à objeção de altura acima — ele custa 8,6% da **largura** e
+> devolve a altura inteira, medido em 04/08/2026 no emulador.
+>
+> E a objeção era boa: a primeira montagem confiou no padrão do
+> `NavigationSuiteScaffold`, que mantém a barra embaixo em paisagem, e o
+> resultado foi pior do que os 17% do cabeçalho fixo — **21%, com zero fileiras
+> da grade visíveis**. Ver a §0.
+>
+> O que a opção 3 (chips que rolam junto) tinha e esta não tem: custo zero de
+> tela permanente. O que ela não tinha: resposta pra tablet, e o destino
+> continuar existindo depois que a pessoa rolou.
+
 ---
 
 ## 7. Como medir que o redesenho não quebrou nada
@@ -339,7 +384,7 @@ desfazer isso:
 
 | leva | fases | o que se vê no fim |
 |---|---|---|
-| **1** | decisão da §6 + R1 + R2 | o app **parece** o Odeon, sem nada se mexer |
+| **1** ✅ | decisão da §6 + R1 + R2 | o app **parece** o Odeon, sem nada se mexer |
 | **2** | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
 | **3** | R5 + R7 | as coisas viram objetos, e as telas se ligam |
 | **4** | R6 + R8 | o experimental — película, giroscópio, háptico |

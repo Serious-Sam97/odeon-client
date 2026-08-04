@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A caixa de fita, de pé, com a lombada.
+
+  É o objeto que a locadora inteira é feita de — e a lombada é o que faz um
+  retângulo virar uma caixa que está numa prateleira em vez de um cartão. O
+  `docs/REDESENHO.md` (R5) propõe dar lombada às caixas da tela; este ícone é a
+  mesma ideia no tamanho de 24dp, e chega antes porque a aba precisa dele.
+
+  A lombada é um **vazado**, não um traço por cima: `android:fillType="evenOdd"`
+  faz o segundo subcaminho furar o primeiro. Desenhá-la como um retângulo de
+  outra cor exigiria duas cores no ícone, e um ícone de aba tem uma só — ele é
+  tingido inteiro conforme a aba esteja selecionada ou não.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M6.5,2h11a1.5,1.5 0,0 1,1.5 1.5v17a1.5,1.5 0,0 1,-1.5 1.5h-11a1.5,1.5 0,0 1,-1.5 -1.5v-17a1.5,1.5 0,0 1,1.5 -1.5zM9.25,4.5h1.5v15h-1.5z" />
+</vector>

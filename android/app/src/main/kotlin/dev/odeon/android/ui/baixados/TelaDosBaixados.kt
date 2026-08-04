@@ -38,18 +38,17 @@ import dev.odeon.android.ui.Cores
 /// empréstimo que voltou é o tipo de coisa que faz alguém desligar o offline».
 /// Quem apaga é quem toca no botão.
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+/// O "‹ biblioteca" saiu quando esta tela virou aba. Ver o mesmo comentário em
+/// `TelaDaLocadora`: destino de primeiro nível não tem pra onde voltar, e o
+/// botão físico continua atendido pelo `BackHandler` do `AppOdeon`.
 @Composable
-fun TelaDosBaixados(modelo: ModeloDosBaixados, aoVoltar: () -> Unit) {
+fun TelaDosBaixados(modelo: ModeloDosBaixados) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        TextButton(onClick = aoVoltar, contentPadding = PaddingValues(0.dp)) {
-            Text("‹ biblioteca", color = Cores.destaque)
-        }
-
         Text("baixados", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
 
         if (estado.itens.isEmpty()) {

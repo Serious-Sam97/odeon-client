@@ -1,9 +1,17 @@
 package dev.odeon.android.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import dev.odeon.android.R
 
 /// A paleta, e ela é a mesma da web.
 ///
@@ -37,6 +45,122 @@ object Cores {
     val perigo = Color(0xFFFF6B6B)
     val certo = Color(0xFF4ADE80)
 }
+
+/// A serifada de display, e por que ela viaja dentro do APK.
+///
+/// A web declara `--font-display: ui-serif, Georgia, "Noto Serif", "Times New
+/// Roman", serif` e a usa em **53 lugares** — título de obra, título do player,
+/// o número da afinidade, o relógio do "ao vivo". O app era sem serifa em 100%
+/// da tela, e é essa a razão de as duas telas parecerem de produtos diferentes
+/// mesmo carregando a mesma paleta: na web um título é letreiro de cinema, aqui
+/// era item de lista.
+///
+/// ## Por que embutida, e não a serifa do sistema
+///
+/// `ui-serif` não existe no Android, e havia três caminhos:
+///
+/// | | por que não |
+/// |---|---|
+/// | `FontFamily.Serif` | existe e custa 0 KB, mas resolve pra coisa diferente em cada fabricante — e um letreiro que muda de aparelho pra aparelho torna o screenshot, que é a régua deste projeto, uma prova fraca |
+/// | Downloadable Fonts | 0 KB no APK, mas exige Play Services **e rede**. Num app cujo argumento é a fase 6, o título do filme baixado apareceria sem serifa justamente offline |
+/// | embutir | ⬅️ determinística, e funciona sem rede |
+///
+/// **Noto Serif** porque ela está nomeada na própria `--font-display` da web —
+/// ou seja, é o que boa parte dos navegadores já resolve lá — e porque a
+/// altura-de-x grande dela é o que segura título sobre arte de pôster.
+///
+/// ## O tamanho, medido e não estimado
+///
+/// O `.ttf` estático (peso 600, Latino+Grego+Cirílico, hinted) tem **739 KB** —
+/// bem acima dos ~200 KB que o `docs/REDESENHO.md` chutou. O que importa é o
+/// APK, e esse número está no README, medido antes e depois.
+///
+/// Um peso só, de propósito: cada peso adicional é outro arquivo inteiro, e a
+/// fonte variável resolveria isso em um só — mas `FontVariation` é de API 26,
+/// exatamente o `minSdk` deste app, e nascer colado no piso da versão é onde
+/// mora o defeito que só aparece no aparelho mais velho.
+///
+/// A licença (OFL) viaja em `assets/OFL-NotoSerif.txt`. Ela exige que o texto
+/// acompanhe a distribuição, e este repositório é público.
+val Serifada = FontFamily(
+    Font(R.font.noto_serif_semibold, FontWeight.SemiBold),
+)
+
+/// Os papéis que o Material 3 não tem nome pra dar.
+///
+/// O `Typography` abaixo cobre o que cai nos vãos do Material — display,
+/// headline, body. O que sobra é o **rótulo de seção**, que não tem slot
+/// equivalente porque não é uma escala de tamanho: é uma forma.
+object Tipo {
+    /// O versalete espaçado que encabeça seção.
+    ///
+    /// Medido no `.strip h2` da web (`styles.css:2049`): 11px, peso 700,
+    /// `letter-spacing: 0.28em`, caixa alta, cor `--accent`.
+    ///
+    /// ⚠️ A caixa alta é do **chamador**, não daqui. `TextStyle` não tem
+    /// `text-transform`, e fazer o `RotuloDeSecao` aplicar `.uppercase()` é o
+    /// que garante que o rótulo seja escrito em minúscula no código — como todo
+    /// o resto deste app — e desenhado em caixa alta.
+    ///
+    /// Sem serifa, e é a web que decide: o `.strip h2` não declara
+    /// `--font-display`. Serifa em 11px espaçado a 0.28em vira ruído, porque a
+    /// serifa é justamente o que liga uma letra à seguinte.
+    val rotulo = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        letterSpacing = 0.28.em,
+    )
+}
+
+/// A escala tipográfica, e o que ela troca de serifa.
+///
+/// Só **dois** slots do Material viram serifada, e a escolha não é de gosto —
+/// é o que a web faz, conferido classe por classe:
+///
+/// | slot | quem usa hoje | web |
+/// |---|---|---|
+/// | `displaySmall` | a marca "Odeon" no login | — |
+/// | `headlineSmall` | os 4 títulos de tela **e** o título da obra na ficha | `.hero-title`, `.player-title` |
+/// | `bodySmall` | o título no cartaz da grade | `.poster-title`: **sem serifa**, 19px/700 |
+///
+/// A última linha é a que evita o erro fácil. Parece que "todo título de obra é
+/// serifado", e não é: na web o título dentro do cartaz da grade é sem serifa.
+/// Serifa ali seria serifa em 12sp multiplicada por 8.316 entradas — o oposto
+/// de letreiro.
+///
+/// ⚠️ Uma coisa fica fora e é decisão do dono: a marca do login. A `.brand-name`
+/// da web (`styles.css:195`) **não** é serifada — ela é sem serifa, 700, caixa
+/// alta, `letter-spacing: 0.28em`, ou seja o mesmo tratamento do `Tipo.rotulo`.
+/// Aqui ela ficou serifada porque `displaySmall` é slot de display e o login não
+/// tem equivalente na web pra copiar. Alinhá-la ao versalete da web é uma linha,
+/// e é pergunta, não conserto.
+///
+/// Os números vêm da `styles.css`, não de lembrança:
+///
+/// - `.hero-title`: `clamp(30px, 4vw, 58px)`, entrelinha **1.02**, tracking
+///   **-0.01em**. Num celular de ~411dp, `4vw` dá ~16px e o `clamp` trava no
+///   piso — ou seja, **30sp** é o tamanho que a web mostra no celular, não o
+///   mínimo teórico dela.
+/// - `.player-title`: `clamp(22px, 2.4vw, 34px)`, entrelinha 1.05.
+///
+/// O tracking negativo importa mais do que parece: serifa em corpo grande
+/// precisa fechar, senão o título se espalha e deixa de ser uma coisa só.
+private val Padrao = Typography()
+
+private val TipografiaOdeon = Padrao.copy(
+    displaySmall = Padrao.displaySmall.copy(
+        fontFamily = Serifada,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.01).em,
+    ),
+    headlineSmall = Padrao.headlineSmall.copy(
+        fontFamily = Serifada,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 30.sp,
+        lineHeight = 31.sp,
+        letterSpacing = (-0.01).em,
+    ),
+)
 
 /// O esquema de cores do Material 3, traduzido da paleta acima.
 ///
@@ -90,6 +214,7 @@ private val EsquemaEscuro = darkColorScheme(
 fun TemaOdeon(conteudo: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = EsquemaEscuro,
+        typography = TipografiaOdeon,
         content = conteudo,
     )
 }

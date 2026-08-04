@@ -11,13 +11,27 @@ de `web/` e `clients/`.
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
-**Estado: fase 1 escrita, não rodada em aparelho.** Entrar e ver a biblioteca:
-tela de login em dois tempos (endereço, depois conta) e grade de pôsteres
-paginada, vinda de `/api/library`.
+**Estado: a v1 inteira está feita, e a leva 1 do redesenho entrou.**
 
-Compila, passa em 10 testes e passa no lint. **Nenhuma tela foi vista rodando** —
-o emulador segfalta nesta máquina, e a continuação é noutro computador. Ver
-[`../docs/CONTINUAR-ANDROID.md`](../docs/CONTINUAR-ANDROID.md).
+As sete fases da §5 da espec foram escritas **e vistas rodando em aparelho**,
+tela a tela — não só compiladas. O Cast é a única com ressalva: ele está escrito,
+mas só dá pra verificar na rede de casa, porque o Chromecast não entra na tailnet
+(§4c).
+
+Depois delas entrou a **leva 1 do [`docs/REDESENHO.md`](docs/REDESENHO.md)**:
+
+| | |
+|---|---|
+| a decisão da §6 | os destinos saíram do cabeçalho da biblioteca e viraram **barra de navegação adaptativa** — barra embaixo em pé, trilho lateral em paisagem e tablet |
+| R1 | entrou uma **serifada de display** (Noto Serif SemiBold, embutida), e título de tela e de obra viraram letreiro |
+| R2 | o **rótulo de seção** com versalete espaçado e régua em gradiente, medido no `.strip` da web |
+
+`assembleDebug` ✅ · **29 testes** ✅ · `lintDebug` limpo ✅
+
+⚠️ O parágrafo que estava aqui até 04/08/2026 dizia «fase 1 escrita, não rodada
+em aparelho — nenhuma tela foi vista rodando». Ficou desatualizado por seis fases
+sem ninguém voltar pra corrigi-lo, e é o tipo de linha que faz quem chega
+recomeçar trabalho já feito.
 
 ---
 
@@ -102,10 +116,13 @@ app/src/main/kotlin/dev/odeon/android/
     Rede.kt                 UM OkHttp, e o porquê disso
     RepositorioOdeon.kt     procurar servidor, entrar, listar
   ui/
-    Tema.kt                 a paleta, a mesma do web/src/styles.css
-    AppOdeon.kt             a raiz: decide entre login e biblioteca
+    Tema.kt                 a paleta e a escala tipográfica, ambas da web
+    Rotulo.kt               RotuloDeSecao: versalete, régua, número à direita
+    AppOdeon.kt             a raiz: as quatro abas, e quem fica fora delas
     login/                  tela + modelo
     biblioteca/             tela + modelo
+app/src/main/res/font/      a serifada de display, embutida (ver abaixo)
+app/src/main/assets/        a licença OFL, que a fonte exige viajar junto
 app/src/test/…              os testes do EnderecoDoServidor
 app/lint.xml                o que o lint pode calar, e por quê
 gradle/libs.versions.toml   as versões, todas medidas
@@ -128,6 +145,32 @@ deixa 401 subir como 401; quem decide renovar é quem sabe se há filme no ar.
 que `/api/auth/status` respondeu naquele endereço. É o §53 — o produto não
 oferece o que a validação vai negar —, e de quebra evita mandar a senha da casa
 pra qualquer coisa que atenda naquela porta.
+
+---
+
+## A fonte embutida, e o que ela custou de verdade
+
+O `docs/REDESENHO.md` estimou «~200 KB por peso». Medido em 04/08/2026:
+
+| | |
+|---|---|
+| o `.ttf` no disco | **739.428 bytes** — Noto Serif SemiBold, Latino+Grego+Cirílico, hinted |
+| o mesmo arquivo **dentro do APK** | **360.349 bytes** (o DEFLATE tira 51%) |
+| o APK de depuração inteiro | 21.569.757 bytes |
+| ou seja | **1,7%** do APK |
+
+O número que importa é o do meio, não o do disco — e a estimativa errou por
+quase o dobro nos dois sentidos ao mesmo tempo: o arquivo é 3,7× maior do que o
+chute, e o custo real é 1,8× o chute.
+
+Se um dia incomodar, o caminho é recortar o charset pra Latin-1 (`pyftsubset`),
+que derruba pra ~100 KB. Não foi feito porque 1,7% não paga a ferramenta a mais
+no build — e porque um título em cirílico cairia na sem-serifa sem avisar.
+
+⚠️ **Um peso só.** Cada peso adicional é outro arquivo inteiro. A fonte variável
+resolveria em um, mas `FontVariation` é de API 26 — exatamente o `minSdk` deste
+app —, e nascer colado no piso da versão é onde mora o defeito que só aparece no
+aparelho mais velho.
 
 ---
 

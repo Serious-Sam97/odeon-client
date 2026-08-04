@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.RotuloDeSecao
 import kotlin.math.max
 import kotlin.math.min
 import dev.odeon.android.dados.ItemPraContinuar
@@ -57,9 +58,6 @@ import androidx.compose.foundation.layout.width
 fun TelaDaBiblioteca(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit = {},
-    aoAbrirLocadora: () -> Unit = {},
-    aoAbrirBaixados: () -> Unit = {},
-    aoAbrirParaVoce: () -> Unit = {},
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
     val grade = rememberLazyGridState()
@@ -137,9 +135,6 @@ fun TelaDaBiblioteca(
                 Cabecalho(
                     quantos = estado.itens.size,
                     total = estado.total,
-                    aoAbrirLocadora = aoAbrirLocadora,
-                    aoAbrirBaixados = aoAbrirBaixados,
-                    aoAbrirParaVoce = aoAbrirParaVoce,
                 )
             }
 
@@ -182,9 +177,6 @@ fun TelaDaBiblioteca(
 private fun Cabecalho(
     quantos: Int,
     total: Int?,
-    aoAbrirLocadora: () -> Unit,
-    aoAbrirBaixados: () -> Unit,
-    aoAbrirParaVoce: () -> Unit,
 ) {
     /// Sem padding lateral próprio: dentro da grade quem alinha é o
     /// `contentPadding` de 16.dp dela, e somar os dois afastaria o título dos
@@ -208,24 +200,22 @@ private fun Cabecalho(
             )
         }
 
-        /// A porta da locadora.
+        /// ## Os três links saíram daqui
         ///
-        /// Ela mora no cabeçalho e não numa barra de navegação porque o app tem
-        /// **um** destino além da biblioteca. Uma barra de abas com dois itens
-        /// gasta altura permanente pra oferecer uma escolha que quase sempre já
-        /// está feita — e some junto com o cabeçalho ao rolar, que é o
-        /// comportamento certo pra quem veio ver o acervo.
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            TextButton(onClick = aoAbrirLocadora, contentPadding = PaddingValues(vertical = 4.dp)) {
-                Text("locadora ›", color = Cores.destaque)
-            }
-            TextButton(onClick = aoAbrirBaixados, contentPadding = PaddingValues(vertical = 4.dp)) {
-                Text("baixados ›", color = Cores.destaque)
-            }
-            TextButton(onClick = aoAbrirParaVoce, contentPadding = PaddingValues(vertical = 4.dp)) {
-                Text("para você ›", color = Cores.destaque)
-            }
-        }
+        /// Eles eram `locadora ›`, `baixados ›` e `para você ›`, e o comentário
+        /// que estava neste lugar defendia o arranjo assim: «uma barra de abas
+        /// com dois itens gasta altura permanente pra oferecer uma escolha que
+        /// quase sempre já está feita».
+        ///
+        /// O argumento era bom e envelheceu. Ele foi escrito quando havia dois
+        /// destinos; a v1 terminou com quatro, que é exatamente a faixa em que o
+        /// Material põe barra de navegação. E o defeito de verdade não era a
+        /// altura: era que os três só existiam **de dentro desta tela** — ir dos
+        /// baixados pra locadora passava pela biblioteca no meio.
+        ///
+        /// Agora eles estão no `EsqueletoComAbas` do `AppOdeon`, que vira trilho
+        /// lateral em paisagem e em tablet — o que responde à objeção de altura
+        /// justamente onde ela doía.
     }
 }
 
@@ -249,11 +239,10 @@ private fun FileiraParaContinuar(
     aoTocar: (ItemPraContinuar) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "continuar",
-            style = MaterialTheme.typography.titleMedium,
-            color = Cores.texto,
-        )
+        /// O número é `itens.size`, e ele é honesto: a fileira mostra tudo que
+        /// tem, sem paginação. Não é o caso da grade, cujo "60 de 17.498" é
+        /// outra conversa e continua no cabeçalho.
+        RotuloDeSecao(texto = "continuar", numero = itens.size)
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(itens, key = { it.id }) { item ->

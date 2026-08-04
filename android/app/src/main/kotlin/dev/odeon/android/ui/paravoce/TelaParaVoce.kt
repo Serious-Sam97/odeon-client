@@ -49,10 +49,10 @@ import dev.odeon.android.ui.Cores
 ///
 /// Por isso um cartão **sem motivo** aqui é um cartão que não deveria existir:
 /// ele viraria catálogo no meio da curadoria.
+/// O "‹ biblioteca" saiu quando esta tela virou aba. Ver `TelaDaLocadora`.
 @Composable
 fun TelaParaVoce(
     modelo: ModeloParaVoce,
-    aoVoltar: () -> Unit,
     aoAbrirObra: (String) -> Unit,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
@@ -61,10 +61,6 @@ fun TelaParaVoce(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        TextButton(onClick = aoVoltar, contentPadding = PaddingValues(0.dp)) {
-            Text("‹ biblioteca", color = Cores.destaque)
-        }
-
         Text("para você", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
 
         /// "Tenho 90 minutos" — o filtro que faz esta tela ser de celular.

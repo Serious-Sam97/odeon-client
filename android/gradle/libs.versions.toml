@@ -136,6 +136,25 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 
+# A barra de navegação que muda de forma conforme a tela.
+#
+# ## Por que um artefato, e não 40 linhas à mão
+#
+# Este projeto recusou o `navigation-compose` com argumento medido — a pilha tem
+# dois níveis e um `sealed` resolve. A régua é a mesma aqui, e dá resposta
+# oposta: o `NavigationSuiteScaffold` não guarda estado nenhum, ele entrega as
+# **duas formas** (barra inferior e trilho lateral) e a troca entre elas, com os
+# encaixes de inset de cada uma. Escrever isso à mão é escrever duas barras.
+#
+# ⚠️ O que ele NÃO resolve, e o comentário aqui já afirmou que resolvia: **qual**
+# forma usar. O padrão dele escolhe barra inferior quando a altura é compacta —
+# ou seja, no celular deitado — e o screenshot mostrou o resultado: 21% da tela
+# em paisagem, com zero fileiras da grade visíveis. O `AppOdeon` passa um
+# `layoutType` explícito por causa disso, e o número está lá.
+#
+# Sem versão de propósito: quem alinha é o BOM, como todo `compose-*` acima.
+androidx-compose-material3-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
+
 # Ver o comentário de `media3` acima antes de usar qualquer uma destas.
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 

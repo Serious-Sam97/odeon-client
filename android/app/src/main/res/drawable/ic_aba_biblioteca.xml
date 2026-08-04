@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A grade — a biblioteca.
+
+  Quatro retângulos, que é literalmente o que a tela mostra: a grade de
+  cartazes. É o ícone mais fácil dos quatro porque a metáfora e a tela são a
+  mesma coisa.
+
+  Os quatro ícones de aba são desenhados aqui e não vêm do Material por dois
+  motivos medidos. O `material-icons-core` que já está no APK tem ~40 ícones, e
+  nenhum deles diz "locadora de fitas" nem "baixados" — o mais perto seria um
+  carrinho de compras, que é metáfora de comprar e não de pegar emprestado. E o
+  `material-icons-extended`, que teria os certos, entra inteiro no APK: o R8
+  está desligado no release (o motivo está no `app/build.gradle.kts`), então não
+  há quem pode as ~2 MB de ícones que o app não usa.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,3h6.5v6.5h-6.5z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M13.5,3h6.5v6.5h-6.5z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,12.5h6.5v6.5h-6.5z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M13.5,12.5h6.5v6.5h-6.5z" />
+</vector>

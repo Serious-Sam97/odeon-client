@@ -88,6 +88,13 @@ class ModeloDeLogin(private val odeon: RepositorioOdeon) : ViewModel() {
 
     fun entrar() {
         val agora = _estado.value
+        /// Esta guarda **não** é código morto, embora o botão já não deixe
+        /// chegar aqui com campo vazio.
+        ///
+        /// O botão é uma das duas portas: a outra é o `ImeAction.Go` do campo de
+        /// senha, que dispara `entrar()` direto do teclado sem passar por
+        /// `enabled` nenhum. Tirar isto daqui abriria um login vazio pra quem
+        /// entra pelo teclado — que é justamente quem digita rápido.
         if (agora.usuario.isBlank() || agora.senha.isEmpty()) {
             _estado.update { it.copy(erro = "usuário e senha") }
             return

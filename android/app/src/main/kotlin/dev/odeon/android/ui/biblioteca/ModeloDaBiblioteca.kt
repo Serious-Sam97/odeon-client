@@ -3,6 +3,7 @@ package dev.odeon.android.ui.biblioteca
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.odeon.android.dados.ItemDaBiblioteca
+import dev.odeon.android.dados.ItemPraContinuar
 import dev.odeon.android.dados.RepositorioOdeon
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,10 @@ import java.io.IOException
 
 data class EstadoDaBiblioteca(
     val itens: List<ItemDaBiblioteca> = emptyList(),
+    /// A fileira de "continuar de onde parou". Vazia é o estado normal de quem
+    /// não começou nada — e aí ela **não aparece**, em vez de aparecer vazia
+    /// com um título por cima (§24).
+    val paraContinuar: List<ItemPraContinuar> = emptyList(),
     /// O total do filtro atual, que vem repetido em toda linha do servidor.
     ///
     /// `null` enquanto nada chegou — e a tela **não escreve "0"** nesse caso.
@@ -42,6 +47,19 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
             // devolve nulo e a tela desenha a grade inteira sem capa nenhuma.
             odeon.garantirTokenDeMidia()
             buscar(pulando = 0, primeira = true)
+        }
+        recarregarParaContinuar()
+    }
+
+    /// A fileira de "continuar", numa corrotina separada da grade.
+    ///
+    /// Separada de propósito: as duas não dependem uma da outra, e a grade é o
+    /// que a pessoa veio ver. Esperar a fileira pra desenhar o acervo somaria
+    /// dois tempos de rede na primeira tela do app.
+    fun recarregarParaContinuar() {
+        viewModelScope.launch {
+            val fileira = odeon.paraContinuar()
+            _estado.update { it.copy(paraContinuar = fileira) }
         }
     }
 
@@ -83,4 +101,8 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
 
     /// A URL da capa, já com o token de mídia. `null` quando a obra não tem.
     fun capa(item: ItemDaBiblioteca): String? = odeon.urlDoPoster(item.poster)
+
+    /// A arte da fileira de continuar — `still`, `backdrop` ou `poster`, nessa
+    /// ordem. Ver `ItemPraContinuar.arte`.
+    fun arte(item: ItemPraContinuar): String? = odeon.urlDaArte(item.arte)
 }

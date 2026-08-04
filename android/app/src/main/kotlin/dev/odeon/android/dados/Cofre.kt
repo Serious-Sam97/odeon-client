@@ -59,6 +59,36 @@ class Cofre(contexto: Context) {
     val servidor: Flow<String?> = armazem.data.map { it[CHAVE_SERVIDOR] }
     val sessao: Flow<String?> = armazem.data.map { it[CHAVE_SESSAO] }
 
+    /// O identificador deste aparelho, pro servidor separar "onde eu parei".
+    ///
+    /// Nasce uma vez e vive enquanto o app estiver instalado. **Não** é o
+    /// `ANDROID_ID` nem nada que identifique o aparelho fora daqui: é um número
+    /// aleatório que só faz sentido dentro deste Odeon, e some com o app.
+    ///
+    /// A tese do projeto depende dele — continuar na TV o que começou no ônibus
+    /// só funciona se o servidor souber que foram dois lugares diferentes.
+    @Volatile
+    var aparelhoEmMemoria: String? = null
+        private set
+
+    /// O maior instante já visto, em epoch ms.
+    ///
+    /// É o que impede atrasar o relógio de estender um empréstimo baixado —
+    /// toda a explicação está em `RelogioQueNaoVolta`. Fica em memória **e** em
+    /// disco: em memória porque quem pergunta é a tela, e em disco porque um app
+    /// reaberto com a hora atrasada precisa lembrar do que já viu.
+    @Volatile
+    var maiorInstanteVisto: Long = 0L
+        private set
+
+    /// Registra um instante — do relógio local ou do cabeçalho `Date` do
+    /// servidor. Só grava quando **sobe**, que é a regra inteira.
+    suspend fun viuOInstante(quando: Long) {
+        if (quando <= maiorInstanteVisto) return
+        maiorInstanteVisto = quando
+        armazem.edit { it[CHAVE_MAIOR_INSTANTE] = quando }
+    }
+
     /// Chamado uma vez, no arranque, antes de qualquer requisição.
     ///
     /// Sem isto a primeira chamada depois de reabrir o app sai sem `Bearer` e
@@ -67,6 +97,12 @@ class Cofre(contexto: Context) {
         val atual = armazem.data.first()
         sessaoEmMemoria = atual[CHAVE_SESSAO]
         midiaEmMemoria = atual[CHAVE_MIDIA]
+
+        maiorInstanteVisto = maxOf(atual[CHAVE_MAIOR_INSTANTE] ?: 0L, System.currentTimeMillis())
+
+        aparelhoEmMemoria = atual[CHAVE_APARELHO] ?: java.util.UUID.randomUUID().toString().also {
+            armazem.edit { prefs -> prefs[CHAVE_APARELHO] = it }
+        }
     }
 
     suspend fun guardarServidor(url: String) {
@@ -102,5 +138,13 @@ class Cofre(contexto: Context) {
         val CHAVE_SERVIDOR = stringPreferencesKey("servidor")
         val CHAVE_SESSAO = stringPreferencesKey("sessao")
         val CHAVE_MIDIA = stringPreferencesKey("midia")
+
+        /// Fora do `esquecerSessao` de propósito: sair da conta não faz o
+        /// aparelho virar outro aparelho.
+        val CHAVE_APARELHO = stringPreferencesKey("aparelho")
+
+        /// Fora do `esquecerSessao` também: sair da conta não faz o tempo
+        /// voltar.
+        val CHAVE_MAIOR_INSTANTE = androidx.datastore.preferences.core.longPreferencesKey("maior_instante")
     }
 }

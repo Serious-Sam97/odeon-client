@@ -104,6 +104,195 @@ class RepositorioOdeon(private val cofre: Cofre) {
             exigirApi().biblioteca(limite = limite, pulando = pulando, busca = busca?.takeIf { it.isNotBlank() })
         }
 
+    // ----------------------------------------------------------------- fase 2
+
+    suspend fun obra(id: String): ObraDetalhada = withContext(Dispatchers.IO) {
+        exigirApi().obra(id)
+    }
+
+    /// O que este usuário tem emprestado. **É da fase 5**, e não do player.
+    ///
+    /// ⚠️ Não chame isto antes de desenhar o play. A regra mudou no servidor
+    /// (§71 do `DESIGN.md`): a exigência de empréstimo vale **dentro da
+    /// locadora**, e a biblioteca é modo livre. A tela da obra chegou a
+    /// perguntar, e o efeito foi esconder o play do acervo inteiro — a história
+    /// está em `ui/obra/ModeloDaObra.kt`.
+    ///
+    /// ⚠️ Falhar aqui **não** pode virar "nada liberado". Uma tela que nasce
+    /// dizendo "pegar na locadora" pra tudo e conserta meio segundo depois mente
+    /// duas vezes em vez de uma. Sem resposta, segue sem trancar nada.
+    suspend fun liberadas(): Liberadas = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().liberadas() }.getOrDefault(Liberadas(exige = false))
+    }
+
+    /// O plano de reprodução.
+    ///
+    /// ⚠️ `paraCast` troca **o sujeito da pergunta**. A rota recebe os codecs
+    /// "do cliente", e o §M6 do servidor assume que quem pergunta é quem toca —
+    /// com Cast isso deixa de valer: quem toca é o Chromecast.
+    ///
+    /// Mandar o perfil do celular durante um cast pediria Direct Play de um HEVC
+    /// que a TV não abre, e o defeito apareceria como tela preta na sala. Ver
+    /// `PerfilDeCast`, e a §4c da espec — que registra que isto **não custa
+    /// backend**, porque a rota já aceita a lista como parâmetro.
+    suspend fun plano(arquivoId: String, paraCast: Boolean = false): PlanoDeReproducao = withContext(Dispatchers.IO) {
+        /// As capacidades vão pro log porque **elas decidem o modo**, e o modo
+        /// mudou entre duas execuções do mesmo arquivo sem ninguém mexer em
+        /// nada: uma vez `direto`, outra `transcodificando — o cliente não toca
+        /// áudio em ac3`. Sem saber o que foi enviado, os dois lados parecem
+        /// certos e o desacordo não tem onde ser investigado.
+        android.util.Log.i(
+            "Odeon",
+            "plano($arquivoId) capacidades: v=${CapacidadesDoAparelho.codecsDeVideo} " +
+                "a=${CapacidadesDoAparelho.codecsDeAudio} c=${CapacidadesDoAparelho.containers}",
+        )
+        exigirApi().plano(
+            arquivoId = arquivoId,
+            containers = if (paraCast) PerfilDeCast.CONTAINERS else CapacidadesDoAparelho.containers,
+            codecsDeVideo = if (paraCast) PerfilDeCast.VIDEO else CapacidadesDoAparelho.codecsDeVideo,
+            codecsDeAudio = if (paraCast) PerfilDeCast.AUDIO else CapacidadesDoAparelho.codecsDeAudio,
+        )
+    }
+
+    suspend fun abrirSessao(
+        arquivoId: String,
+        comecandoEm: Int,
+        paraCast: Boolean = false,
+    ): SessaoDeTranscodificacao =
+        withContext(Dispatchers.IO) {
+            exigirApi().abrirSessao(
+                arquivoId = arquivoId,
+                containers = if (paraCast) PerfilDeCast.CONTAINERS else CapacidadesDoAparelho.containers,
+                codecsDeVideo = if (paraCast) PerfilDeCast.VIDEO else CapacidadesDoAparelho.codecsDeVideo,
+                codecsDeAudio = if (paraCast) PerfilDeCast.AUDIO else CapacidadesDoAparelho.codecsDeAudio,
+                comecandoEm = comecandoEm,
+            )
+        }
+
+    // ----------------------------------------------------------------- fase 7
+
+    suspend fun paraVoce(minutos: Int? = null): ParaVoce = withContext(Dispatchers.IO) {
+        exigirApi().paraVoce(minutos = minutos)
+    }
+
+    // ----------------------------------------------------------------- fase 5
+
+    suspend fun prateleira(): Prateleira = withContext(Dispatchers.IO) {
+        exigirApi().prateleira()
+    }
+
+    /// Pegar a fita. **Escreve em produção** — ver `OdeonApi.alugar`.
+    suspend fun alugar(obraId: String): RespostaDoAluguel = withContext(Dispatchers.IO) {
+        exigirApi().alugar(AlvoDaCaixa(obraId))
+    }
+
+    /// Devolver. Também escreve.
+    suspend fun devolver(emprestimoId: Int) = withContext(Dispatchers.IO) {
+        exigirApi().devolver(emprestimoId)
+        Unit
+    }
+
+    /// De onde continuar.
+    ///
+    /// Falha vira lista vazia, e é escolha: a fileira de "continuar" fica
+    /// **acima** da biblioteca, e derrubar a tela inteira porque essa consulta
+    /// não voltou seria trocar o acervo por um erro. Sem ela, a grade aparece
+    /// igual — a fileira é que some.
+    suspend fun paraContinuar(): List<ItemPraContinuar> = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().paraContinuar() }.getOrDefault(emptyList())
+    }
+
+    /// A URL de uma arte qualquer (`still`, `backdrop` ou `poster`), com o token.
+    ///
+    /// É a mesma montagem do `urlDoPoster` — as três moram em `/artwork/`. Existe
+    /// separada só porque o nome "pôster" mentiria sobre as outras duas.
+    fun urlDaArte(caminho: String?): String? = urlDoPoster(caminho)
+
+    /// Encerra a sessão de HLS. Ver `OdeonApi.encerrarSessao`.
+    ///
+    /// Falha em silêncio de propósito: isto roda quando a tela já está indo
+    /// embora, e não há mais onde mostrar erro. O servidor tem um reaper pro
+    /// caso de a chamada não chegar — ele é a rede de segurança, não o plano.
+    suspend fun encerrarSessao(sessaoId: String) = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().encerrarSessao(sessaoId) }
+            .onFailure { android.util.Log.w("Odeon", "sessão $sessaoId não encerrou: $it") }
+        Unit
+    }
+
+    /// Marca onde parou.
+    ///
+    /// ## Falhar aqui é **silencioso de propósito**, e é a exceção ao §8b
+    ///
+    /// A regra da casa diz que errar calado é o defeito. Aqui vale o contrário,
+    /// e o motivo é o que esta chamada é: ela roda a cada poucos segundos com o
+    /// filme na tela. Uma tarja vermelha por cima do vídeo porque uma marca de
+    /// progresso não subiu interromperia justamente o que ela existe pra
+    /// preservar — e a próxima marca, segundos depois, conserta sozinha.
+    ///
+    /// O que **não** é silencioso é a marca do fim: quando o player para, a
+    /// última chamada é a que decide se dá pra continuar amanhã.
+    suspend fun marcarProgresso(
+        obraId: String,
+        posicaoEmSegundos: Double,
+        duracaoEmSegundos: Double?,
+        arquivoId: String,
+        tipo: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            exigirApi().marcarProgresso(
+                obraId = obraId,
+                marca = MarcaDeProgresso(
+                    posicaoEmSegundos = posicaoEmSegundos,
+                    duracaoEmSegundos = duracaoEmSegundos,
+                    arquivoId = arquivoId,
+                    tipo = tipo,
+                    aparelhoId = cofre.aparelhoEmMemoria,
+                ),
+            )
+        }.onFailure {
+            /// Silencioso na tela, **não** no log.
+            ///
+            /// A tela cala porque uma tarja vermelha por cima do filme por causa
+            /// de uma marca perdida é pior que a marca perdida. Mas calar nos dois
+            /// lugares é como um progresso que nunca sobe vira "o servidor não
+            /// guarda isso" na cabeça de quem for investigar.
+            android.util.Log.w("Odeon", "progresso não subiu ($tipo, ${posicaoEmSegundos}s): $it")
+        }.isSuccess
+    }
+
+    /// A folha de sprites, ou `null` quando ainda não foi gerada.
+    ///
+    /// ⚠️ **Só o 404 vira `null`.** Qualquer outro código sobe como erro, e isso
+    /// não é rigor gratuito: a web já perdeu os sprites de todo o acervo por
+    /// tratar "não deu certo" como "não existe" — um 401 virou "sem preview",
+    /// calado, e os sprites que estavam no banco nunca apareceram.
+    suspend fun folhaDeSprites(arquivoId: String): FolhaDeSprites? = withContext(Dispatchers.IO) {
+        try {
+            exigirApi().folhaDeSprites(arquivoId)
+        } catch (e: HttpException) {
+            if (e.code() == 404) null else throw e
+        }
+    }
+
+    /// Uma URL de mídia com o token pendurado.
+    ///
+    /// Serve pro vídeo direto e pra playlist de HLS, e as duas vêm do servidor
+    /// como caminho relativo. É o mesmo mecanismo do pôster — e o mesmo motivo:
+    /// o player não manda header, então o token viaja na query (§43).
+    ///
+    /// ⚠️ O token **não se renova aqui**. Emitir um novo aposenta o anterior, e
+    /// o anterior pode estar dentro de um player tocando neste segundo.
+    fun urlDeMidia(caminhoOuUrl: String?): String? {
+        val caminho = caminhoOuUrl ?: return null
+        val base = base ?: return null
+        val token = cofre.midiaEmMemoria ?: return null
+        val completa = if (caminho.startsWith("http")) caminho else "$base${caminho.ensurePrefix()}"
+        val separador = if ('?' in completa) "&" else "?"
+        return "$completa${separador}token=$token"
+    }
+
+    private fun String.ensurePrefix(): String = if (startsWith("/")) this else "/$this"
+
     /// Garante que existe token de mídia — **sem pedir um novo se já houver**.
     ///
     /// ⚠️ É a regra do §43 em código: emitir aposenta o anterior. Um app que

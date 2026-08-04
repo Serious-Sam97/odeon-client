@@ -26,7 +26,7 @@ import dev.odeon.android.ui.AppOdeon
 /// exigência da plataforma — o manifesto aponta pro nome que estiver aqui. Os
 /// clientes Kotlin de `clients/` usam nomes em inglês porque são de antes, e não
 /// são a régua: a régua é o `web/src/`, onde o código novo (`arrasto.ts`,
-/// `liberadas.ts`) nomeia em português.
+/// `hls.ts`) nomeia em português.
 class AtividadePrincipal : ComponentActivity() {
 
     /// `savedInstanceState` em inglês, e é a exceção que confirma a regra.

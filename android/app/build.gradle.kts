@@ -104,6 +104,38 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
+    /// O player, ligado na fase 2.
+    ///
+    /// ⚠️ A UI se escreve contra a interface `Player`, **nunca** contra
+    /// `ExoPlayer`. O comentário longo está em `gradle/libs.versions.toml`, ao
+    /// lado das versões, e o resumo é: `media3-cast` entrega um `CastPlayer` que
+    /// implementa a mesma interface, então a fase 4 é trocar a instância.
+    ///
+    /// O `datasource-okhttp` é o que amarra o player **na mesma instância de
+    /// OkHttp** do Retrofit e do Coil. Sem ele o player abre pool próprio, e o
+    /// token de mídia passa a ter duas contabilidades — que é onde o §43 morde.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+
+    /// A sessão de mídia: controles do sistema, tela de bloqueio, botão do fone.
+    /// Ela é o que faz a tela segurar um `MediaController` em vez de um player —
+    /// e `MediaController` também é um `Player`, então a decisão de escrever
+    /// contra a interface passou no primeiro teste de verdade dela.
+    implementation(libs.media3.session)
+
+    /// O Cast — fase 4.
+    ///
+    /// `media3-cast` traz o `CastPlayer`, que implementa a **mesma** interface
+    /// `Player` que o resto da tela já usa. É a aposta que a fase 2 fez sendo
+    /// cobrada: mandar pra TV virou trocar a instância.
+    ///
+    /// O `play-services-cast-framework` não vem junto e é obrigatório — o
+    /// `CastPlayer` recebe um `CastContext`, e ele nasce aqui.
+    implementation(libs.media3.cast)
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.media3.datasource.okhttp)
+    implementation(libs.media3.exoplayer.hls)
+
     /// Só no debug. Ele imprime corpo de requisição no logcat, e corpo de
     /// requisição deste app inclui **a senha** do login e o token de sessão.
     debugImplementation(libs.okhttp.logging)

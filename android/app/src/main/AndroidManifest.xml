@@ -14,6 +14,29 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+      A sessão de mídia roda em primeiro plano: é o que mantém o filme tocando
+      com a tela apagada e o que põe os controles na tela de bloqueio. Desde o
+      Android 14 o tipo tem que ser declarado, e o genérico não serve.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- O download em primeiro plano é `dataSync`, e pede a permissão dele. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!--
+      A notificação do player.
+
+      Do Android 13 pra cima ela é permissão de tempo de execução — mas **não**
+      há diálogo pedido aqui, e é decisão: o sistema já pergunta sozinho quando a
+      sessão de mídia sobe a primeira notificação. Pedir antes, numa tela de
+      login, seria pedir permissão pra algo que ainda não vai acontecer.
+
+      E negar não quebra nada: o filme toca igual, sem o controle na gaveta.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
       ## Não há `uses-feature` nenhum aqui, e é assim que se diz "não sou app de
       ## TV"
 
@@ -83,16 +106,76 @@
           declaração não vale de API 13 pra cima, e `layoutDirection` porque o
           `supportsRtl` acima faz essa mudança existir.
         -->
+        <!--
+          `supportsPictureInPicture`: a janelinha que continua tocando quando se
+          sai do app. A espec (§4) fixou `minSdk` 26 **por causa dela** — é onde
+          o PiP mora, e num app de vídeo ela não é enfeite.
+
+          `resizeableActivity` porque a janela do PiP é um redimensionamento, e
+          sem isto o sistema recusa entrar.
+
+          E o `configChanges` já cobria `orientation|screenSize`, que é o que o
+          PiP também dispara: sem eles, entrar na janelinha recriaria a Activity
+          e reiniciaria o filme — o mesmo defeito que girar o aparelho causava.
+        -->
         <activity
             android:name=".AtividadePrincipal"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|layoutDirection"
             android:exported="true"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.Odeon">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          O SDK do Cast acha a configuração por **nome de classe**, declarado
+          aqui. Sem esta linha ele lança em tempo de execução na primeira vez que
+          alguém abre o Cast, com uma mensagem que não diz que faltou manifesto.
+
+          Ver `midia/OpcoesDeCast.kt`.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="dev.odeon.android.midia.OpcoesDeCast" />
+
+        <!--
+          A sessão de mídia. Ver `midia/ServicoDeMidia.kt` pro porquê de o player
+          morar aqui e não dentro da tela.
+
+          `exported="true"` com o filtro de `MediaSessionService` é o que deixa o
+          sistema — Android Auto, tela de bloqueio, botão do fone — encontrar a
+          sessão. Sem o filtro ela existe e ninguém acha.
+        -->
+        <service
+            android:name=".midia.ServicoDeMidia"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          O serviço que baixa. Ver `midia/ServicoDeDownload.kt`.
+
+          `dataSync` é o tipo de serviço em primeiro plano pra transferência de
+          arquivo — **não** é `mediaPlayback`: os dois tipos existem porque o
+          sistema os trata diferente, e declarar o errado é o tipo de coisa que
+          o Android 14 recusa em tempo de execução.
+        -->
+        <service
+            android:name=".midia.ServicoDeDownload"
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
+            <intent-filter>
+                <action android:name="androidx.media3.exoplayer.downloadService.action.RESTART" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
 
     </application>
 

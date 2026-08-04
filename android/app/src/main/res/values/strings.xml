@@ -17,4 +17,11 @@
 -->
 <resources>
     <string name="nome_do_app">Odeon</string>
+
+    <!--
+      Este vai pra cá porque é **exigência da plataforma**: o `DownloadService`
+      pede um id de recurso pro nome do canal de notificação, não uma String. É
+      a exceção que a nota acima previa.
+    -->
+    <string name="canal_de_downloads">Downloads</string>
 </resources>

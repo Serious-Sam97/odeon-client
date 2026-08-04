@@ -100,6 +100,23 @@ media3 = "1.10.1"
 # O SDK do Cast do Google. Ver o comentário em `play-services-cast-framework`.
 playServicesCast = "22.1.0"
 
+# ------------------------------------------------------------------- widget
+#
+# O Glance — o widget de "continuar assistindo" da R9.
+#
+# 1.1.1 é a última **estável**; a linha 1.2 inteira está em beta/rc e a 1.3 em
+# alpha. Num app que não tem widget nenhum hoje, estrear com alpha seria pagar
+# por API que ainda muda de assinatura.
+#
+# ## Ele não é o Compose desta tela, e isso importa
+#
+# Um widget não roda no processo do app: ele é desenhado pelo launcher, a partir
+# de `RemoteViews`. O Glance dá a **sintaxe** do Compose e gera `RemoteViews` por
+# baixo — o que significa que nada de `ui/` reaproveita: nem `Cores`, nem
+# `Tipo`, nem um `Modifier`. São `GlanceModifier`, `ColorProvider` e uma lista
+# curta de composables que o `RemoteViews` sabe representar.
+glance = "1.1.1"
+
 # --------------------------------------------------------------------- teste
 junit = "4.13.2"
 androidxTestJunit = "1.3.0"
@@ -186,6 +203,8 @@ media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "
 # build passa e o app quebra em tempo de execução, na primeira vez que alguém
 # tocar no botão de Cast.
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
+
+glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }

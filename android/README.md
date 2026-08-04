@@ -11,7 +11,7 @@ de `web/` e `clients/`.
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
-**Estado: a v1 inteira está feita, e o redesenho entrou até a R8.**
+**Estado: a v1 inteira está feita, e o redesenho inteiro entrou — R1 a R9.**
 
 As sete fases da §5 da espec foram escritas **e vistas rodando em aparelho**,
 tela a tela — não só compiladas. O Cast é a única com ressalva: ele está escrito,
@@ -32,10 +32,7 @@ Depois delas entraram as **levas 1 a 4 do [`docs/REDESENHO.md`](docs/REDESENHO.m
 | R6 | o **herói** do para-você, com as lâmpadas da marquise. O grão foi testado e **reprovou** |
 | R8 | o **corpo do aparelho**: paralaxe por acelerômetro na ficha, ficha borda a borda, e o detente háptico no seek |
 
-| R9 | a **arte e o título** no controle de mídia, e os **atalhos** ao segurar o ícone |
-
-⚠️ **O widget de "continuar assistindo" não entrou** — é a única parte da R9 que
-falta, e ela precisa do Glance, que é um artefato e um ciclo de vida novos.
+| R9 | o app **sai do app**: arte e título no controle de mídia, atalhos ao segurar o ícone, e o **widget** de continuar assistindo |
 
 ⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
 rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade

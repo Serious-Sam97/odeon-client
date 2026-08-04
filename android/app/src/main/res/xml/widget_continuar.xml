@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O widget de "continuar assistindo" — R9.
+
+  ## O tamanho, e por que ele é largo e baixo
+
+  Três capas de 64dp lado a lado, com vão e respiro, pedem ~250dp de largura. E
+  96dp de capa mais o rótulo e a linha de "faltam" pedem ~130dp de altura.
+
+  `minWidth`/`minHeight` são o **mínimo aceito**; `targetCellWidth` e
+  `targetCellHeight` são o que o launcher usa por padrão a partir do Android 12,
+  em células e não em dp. Quatro por dois é o retângulo largo que a fileira quer.
+
+  As duas formas vão declaradas de propósito: sem as células, os launchers novos
+  escolhem sozinhos; sem os dp, os velhos não sabem o tamanho.
+
+  ⚠️ O `tools:ignore="UnusedAttribute"` é por causa disso. O lint vê `minSdk` 26,
+  vê dois atributos de API 31, e conclui que não são usados — e ele está certo
+  **pros aparelhos de 26 a 30**, que é justamente por que os `dp` continuam ali.
+  Nos de 31 pra cima os `targetCell*` são o que vale. Silenciado aqui e não no
+  `lint.xml`: é um caso de duas linhas, e um aviso calado por caminho num arquivo
+  inteiro esconderia o próximo atributo de API alta que alguém puser sem pensar.
+
+  ## `updatePeriodMillis` é 30 minutos, e é o mínimo que o sistema respeita
+
+  O Android ignora qualquer valor abaixo de 1.800.000 — pedir 5 minutos não dá
+  5 minutos, dá 30 com uma promessa quebrada no meio.
+
+  ⚠️ **E mesmo 30 minutos não é o que faz o widget acompanhar o que se assiste.**
+  Quem assistir um filme e olhar o widget dois minutos depois vai ver o estado
+  velho. O conserto é o app **empurrar** — `WidgetDeContinuar().updateAll(ctx)`
+  ao voltar do player — e está anotado como pendência no `WidgetDeContinuar`,
+  porque mexe no `AppOdeon`.
+
+  ## Sem `previewImage`
+
+  O que aparece no seletor de widgets é o `description` e mais nada. Uma imagem
+  de prévia seria um PNG desenhado à mão do widget preenchido — e uma prévia que
+  mostra três filmes que a pessoa não tem é uma promessa que a instalação
+  desmente. O `previewLayout`, que renderiza o layout de verdade, é de API 31 e
+  este app vai até a 26.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:description="@string/widget_descricao"
+    android:minWidth="250dp"
+    android:minHeight="130dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    tools:ignore="UnusedAttribute"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:widgetCategory="home_screen" />

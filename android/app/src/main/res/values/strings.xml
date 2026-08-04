@@ -34,4 +34,8 @@
     <string name="atalho_locadora_longo">ir à locadora</string>
     <string name="atalho_baixados_curto">baixados</string>
     <string name="atalho_baixados_longo">o que está no aparelho</string>
+    <!-- O que aparece no seletor de widgets do launcher. Curto porque ali o
+         espaço é de uma linha, e específico porque "Odeon" sozinho não diz o
+         que o widget faz. -->
+    <string name="widget_descricao">o que você deixou pela metade</string>
 </resources>

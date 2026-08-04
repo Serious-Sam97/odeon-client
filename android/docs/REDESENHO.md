@@ -22,10 +22,8 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 | onde ficam os destinos (§6) | **barra inferior adaptativa** — e não a opção 3, que era a preferência escrita abaixo |
 | a fonte serifada (R1) | **embutir no APK** |
 
-E as **levas 1, 2 e 3 estão feitas e vistas em aparelho**, mais a **R6 inteira**
-e **um quarto da R8**: a decisão da §6, e as fases R1, R2, R3, R4, R5, R6 e R7.
-O resto da R8 e a R9 continuam sendo proposta, e a §6 abaixo fica como registro
-do que se pesou.
+E o **redesenho inteiro está feito e visto em aparelho** — a decisão da §6 e as
+nove fases, R1 a R9. A §6 abaixo fica como registro do que se pesou.
 
 > ### ⚠️ A régua de fps da R4 não é aplicável no emulador — e isso precisa ser
 > ### resolvido antes da leva 3
@@ -504,9 +502,35 @@ não é opcional.
 
 - **Widget** de "continuar assistindo" — a mesma rota `/api/continue`, sem tela.
   A §4b da espec já lista isso como coisa que o servidor dá de graça.
-- **Atalhos** ao segurar o ícone: continuar, locadora, baixados.
+  ✅ **Feito**, com Glance 1.1.1. Três capas com o quanto falta de cada uma.
+
+  > **Ele não compartilha nada com o app.** Um widget é desenhado pelo launcher
+  > a partir de `RemoteViews`; o Glance dá a sintaxe do Compose e gera
+  > `RemoteViews` por baixo. Nada de `ui/` entra: nem `Cores`, nem `Tipo`, nem a
+  > serifada. A paleta está repetida à mão, e está escrito que está.
+  >
+  > **Três capas e não todas**: cada bitmap atravessa a fronteira de processo
+  > dentro do `RemoteViews`, e o `Binder` corta em ~1 MB por transação.
+  >
+  > ⚠️ **Dois defeitos que o screenshot pegou.** As capas não apareciam: o
+  > `provideGlance` é `suspend` mas não é `suspend` **na IO**, e o `execute()`
+  > bloqueante do OkHttp virava `NetworkOnMainThreadException` que o
+  > `runCatching` engolia — erro de despachante disfarçado de dado ausente, com
+  > o widget parecendo certo e o acervo parecendo sem pôster. E "faltam 141min"
+  > truncava nos 64dp da coluna; ficou só o número, que é o dado.
+  >
+  > **Pendência:** ele não se atualiza ao assistir. O launcher repede a cada 30
+  > minutos (o mínimo que o Android respeita) e nada empurra do app. O conserto
+  > é `WidgetDeContinuar().updateAll(ctx)` ao voltar do player.
+- **Atalhos** ao segurar o ícone: continuar, locadora, baixados. ✅ **Feito**,
+  estáticos — eles levam a lugares, não a obras, então não mudam. O dinâmico
+  ("continuar assistindo *Drive*", com capa) fica em aberto.
+  ⚠️ Trocar de aba com o app **já aberto** cai no `onNewIntent` e ainda não
+  funciona.
 - **A arte no controle de mídia**: hoje a notificação da sessão sobe sem capa.
-  O `MediaSession` aceita `artworkUri`, e o app já tem a URL.
+  O `MediaSession` aceita `artworkUri`, e o app já tem a URL. ✅ **Feito** — e o
+  buraco era maior do que a fase dizia: a `MediaItem` não declarava
+  `MediaMetadata` nenhuma, então faltava **o título também**.
 
 ---
 
@@ -589,7 +613,7 @@ desfazer isso:
 | **2** ✅ | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
 | **3** ✅ | R5 + R7 | as coisas viram objetos, e as telas se ligam |
 | **4** ◐ | R6 + R8 | o experimental — película, giroscópio, háptico |
-| **5** | R9 | o app sai do app |
+| **5** ✅ | R9 | o app sai do app |
 
 A leva 1 é a que mais muda a impressão por linha escrita. A 4 é a mais
 divertida, e é a que mais precisa de screenshot pra não virar barulho.

@@ -181,6 +181,20 @@
             </intent-filter>
         </service>
 
+        <!-- O widget de "continuar assistindo" — R9.
+             `exported="false"`: quem manda a difusão de atualização é o próprio
+             sistema, e nenhum outro app tem o que fazer com ela. -->
+        <receiver
+            android:name=".widget.ReceptorDoWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_continuar" />
+        </receiver>
+
     </application>
 
 </manifest>

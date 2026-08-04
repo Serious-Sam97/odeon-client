@@ -180,6 +180,11 @@ dependencies {
     /// do Compose são grandes e não têm o que fazer num APK publicado.
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    /// O widget da R9. Ver o comentário no catálogo: ele **não** compartilha
+    /// nada com o Compose das telas — o launcher desenha `RemoteViews`, e o
+    /// Glance é a sintaxe por cima disso.
+    implementation(libs.glance.appwidget)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

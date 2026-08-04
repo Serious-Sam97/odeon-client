@@ -116,6 +116,25 @@ data class ItemDaBiblioteca(
     @SerialName("finished_count") val quantasVistas: Int = 0,
     @SerialName("media_file_id") val arquivoId: String? = null,
     @SerialName("duration_seconds") val duracaoEmSegundos: Double? = null,
+
+    /// A altura do vídeo em linhas, e o tamanho do arquivo em bytes.
+    ///
+    /// ## Eles sempre vieram na resposta, e o app jogava fora
+    ///
+    /// Estão no `LibraryEntry` do `web/src/api.ts` (`height`, `size_bytes`)
+    /// desde antes deste app existir. A fase 1 mapeou o que a grade daquele dia
+    /// desenhava e não voltou aqui — então `/api/library` mandava os dois em
+    /// toda linha e o `ignoreUnknownKeys` do `Rede` os descartava, calado.
+    ///
+    /// É a terceira vez que ler a web economiza uma pergunta ao dono: a R4 do
+    /// redesenho pede a linha `1969 · 816p · 2h22 · 2,3 GB`, e sem isto ela
+    /// teria virado pedido de servidor por um dado que já estava chegando.
+    ///
+    /// **Nulos existem e são normais** — 8.598 obras não têm arquivo casado. Por
+    /// isso a linha de metadados omite item por item, e não some inteira: §24.
+    val height: Int? = null,
+    @SerialName("size_bytes") val tamanhoEmBytes: Long? = null,
+
     val kind: String? = null,
     @SerialName("match_state") val estadoDaIdentificacao: String? = null,
     @SerialName("position_seconds") val ondeParou: Double? = null,
@@ -162,10 +181,13 @@ data class ArquivoDeMidia(
 /// `tags` é lista de texto, aqui é objeto. Por isso não herda de
 /// `ItemDaBiblioteca` — herdar faria parecer que os campos batem.
 ///
-/// Os campos que a fase 2 não desenha (`tags`, `collections`, `relations`,
-/// `credits`, `external_ids`) ficam **de fora** de propósito: o
-/// `ignoreUnknownKeys` do `Rede` os descarta, e declarar campo que nenhuma tela
-/// lê é contrato que ninguém confere.
+/// Os campos que nenhuma tela desenha (`collections`, `relations`, `credits`,
+/// `external_ids`) ficam **de fora** de propósito: o `ignoreUnknownKeys` do
+/// `Rede` os descarta, e declarar campo que ninguém lê é contrato que ninguém
+/// confere.
+///
+/// `tags` **saiu** dessa lista na R3 do redesenho — a ficha passou a desenhá-las
+/// como pílulas, então agora há tela que lê, e o contrato volta a valer a pena.
 @Serializable
 data class ObraDetalhada(
     val id: String,
@@ -184,6 +206,31 @@ data class ObraDetalhada(
     /// Onde **este** usuário parou, em segundos. `0` se nunca começou.
     @SerialName("position_seconds") val ondeParou: Double = 0.0,
     val finished: Boolean = false,
+    val tags: List<Etiqueta> = emptyList(),
+)
+
+/// Uma etiqueta da obra — `WorkTag` na web.
+///
+/// ## `namespace` e `value` são coisas diferentes, e a tela mostra o segundo
+///
+/// O servidor guarda `genero/Crime`, `pais/Estados Unidos`, `tipo/filme`. A web
+/// desenha só o `value`, e é o certo: numa pílula de 11sp, "genero: Crime" gasta
+/// o dobro pra dizer o que a palavra "Crime" já diz.
+///
+/// O `namespace` fica declarado mesmo sem tela que o desenhe porque é ele que
+/// permitiria agrupar ou filtrar depois — e porque sem ele o modelo afirmaria
+/// que a etiqueta é só um texto solto, que não é.
+///
+/// ⚠️ `color` é do servidor e pode ser nulo. Quando for, a pílula usa a cor da
+/// casa — **nunca** uma cor sorteada. Uma cor inventada por etiqueta pareceria
+/// classificação vinda do acervo, que é o §18 na versão mais difícil de notar.
+@Serializable
+data class Etiqueta(
+    val id: String,
+    val namespace: String,
+    val value: String,
+    val color: String? = null,
+    val source: String? = null,
 )
 
 /// `GET /api/locadora/liberadas` — o §66 em duas linhas.

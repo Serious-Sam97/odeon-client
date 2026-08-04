@@ -22,9 +22,32 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 | onde ficam os destinos (§6) | **barra inferior adaptativa** — e não a opção 3, que era a preferência escrita abaixo |
 | a fonte serifada (R1) | **embutir no APK** |
 
-E a **leva 1 está feita e vista em aparelho**: a decisão da §6, a R1 e a R2.
-As fases R3 a R9 continuam sendo proposta, e a §6 abaixo fica como registro do
-que se pesou.
+E as **levas 1 e 2 estão feitas e vistas em aparelho**: a decisão da §6, a R1, a
+R2, a R3 e a R4. As fases R5 a R9 continuam sendo proposta, e a §6 abaixo fica
+como registro do que se pesou.
+
+> ### ⚠️ A régua de fps da R4 não é aplicável no emulador — e isso precisa ser
+> ### resolvido antes da leva 3
+>
+> A R4 diz: «a régua é o quadro perdido — se a rolagem sair de 60fps no emulador,
+> o enfeite sai». Tentado, com `dumpsys gfxinfo`, seis arrastos iguais sobre
+> conteúdo já carregado:
+>
+> | | quadros | perdidos | 90º percentil |
+> |---|---|---|---|
+> | com o afundar ao toque | 151 | 43,0% | 81ms |
+> | sem enfeite nenhum | 87 | 66,7% | 85ms |
+>
+> **A versão sem o enfeite saiu pior**, o que não pode ser verdade — e 87 contra
+> 151 quadros pro mesmo gesto explica: a variância entre execuções é maior que a
+> diferença entre as versões. O emulador não segura 60fps nesta grade em nenhuma
+> das duas (mediana de 32ms e 36ms, ou seja ~30fps).
+>
+> A régua como está escrita **não decide nada**. Ela precisa de aparelho de
+> verdade, ou de `androidx.benchmark`, que roda a rolagem N vezes e devolve
+> intervalo de confiança em vez de uma amostra. **Isso vale antes da leva 4**,
+> que é onde entram giroscópio e película — os enfeites que de fato custam
+> quadro, e sobre os quais uma medida ruim decidiria errado.
 
 > ### O que a leva 1 ensinou, e que muda a régua das próximas
 >
@@ -219,6 +242,19 @@ desenhado como três `TextButton` soltos. A web mostra seis cortes em pílulas, 
 **⚠️ Cuidado do §18:** tag é dado, chip é forma. Um chip de "Crime" só aparece
 se a obra tiver a tag — nunca um "—" nem um chip vazio.
 
+> ### ✅ Feito, e duas coisas que a implementação corrigiu no plano
+>
+> **Os cortes de tempo não eram três nem seis inventados.** São os seis do
+> `TIME_OPTIONS` do `ForYou.tsx:13` — `qualquer tempo`, `15 min`, `30 min`,
+> `45 min`, `1h`, `2h`. A primeira versão desta fase inventou um "1h30" e perdeu
+> o "15 min", que é justamente o corte que responde «tenho um episódio de tempo».
+>
+> **A etiqueta mostra namespace *e* valor.** O `Details.tsx:860` desenha
+> `{namespace}<b>{value}</b>` — "genre **Ação**", "country **Reino Unido**" — e a
+> `color` da tag tinge a **borda**, nunca o fundo. Fundo colorido faria uma
+> etiqueta parecer mais importante que as outras, e `color` no servidor não quer
+> dizer importância.
+
 ---
 
 ### R4 — O cartaz vira objeto
@@ -234,6 +270,22 @@ se a obra tiver a tag — nunca um "—" nem um chip vazio.
 **A medida que este item precisa:** a grade tem 8.316 entradas e rola rápido.
 Cada enfeite aqui é multiplicado por tudo que está na tela. A régua é o quadro
 perdido — se a rolagem sair de 60fps no emulador, o enfeite sai.
+
+> ### ✅ Feito, com dois cortes que o aparelho impôs
+>
+> **As tags saíram da grade.** O `LibraryEntry` não as traz — elas são do
+> `WorkDetail`. Desenhá-las no cartaz exigiria uma requisição por entrada, e a
+> grade tem 8.316. Elas ficaram na ficha (R3).
+>
+> **O tamanho saiu da linha de metadados.** `1969 · 816p · 2h22 · 2,3 GB` não
+> cabe num cartaz de 108dp: no aparelho a linha virou `1969 · 816p · 2h22 · …`,
+> e a reticência promete um dado que nenhum gesto daquela tela alcança. O tamanho
+> foi pra ficha, ao lado do botão de baixar — que é o único momento em que ele
+> importa.
+>
+> **E `height`/`size_bytes` já vinham na resposta.** Os dois estão no
+> `LibraryEntry` da web desde antes deste app existir, e o modelo Android os
+> descartava calado. A linha de metadados não custou pedido de servidor nenhum.
 
 ---
 
@@ -385,7 +437,7 @@ desfazer isso:
 | leva | fases | o que se vê no fim |
 |---|---|---|
 | **1** ✅ | decisão da §6 + R1 + R2 | o app **parece** o Odeon, sem nada se mexer |
-| **2** | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
+| **2** ✅ | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
 | **3** | R5 + R7 | as coisas viram objetos, e as telas se ligam |
 | **4** | R6 + R8 | o experimental — película, giroscópio, háptico |
 | **5** | R9 | o app sai do app |

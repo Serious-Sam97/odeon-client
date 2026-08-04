@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +34,8 @@ import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ArquivoDeMidia
 import dev.odeon.android.dados.PlanoDeReproducao
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.PilulaDeEtiqueta
+import dev.odeon.android.ui.corDeHex
 
 /// A ficha da obra — a terceira tela do app, e a porta do player.
 ///
@@ -41,6 +45,11 @@ import dev.odeon.android.ui.Cores
 /// inteiro. O alcance da regra foi corrigido pelo dono: **a escassez vale no
 /// modo locadora; pela biblioteca se assiste direto.** O porquê e o que os
 /// documentos ainda dizem estão em `ModeloDaObra`.
+///
+/// O `@OptIn` é do `FlowRow`, usado pelas etiquetas: experimental de assinatura,
+/// estável de comportamento, e o único jeito de ter `flex-wrap` sem escrever
+/// medição de linha à mão.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TelaDaObra(
     modelo: ModeloDaObra,
@@ -130,6 +139,35 @@ fun TelaDaObra(
 
         obra.overview?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = Cores.texto)
+        }
+
+        /// As etiquetas — R3.
+        ///
+        /// ## Elas vêm do servidor desde sempre, e o app descartava
+        ///
+        /// `tags` está no `WorkDetail` da web e o `ObraDetalhada` não a
+        /// declarava: o comentário do modelo dizia que campo sem tela que o leia
+        /// é contrato que ninguém confere, e estava certo — até esta tela
+        /// existir.
+        ///
+        /// ⚠️ **Sem etiqueta, nada é desenhado** — nem rótulo de seção, nem
+        /// "nenhuma". §24: linha vazia some. A web escreve "nenhuma" aqui, e é
+        /// escolha dela: lá a seção é editável por administrador e o vazio é
+        /// convite pra preencher. Aqui não há edição, então o vazio não é
+        /// convite pra nada.
+        if (obra.tags.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                obra.tags.forEach { etiqueta ->
+                    PilulaDeEtiqueta(
+                        namespace = etiqueta.namespace,
+                        valor = etiqueta.value,
+                        cor = corDeHex(etiqueta.color),
+                    )
+                }
+            }
         }
 
         Reproduzir(
@@ -315,8 +353,32 @@ private fun Versoes(
     }
 }
 
+/// O tamanho do arquivo, e por que ele mora **aqui** e não na grade.
+///
+/// A R4 do redesenho pedia `1969 · 816p · 2h22 · 2,3 GB` no cartaz da grade, e
+/// foi o que a primeira versão fez. O screenshot mostrou a linha truncando num
+/// cartaz de 108dp — `1969 · 816p · 2h22 · …` —, e a reticência era o defeito:
+/// ela promete um dado que nenhum gesto daquela tela alcança.
+///
+/// Esta é a tela certa pra ele de qualquer forma. O tamanho não ajuda a escolher
+/// o que assistir; ele importa antes de **baixar**, e o botão de baixar está a
+/// dois dedos daqui.
+///
+/// Vírgula decimal porque o app é em português. **Base 1000 e não 1024**, que é
+/// a mesma escolha da web: este número é o que a pessoa compara com o espaço
+/// livre que o Android mostra, e o Android usa base 1000 desde o Oreo. Com 1024
+/// o mesmo arquivo apareceria como "2,1 GB" aqui e "2,3 GB" nos ajustes — e o
+/// §18 vale também pra unidade.
+private fun tamanho(bytes: Long): String {
+    val gb = bytes / 1_000_000_000.0
+    if (gb >= 1) return "%.1f GB".format(gb).replace('.', ',')
+    val mb = bytes / 1_000_000.0
+    return "${mb.toLong()} MB"
+}
+
 private fun ficha(a: ArquivoDeMidia): String? = listOfNotNull(
     a.height?.let { "${it}p" },
+    a.tamanhoEmBytes?.let { tamanho(it) },
     a.codecDeVideo,
     a.codecDeAudio,
     a.canaisDeAudio?.let { "${it}ch" },

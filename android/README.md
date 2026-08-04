@@ -25,6 +25,14 @@ Depois delas entrou a **leva 1 do [`docs/REDESENHO.md`](docs/REDESENHO.md)**:
 | a decisão da §6 | os destinos saíram do cabeçalho da biblioteca e viraram **barra de navegação adaptativa** — barra embaixo em pé, trilho lateral em paisagem e tablet |
 | R1 | entrou uma **serifada de display** (Noto Serif SemiBold, embutida), e título de tela e de obra viraram letreiro |
 | R2 | o **rótulo de seção** com versalete espaçado e régua em gradiente, medido no `.strip` da web |
+| R3 | as **pílulas** — o filtro de tempo do para-você e as etiquetas da ficha |
+| R4 | o cartaz vira **objeto**: barra de progresso dentro do pôster, linha de metadados, e afundar ao toque |
+
+⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
+rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade
+**com ou sem** enfeite — a variância entre execuções ficou maior que a diferença
+entre as versões. Precisa de aparelho de verdade ou de `androidx.benchmark`. Os
+números estão no `docs/REDESENHO.md` §0 e no comentário do `Cartaz`.
 
 `assembleDebug` ✅ · **29 testes** ✅ · `lintDebug` limpo ✅
 

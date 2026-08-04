@@ -110,6 +110,19 @@ object Tipo {
         fontSize = 11.sp,
         letterSpacing = 0.28.em,
     )
+
+    /// O texto dentro de uma pílula.
+    ///
+    /// Medido no `.chip` (`styles.css:1101`) e no `.cartaz-chip` (`:3954`): os
+    /// dois declaram **12px** e mais nada — sem `font-weight`, sem
+    /// `letter-spacing`. Ou seja, peso e espaçamento normais, e só o tamanho é
+    /// escolha.
+    ///
+    /// A tentação é reusar o `rotulo` acima, que já é o versalete da casa. Não
+    /// serve, e a web concorda: `letter-spacing` soma o espaço **depois** de
+    /// cada letra, inclusive da última, então 0.28em dentro de uma pílula
+    /// empurraria a palavra contra a borda direita.
+    val pilula = TextStyle(fontSize = 12.sp)
 }
 
 /// A escala tipográfica, e o que ela troca de serifa.

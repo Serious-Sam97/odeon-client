@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -27,10 +29,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.Recomendacao
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.PilulaDeFiltro
+import dev.odeon.android.ui.Tipo
 
 /// Para você.
 ///
@@ -50,6 +55,11 @@ import dev.odeon.android.ui.Cores
 /// Por isso um cartão **sem motivo** aqui é um cartão que não deveria existir:
 /// ele viraria catálogo no meio da curadoria.
 /// O "‹ biblioteca" saiu quando esta tela virou aba. Ver `TelaDaLocadora`.
+///
+/// O `@OptIn` é do `FlowRow`, que continua experimental de assinatura mas é
+/// estável de comportamento há vários releases — e é o único jeito de ter
+/// `flex-wrap` sem escrever medição de linha à mão.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TelaParaVoce(
     modelo: ModeloParaVoce,
@@ -68,16 +78,55 @@ fun TelaParaVoce(
         /// A pergunta que se faz com o telefone na mão não é "o que existe", é
         /// "o que cabe agora". O servidor já aceita `minutes`; a tela só precisa
         /// oferecer os cortes que alguém realmente usa.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ///
+        /// ## R3: eram três botões, viraram as seis pílulas da web
+        ///
+        /// Os três eram `TextButton` soltos — "qualquer", "até 90min", "até 2h" —
+        /// e o único sinal de qual valia era a **cor da letra**. A `.chip.on` da
+        /// web muda borda, fundo e letra de uma vez, e é o que faz o corte
+        /// escolhido ser lido de relance em vez de procurado.
+        ///
+        /// ⚠️ Os seis cortes **não** são escolha minha: são o `TIME_OPTIONS` do
+        /// `ForYou.tsx:13`, copiado. A primeira versão desta lista inventou um
+        /// "1h30" que não existe lá e perdeu o "15 min" que existe — e inventar
+        /// corte é decidir sozinho que 90 minutos é uma pergunta que alguém faz.
+        /// O "15 min" é o que responde "tenho um episódio de tempo", e some se
+        /// ninguém copiar a lista de onde ela mora.
+        ///
+        /// O rótulo "tenho" é o `.filter-label` (`styles.css:1164`): 11px, caixa
+        /// alta, `letter-spacing: 0.1em`. Sem ele, "45 min" sozinho é ambíguo —
+        /// pode ser duração do filme ou tempo de quem assiste.
+        ///
+        /// `FlowRow` e não rolagem lateral: os seis não cabem nos 411dp de um
+        /// celular, e rolagem lateral **esconde** cortes atrás de um gesto que
+        /// ninguém sabe que existe (§8b). A web resolve com `flex-wrap` nos
+        /// `.chips`, e o `FlowRow` é isso mesmo.
+        Text(
+            text = "tenho".uppercase(),
+            style = Tipo.rotulo.copy(letterSpacing = 0.1.em),
+            color = Cores.textoApagado,
+        )
+        FlowRow(
+            /// 6dp, que é o `gap` do `.chips`. O vertical fica em zero porque o
+            /// `minimumInteractiveComponentSize` das pílulas já reserva 48dp de
+            /// altura por linha — somar espaçamento aqui abriria um vão que a
+            /// web não tem, e foi o que a primeira versão fez.
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
             listOf<Pair<String, Int?>>(
-                "qualquer" to null,
-                "até 90min" to 90,
-                "até 2h" to 120,
+                "qualquer tempo" to null,
+                "15 min" to 15,
+                "30 min" to 30,
+                "45 min" to 45,
+                "1h" to 60,
+                "2h" to 120,
             ).forEach { (rotulo, minutos) ->
-                val ativo = estado.minutos == minutos
-                TextButton(onClick = { modelo.filtrar(minutos) }) {
-                    Text(rotulo, color = if (ativo) Cores.destaque else Cores.textoApagado)
-                }
+                PilulaDeFiltro(
+                    texto = rotulo,
+                    selecionada = estado.minutos == minutos,
+                    aoTocar = { modelo.filtrar(minutos) },
+                )
             }
         }
 

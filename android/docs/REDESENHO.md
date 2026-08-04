@@ -13,6 +13,54 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 
 ---
 
+## 0b. O segundo redesenho — «dar vida»
+
+Pedido em 04/08/2026, depois de as nove fases estarem feitas: *«não refazer,
+melhorar, dar vida»*, e a direção dada pelo dono foi **brincar com o preto e o
+amarelo**.
+
+### O diagnóstico, e ele não era falta de cor
+
+| uso | app **antes** | web |
+|---|---|---|
+| `destaque` / `--accent` | 26 | 210 |
+| `destaqueApagado` / `--accent-dim` | **2** | 107 |
+| `destaqueQuente` / `--accent-hot` | 2 | 19 |
+| dourado como **luz** — sombra, halo, gradiente | **0** | **19** |
+| animações declaradas | 4 | 36 |
+
+**O app usava o dourado como tinta; a web usa como luz.** E o `Tema.kt` já
+chamava os três tons de «o filamento aceso», «o topo da luz» e «o filamento
+apagado» desde a fase 1 — nomes que descreviam uma sala acesa que o código nunca
+desenhou.
+
+A proposta foi desenhada e aprovada antes de qualquer linha. Três levas:
+
+| leva | o que entrou |
+|---|---|
+| **1 — a luz** ✅ | `ui/Luz.kt`: os três tons ganham papel. Contorno dourado nos cartazes, barra de progresso que esquenta na ponta, pílula que acende por baixo, e o botão de assistir **projetando** halo |
+| **2 — a chegada** ✅ | herói na biblioteca (a tela mais visitada era a mais plana), a **tábua** sob as caixas da locadora, e a `dominant_color` tingindo a chegada |
+| **3 — o ritual** ✅ | `ui/Chegada.kt` — as caixas caem na prateleira, escalonadas — e **apagar a luz**: tocar em assistir escurece a sala antes de trocar de tela |
+
+### Três coisas que o screenshot achou
+
+**A locadora vazia contradizia a própria frase.** Ela diz «nenhuma caixa fora da
+estante» — afirmação positiva — e desenhava isso como 1.400 pixels de preto.
+Agora desenha as tábuas vazias: a mobília da loja existe mesmo sem caixa fora.
+⚠️ Sem inventar estoque — esta tela só conhece o que **saiu** da estante.
+
+**O herói saía cinza.** `brightness(0.32)` sobre um pôster de neve branca tira a
+cor junto com a luz, e a lavagem a 30% não repunha. A web usa 42% na
+`.hero-wash`, e o número dela não era estético: era corretivo.
+
+**`padding` negativo derruba o app.** A tábua sangra 16dp pra cada lado, e a
+primeira versão pediu isso com `padding(horizontal = (-16).dp)`. Compilou, passou
+no lint, e o app caiu ao abrir a locadora com `IllegalArgumentException: Padding
+must be non-negative`. O jeito certo é medir com folga e posicionar deslocado —
+mais uma para a lista de «compilar e passar no lint não é ter visto».
+
+---
+
 ## 0. O que já foi decidido e feito — atualizado em 04/08/2026
 
 **As duas decisões que a §6 e a R1 pediam foram tomadas pelo dono:**

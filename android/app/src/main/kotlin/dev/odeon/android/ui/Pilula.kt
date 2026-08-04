@@ -75,9 +75,12 @@ fun PilulaDeFiltro(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .clip(forma)
-            .background(
-                if (selecionada) Cores.destaque.copy(alpha = 0.08f) else Cores.fundoElevado,
-            )
+            /// Selecionada, ela **acende por baixo** em vez de só ganhar um
+            /// fundo a 8%. É o mesmo alfa da `.chip.on` da web somado a um
+            /// radial vindo da base — a diferença entre "está marcada" e "está
+            /// ligada". Ver `Luz.porBaixo`.
+            .background(Cores.fundoElevado)
+            .acendePorBaixo(selecionada)
             .border(
                 BorderStroke(1.dp, if (selecionada) Cores.destaque else Cores.linha),
                 forma,

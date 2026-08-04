@@ -35,6 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
@@ -46,7 +49,10 @@ import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.MolduraDoCartaz
+import dev.odeon.android.ui.LampadasDaMarquise
+import dev.odeon.android.ui.Luz
 import dev.odeon.android.ui.RotuloDeSecao
+import dev.odeon.android.ui.pegaLuz
 import dev.odeon.android.ui.corDeHex
 import kotlin.math.max
 import kotlin.math.min
@@ -162,10 +168,42 @@ fun TelaDaBiblioteca(
             ///
             /// E some inteira quando não há nada — sem título órfão, sem "nada
             /// por aqui" (§24).
+            /// O herói da chegada — leva 2 do segundo redesenho.
+            ///
+            /// ## A tela mais visitada era a mais plana
+            ///
+            /// Toda sessão começa aqui, e aqui havia menos desenho que em
+            /// qualquer outra tela: cabeçalho, uma fileira e 8.316 retângulos do
+            /// mesmo tamanho. O "para você" — a aba menos visitada — ganhou
+            /// herói na leva 4 do primeiro redesenho e virou a tela mais bonita
+            /// do app. Esta não tinha.
+            ///
+            /// ## Ele é o que se estava assistindo, e não uma recomendação
+            ///
+            /// É a diferença entre as duas telas. O herói do "para você"
+            /// responde *o que assistir*; este responde *onde você parou* — que
+            /// é a pergunta de quem abre o app com um filme pela metade, e a
+            /// §5 da espec chama de «você parou na TV e continua no ônibus».
+            ///
+            /// ⚠️ **Sem nada pela metade, não há herói** (§24). A tela volta a
+            /// abrir na grade, sem faixa vazia e sem "nada por aqui".
             if (estado.paraContinuar.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
+                    HeroiDaChegada(
+                        item = estado.paraContinuar.first(),
+                        arte = modelo.arte(estado.paraContinuar.first()),
+                        aoTocar = { aoAbrirObra(estado.paraContinuar.first().id) },
+                    )
+                }
+            }
+
+            if (estado.paraContinuar.size > 1) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     FileiraParaContinuar(
-                        itens = estado.paraContinuar,
+                        /// O primeiro virou herói, então a fileira mostra o
+                        /// resto. Repeti-lo seria a mesma obra duas vezes na
+                        /// mesma tela, a 30dp de distância.
+                        itens = estado.paraContinuar.drop(1),
                         arte = modelo::arte,
                         aoTocar = { aoAbrirObra(it.id) },
                     )
@@ -227,6 +265,120 @@ private fun Cabecalho(
         /// Agora eles estão no `EsqueletoComAbas` do `AppOdeon`, que vira trilho
         /// lateral em paisagem e em tablet — o que responde à objeção de altura
         /// justamente onde ela doía.
+    }
+}
+
+/// O herói da biblioteca: o que você deixou pela metade, em tamanho de cartaz.
+///
+/// ## A cor da obra tinge a tela — e é a tese da §4b sendo cobrada
+///
+/// «A interface se tinge com a obra que você está olhando», diz a espec, e
+/// **9.332 obras já têm `dominant_color` extraída** pelo servidor. Até agora o
+/// app usava esse dado pra uma coisa só: preencher o fundo de cartão sem pôster.
+/// Ou seja, a cor da obra só aparecia quando **não havia** obra pra ver.
+///
+/// Aqui ela entra onde faz sentido: na lavagem por baixo do texto. A tela de
+/// chegada muda de temperatura conforme o filme que está em cima dela.
+///
+/// Nulo é normal — 8.598 obras não têm arte, logo não têm cor extraída dela — e
+/// aí a lavagem cai no dourado da casa. Nunca numa cor sorteada.
+@Composable
+private fun HeroiDaChegada(item: ItemPraContinuar, arte: String?, aoTocar: () -> Unit) {
+    val corDaObra = corDeHex(item.corDominante) ?: Cores.destaque
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Cores.fundoElevado)
+            .clickable(onClick = aoTocar),
+    ) {
+        if (arte != null) {
+            AsyncImage(
+                model = arte,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                /// `brightness(0.32)` da `.hero-art` da web, o mesmo do herói do
+                /// "para você". Sobre a arte crua o texto some em metade dos
+                /// pôsteres — e o que está escrito aqui é o quanto falta, que é
+                /// a razão desta faixa existir.
+                colorFilter = ColorFilter.colorMatrix(
+                    ColorMatrix(
+                        floatArrayOf(
+                            0.32f, 0f, 0f, 0f, 0f,
+                            0f, 0.32f, 0f, 0f, 0f,
+                            0f, 0f, 0.32f, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        /// Duas camadas: a **cor da obra** vindo do canto de baixo, e o fundo da
+        /// casa subindo da base pra dar chão ao texto. Nessa ordem — a cor tinge
+        /// a arte, o fundo sustenta a letra.
+        /// ⚠️ **42%, e o screenshot é que definiu o número.**
+        ///
+        /// A 30% a faixa saía **cinza**: `brightness(0.32)` sobre um pôster de
+        /// neve branca tira a cor junto com a luz, e uma lavagem fraca não
+        /// repõe. A web usa `42%` na `.hero-wash` (`styles.css:2086`) e é
+        /// exatamente por isso — o número dela não era estético, era corretivo.
+        ///
+        /// O centro fica **fora** da faixa (`y = 1.1`), então o que se vê é o
+        /// topo do halo subindo da base. Centrado, ele viraria uma bola de luz
+        /// no meio da arte.
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.radialGradient(
+                    colors = listOf(corDaObra.copy(alpha = 0.42f), Color.Transparent),
+                    center = androidx.compose.ui.geometry.Offset(0.10f, 1.1f),
+                    radius = 1.15f,
+                ),
+            ),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.45f to Cores.fundo.copy(alpha = 0.5f),
+                    1f to Cores.fundo.copy(alpha = 0.94f),
+                ),
+            ),
+        )
+
+        /// As lâmpadas da marquise, o mesmo composable do "para você".
+        LampadasDaMarquise(Modifier.align(Alignment.TopCenter))
+
+        Column(
+            modifier = Modifier.align(Alignment.BottomStart).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = item.tituloDaSerie ?: item.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Cores.texto,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            segundaLinhaDeContinuar(item)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Cores.destaque)
+            }
+        }
+
+        /// A barra do quanto falta, colada na base do herói — a mesma conta e o
+        /// mesmo desenho da fileira e da grade, pra não haver três progressos
+        /// diferentes na mesma tela.
+        item.fracaoVista?.let { fracao ->
+            Box(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp)
+                    .background(Cores.fundoAfundado),
+            ) {
+                Box(Modifier.fillMaxWidth(fracao).height(3.dp).background(Luz.filamento))
+            }
+        }
     }
 }
 
@@ -334,7 +486,11 @@ private fun CartaoDeContinuar(item: ItemPraContinuar, arte: String?, aoTocar: ()
                         Modifier
                             .fillMaxWidth(fracao)
                             .height(4.dp)
-                            .background(Cores.destaque),
+                            /// Acesa em vez de chapada: o filamento vai do frio
+                            /// à ponta quente. Uma barra chapada é uma medida;
+                            /// uma que esquenta na ponta é uma coisa **acesa até
+                            /// ali**, que é o que progresso é.
+                            .background(Luz.filamento),
                     )
                 }
             }
@@ -496,6 +652,14 @@ private fun Cartaz(
                 /// ficha, e ele tem que levar o próprio recorte junto. Depois do
                 /// clip, o elemento compartilhado seria o retângulo sem cantos.
                 .then(moldura.de(item.id))
+                /// O cartaz pega luz — leva 1 do segundo redesenho.
+                ///
+                /// Sobre `#0A0A0C` um cartaz sem contorno **flutua**: não há
+                /// aresta, e a arte lê como adesivo colado no preto. 1dp de
+                /// dourado a 22% dá a borda, e borda é o que separa "imagem" de
+                /// "coisa". Sem sombra aqui — ver `Luz.pegaLuz`, que explica por
+                /// que a parte cara ficou de fora da grade de 8.316.
+                .pegaLuz(RoundedCornerShape(6.dp))
                 .clip(RoundedCornerShape(6.dp))
                 .background(fundoDoCartaz),
             contentAlignment = Alignment.Center,
@@ -549,7 +713,11 @@ private fun Cartaz(
                         Modifier
                             .fillMaxWidth(fracao)
                             .height(4.dp)
-                            .background(Cores.destaque),
+                            /// Acesa em vez de chapada: o filamento vai do frio
+                            /// à ponta quente. Uma barra chapada é uma medida;
+                            /// uma que esquenta na ponta é uma coisa **acesa até
+                            /// ali**, que é o que progresso é.
+                            .background(Luz.filamento),
                     )
                 }
             }

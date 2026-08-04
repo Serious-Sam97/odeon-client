@@ -15,7 +15,12 @@ de `web/` e `clients/`.
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
-**Estado: a v1 inteira está feita, e o redesenho inteiro entrou — R1 a R9.**
+**Estado: a v1 inteira está feita, o redesenho R1–R9 entrou, e o segundo
+redesenho — «dar vida» — entrou nas três levas.**
+
+O segundo é sobre o dourado: o app usava a cor da casa como **tinta** (zero
+brilhos, halos ou gradientes) e a web usa como **luz** (dezenove). Ver a §0b do
+`docs/REDESENHO.md`.
 
 As sete fases da §5 da espec foram escritas **e vistas rodando em aparelho**,
 tela a tela — não só compiladas. O Cast é a única com ressalva: ele está escrito,

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,7 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -53,6 +56,7 @@ import coil3.compose.AsyncImage
 import dev.odeon.android.dados.Emprestada
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.RotuloDeSecao
+import dev.odeon.android.ui.chega
 
 /// A locadora.
 ///
@@ -108,8 +112,9 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora) {
         if (estado.minhas.isNotEmpty()) {
             Secao("comigo", quantos = estado.minhas.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(estado.minhas, key = { it.id }) { fita ->
+                    itemsIndexed(estado.minhas, key = { _, f -> f.id }) { i, fita ->
                         Caixa(
+                            indice = i,
                             fita = fita,
                             arte = modelo.arte(fita.poster),
                             /// Devolver só existe nas minhas. Nas dos outros o
@@ -126,8 +131,14 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora) {
         if (estado.dosOutros.isNotEmpty()) {
             Secao("na mão de alguém", quantos = estado.dosOutros.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(estado.dosOutros, key = { it.id }) { fita ->
-                        Caixa(fita = fita, arte = modelo.arte(fita.poster), aoDevolver = null, devolvendo = false)
+                    itemsIndexed(estado.dosOutros, key = { _, f -> f.id }) { i, fita ->
+                        Caixa(
+                            indice = i,
+                            fita = fita,
+                            arte = modelo.arte(fita.poster),
+                            aoDevolver = null,
+                            devolvendo = false,
+                        )
                     }
                 }
             }
@@ -139,20 +150,133 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora) {
         /// estado normal e informativo — "está tudo na estante" é notícia. Uma
         /// tela em branco, não.
         if (estado.minhas.isEmpty() && estado.dosOutros.isEmpty() && estado.erro == null) {
-            Text(
-                text = "nenhuma caixa fora da estante",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Cores.textoApagado,
-            )
+            EstanteVazia()
         }
     }
 }
 
+/// Uma seção da locadora: rótulo, as caixas, e **a tábua** por baixo.
+///
+/// ## A tábua é a leva 2, e ela conserta o que a leva 3 deixou pela metade
+///
+/// A caixa ganhou lombada, pose e verniz — e ficou de pé **no nada**. Não havia
+/// prateleira: as caixas flutuavam sobre o preto, o que desfaz metade do
+/// trabalho de fazê-las parecerem objetos. Objeto que não repousa em nada é
+/// desenho, não coisa.
+///
+/// A web sabe disso e o comentário dela diz por quê:
+///
+/// > «A tábua encosta na base das caixas. Com folga embaixo o conjunto lê como
+/// > cartão, não como objeto.»
+///
+/// Por isso a madeira encosta — sem vão, sem margem. E ela **sangra pras
+/// laterais** (os −16dp) porque prateleira de loja não acaba onde acaba a
+/// fileira: ela atravessa a parede.
+///
+/// ## O halo é a luz da loja batendo na madeira
+///
+/// Um dourado difuso subindo da tábua, a 55% e desfocado. Sem ele a madeira é
+/// uma tarja marrom; com ele, ela é uma superfície **iluminada** — e é o mesmo
+/// argumento do arquivo `Luz.kt`, aplicado a um lugar em vez de a um objeto.
 @Composable
 private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         RotuloDeSecao(texto = titulo, numero = quantos)
         conteudo()
+        Tabua()
+    }
+}
+
+/// A loja com nada emprestado — e **ela continua sendo uma loja**.
+///
+/// ## A tela dizia uma coisa e desenhava outra
+///
+/// A frase é «nenhuma caixa fora da estante», que é uma afirmação **positiva**:
+/// está tudo guardado. E o desenho era um retângulo preto de 1.400 pixels com
+/// uma linha cinza no topo. Copy e desenho se contradiziam: um dizia "está tudo
+/// no lugar", o outro dizia "não há nada aqui".
+///
+/// Duas tábuas vazias com a frase entre elas resolvem isso sem inventar dado: é
+/// a **mobília da loja**, que existe independentemente de haver caixa fora. O
+/// que se vê é uma prateleira de empréstimo vazia, que é exatamente o que é.
+///
+/// ⚠️ **Não desenho caixas cheias**, e a tentação existia — uma estante lotada
+/// leria muito melhor. Seria §18 na forma mais direta: o app não sabe o que está
+/// na estante. Esta tela só conhece o que **saiu** dela; o acervo inteiro é da
+/// biblioteca. Desenhar caixas aqui seria afirmar um estoque que ninguém contou.
+@Composable
+private fun EstanteVazia() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        /// A altura da fileira que **estaria** aqui, vazia. Sem ela as duas
+        /// tábuas ficariam coladas e leriam como duas linhas, não como estante.
+        Box(Modifier.fillMaxWidth().height(96.dp))
+        Tabua()
+        Text(
+            text = "nenhuma caixa fora da estante",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Cores.textoApagado,
+            modifier = Modifier.padding(vertical = 20.dp),
+        )
+        Box(Modifier.fillMaxWidth().height(96.dp))
+        Tabua()
+    }
+}
+
+/// A madeira da prateleira.
+@Composable
+private fun Tabua() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            /// Sangra 16dp de cada lado pra cancelar o padding da tela. Uma
+            /// prateleira que respeita a margem do texto é uma prateleira que
+            /// acaba no ar.
+            ///
+            /// ⚠️ **`padding` negativo não existe em Compose**, e a primeira
+            /// versão disto tentou: `padding(horizontal = (-16).dp)`. Compilou,
+            /// passou no lint, e o app **caiu ao abrir a locadora** com
+            /// `IllegalArgumentException: Padding must be non-negative`. Mais
+            /// uma para a lista: compilar e passar no lint não é ter visto.
+            ///
+            /// O jeito certo é medir com folga e colocar deslocado. O `layout`
+            /// pede ao filho uma largura maior que a que recebeu e depois o
+            /// posiciona 16dp à esquerda, mantendo a **altura** reservada igual
+            /// — assim a coluna acima não se mexe.
+            .layout { medivel, restricoes ->
+                val folga = 16.dp.roundToPx() * 2
+                val largura = restricoes.maxWidth + folga
+                val posto = medivel.measure(
+                    restricoes.copy(minWidth = largura, maxWidth = largura),
+                )
+                layout(restricoes.maxWidth, posto.height) {
+                    posto.place(-folga / 2, 0)
+                }
+            }
+            .height(6.dp)
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF2A2119), Color(0xFF150F0A)),
+                ),
+            ),
+    ) {
+        /// A luz da loja batendo na tábua: uma linha quente no topo dela.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Cores.destaque.copy(alpha = 0.35f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
+        )
     }
 }
 
@@ -197,7 +321,13 @@ private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable ()
 /// 24% sobre a arte, na diagonal, e não uma faixa colorida na horizontal — que
 /// é a forma que a barra de progresso tem em toda outra tela deste app.
 @Composable
-private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, devolvendo: Boolean) {
+private fun Caixa(
+    fita: Emprestada,
+    arte: String?,
+    aoDevolver: (() -> Unit)?,
+    devolvendo: Boolean,
+    indice: Int = 0,
+) {
     var virada by remember { mutableStateOf(false) }
     val giro by animateFloatAsState(
         targetValue = if (virada) 180f else 0f,
@@ -260,7 +390,8 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
     )
 
     Column(
-        modifier = Modifier.width(140.dp + espessura),
+        /// A caixa **cai** na prateleira ao chegar, escalonada — ver `Chegada`.
+        modifier = Modifier.chega(indice).width(140.dp + espessura),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(

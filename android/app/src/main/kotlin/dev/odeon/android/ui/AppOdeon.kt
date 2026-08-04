@@ -1,10 +1,13 @@
 package dev.odeon.android.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.glance.appwidget.updateAll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -29,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -200,6 +205,41 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
     /// `when` escrito duas vezes, um destino novo entraria num lugar e não no
     /// outro, e o sintoma seria uma tela em branco em vez de um erro de
     /// compilação.
+    /// ## Apagar a luz — leva 3 do segundo redesenho
+    ///
+    /// Tocar em assistir **não troca de tela**: a sala escurece primeiro. É a
+    /// R5 da web, e o comentário da folha é a especificação inteira:
+    ///
+    /// > «Clicar em tocar não deve trocar de tela: deve APAGAR A LUZ. O fundo
+    /// > fecha primeiro, o quadro cresce um tico, e o cromo entra depois — nessa
+    /// > ordem, e não junto, porque é a ordem em que uma sala de cinema
+    /// > escurece.»
+    ///
+    /// Aqui são dois tempos, não três: o fundo fecha (240ms), e o player entra
+    /// já com os controles visíveis, que é o terceiro tempo dele. O segundo — o
+    /// quadro crescendo — é o elemento compartilhado da R7, que já leva o pôster
+    /// da grade até a ficha; ele **não** alcança o player, e o motivo está
+    /// escrito logo abaixo: o player fica fora do `AnimatedContent` de propósito,
+    /// porque animar a superfície de vídeo é como o PiP perde o quadro.
+    ///
+    /// ⚠️ **O destino fica guardado, e não é navegado antes.** Se o `onde`
+    /// mudasse junto com o escurecer, o player montaria por trás do véu e o
+    /// primeiro quadro do filme sairia enquanto a tela ainda está preta — que é
+    /// pular o começo, não escurecer a sala.
+    var indoAssistir: Onde.Assistindo? by remember { mutableStateOf(null) }
+    val luz by animateFloatAsState(
+        targetValue = if (indoAssistir != null) 1f else 0f,
+        animationSpec = tween(240),
+        label = "apagar a luz",
+    )
+    LaunchedEffect(indoAssistir, luz) {
+        val destino = indoAssistir
+        if (destino != null && luz >= 1f) {
+            onde = destino
+            indoAssistir = null
+        }
+    }
+
     /// O widget é avisado ao voltar do player — R9.
     ///
     /// ## Sem isto ele mente por até 30 minutos
@@ -353,7 +393,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                             aoVoltar = { onde = Onde.Biblioteca },
                             aoBaixar = { arquivoId -> app.baixarArquivo(arquivoId, alvo.obraId) },
                             aoTocar = { arquivoId, titulo, ondeParou, duracao, capa ->
-                                onde = Onde.Assistindo(
+                                indoAssistir = Onde.Assistindo(
                                     obraId = alvo.obraId,
                                     arquivoId = arquivoId,
                                     titulo = titulo,
@@ -476,6 +516,19 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         corpo(moldura)
                     }
                 }
+            }
+
+            /// O véu. Ele fica **por cima de tudo** e não intercepta toque: a
+            /// tela já está a caminho do player, e um segundo toque no meio do
+            /// escurecer não deveria fazer nada — mas também não deveria ser
+            /// engolido por um retângulo invisível quando a luz está em zero.
+            if (luz > 0f) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = luz }
+                        .background(Color.Black),
+                )
             }
         }
     }

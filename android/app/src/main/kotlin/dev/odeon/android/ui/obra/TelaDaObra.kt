@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
@@ -431,9 +432,27 @@ private fun Reproduzir(estado: EstadoDaObra, aoTocar: (ArquivoDeMidia) -> Unit) 
             color = Cores.textoApagado,
         )
 
+        /// O botão principal do app, **aceso** — leva 1 do segundo redesenho.
+        ///
+        /// Ele era um `Button` do Material com o dourado chapado de fundo. É o
+        /// único botão cheio do app inteiro e o mais importante — e ficava com a
+        /// mesma aparência de um botão de diálogo de sistema.
+        ///
+        /// Agora ele **projeta luz**: o halo dourado sai dele e cai no que está
+        /// em volta. É o que um botão de "assistir" num app de cinema deveria
+        /// fazer, e é a mesma conta do `Luz.acesa` — o `spotColor` degrada pra
+        /// sombra preta abaixo da API 28, e continua dando profundidade.
         else -> Button(
             onClick = { arquivo?.let(aoTocar) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 20.dp,
+                    shape = RoundedCornerShape(percent = 50),
+                    clip = false,
+                    spotColor = Cores.destaque,
+                    ambientColor = Cores.destaque,
+                ),
         ) {
             Text(if (estado.obra?.ondeParou?.let { it > 1 } == true) "continuar" else "assistir")
         }

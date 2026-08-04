@@ -44,7 +44,7 @@ continuam sendo trabalho do `serious-server` — a máquina onde eles rodam, ond
 está o Postgres com dados reais de três pessoas, e onde as migrações são
 compiladas dentro do binário.
 
-### E quando o app precisar de uma mudança no servidor?
+### ⚠️ E quando o app precisar de algo do servidor: **avise o dono**
 
 Vai acontecer, e a espec já sabe de duas:
 
@@ -52,14 +52,37 @@ Vai acontecer, e a espec já sabe de duas:
   servidor, e provavelmente vai precisar de `ODEON_ALLOWED_ORIGINS` (§4c)
 - **a porta padrão**, se decidirem que o app deve tentar 8085 em vez de 8080
 
-Quando isso aparecer: **descreva o que precisa e devolva o pedido pro
-`serious-server`.** Não abra o `odeon-server` pra "só ajustar uma linha" — as
-migrações são embutidas no binário em tempo de compilação, o servidor está no ar
-servindo três pessoas, e a identificação leva ~1h e morre se o processo
-reiniciar.
+**O caminho é este, e é curto:**
 
-Isso não é burocracia: é a regra 4 da casa aplicada a duas máquinas — **não
-corrija sozinho, pergunte ou faça o que foi pedido.**
+> Você diz ao dono o que precisa. Ele leva o pedido pro `serious-server`, onde a
+> mudança é feita. Você recebe de volta e continua.
+
+Ou seja: **não abra o `odeon-server`, não peça a senha do Postgres, não sugira
+um `psql` "rapidinho", e não abra PR lá.** Diga o que falta e espere — ele passa
+adiante.
+
+O motivo é concreto e não é cerimônia: as migrações são embutidas no binário em
+tempo de compilação (`sqlx::migrate!`), o servidor está no ar servindo três
+pessoas de verdade, e a identificação leva ~1h e morre se o processo reiniciar.
+Quem mexe é quem está na máquina, olhando o que ela está fazendo naquele momento.
+
+**Como pedir**, pra o pedido chegar inteiro do outro lado:
+
+```
+o que preciso: <a rota, o campo, a variável de ambiente>
+por quê:       <o que o app não consegue fazer sem isso>
+o que quebra:  <a tela ou fase que fica bloqueada>
+já tentei:     <o que dá pra resolver do lado do cliente, e por que não serve>
+```
+
+O último item é o que mais importa. Boa parte do que parece exigir servidor não
+exige — a espec (§4c) tem um exemplo: com Cast, a negociação de reprodução passa
+a falar de outro aparelho, e o conserto é **o app mandar o perfil do Chromecast**
+em `/api/playback/{id}/plan`, que já aceita a lista como parâmetro. Nenhuma linha
+de servidor.
+
+Isso também é a regra 4 da casa aplicada a duas máquinas — **não corrija sozinho,
+pergunte ou faça o que foi pedido.**
 
 ### O fluxo de trabalho
 

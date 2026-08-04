@@ -239,12 +239,86 @@ existe porque **o servidor já dá o dado** — nenhum pede backend novo.
 | **continuar em qualquer lugar** | parou na TV, continua no ônibus | `/api/continue` e o barramento SSE, que já sincroniza entre aparelhos |
 | **atalhos e widget** | segurar o ícone → "continuar assistindo" | mesma rota, sem tela |
 
-**Proposto: `Cast` fica de fora da v1.** Ele é a resposta certa pra "quero ver na
-TV" — e como não haverá app de TV, ele volta a ser tentador. Mas mandar pro
-Chromecast exige que o servidor seja alcançável pelo Chromecast, e isso é uma
-conversa de rede que merece seção própria.
+**Decidido: `Cast` entra na v1.** Sem app de TV, é ele que responde "quero ver
+na sala" — e a medição mostrou que ele custa menos do que parecia. Ver §4c.
 
 ---
+
+---
+
+## 4c. Cast, e a suposição do Odeon que ele quebra
+
+**Decidido: entra na v1.**
+
+### O que decide tudo: quem busca o vídeo é o Chromecast
+
+O app manda uma **URL** e vira controle remoto. O aparelho de Cast faz a
+requisição sozinho — o celular não repassa um byte. Isso quebra quatro
+suposições do projeto de uma vez, e nenhuma delas é um beco.
+
+### 1. Alcance: funciona em casa, e só
+
+Na mesma rede, o Chromecast chega no servidor pelo IP da LAN. **Fora de casa
+não chega**: ele não entra numa tailnet, e o app mandaria um endereço que só
+existe lá dentro.
+
+**Isso é limite, não defeito, e o documento o carrega:** o Cast do Odeon é um
+recurso de casa. Fazer funcionar de fora exige o servidor publicamente
+alcançável, que é outra decisão inteira.
+
+### 2. Codec: metade do acervo toca direto
+
+Medido, sobre os **17.930** arquivos com codec conhecido:
+
+| codec | arquivos | Chromecast |
+|---|---|---|
+| h264 | **9.550** | toca |
+| hevc | 5.345 | só nos 4K / Google TV |
+| mpeg4 (DivX/Xvid) | 2.335 | **não toca** |
+| av1 | 461 | só nos mais novos |
+| msmpeg4v3 · mpeg2 | 169 | não |
+| mpeg1 · wmv2 · vp7 · vp9 · … | 70 | caso a caso |
+
+**~53% em Direct Play, ~47% por transcode.** O servidor faz o transcode — mas
+cada cast de um HEVC 4K é NVENC trabalhando, e isso vale saber antes de alguém
+achar que Cast é de graça.
+
+### 3. A negociação muda de sujeito, e isso não custa backend
+
+`/api/playback/{id}/plan` recebe `video_codecs` e `audio_codecs` **do cliente**.
+O §M6 inteiro assume que *quem pergunta é quem toca* — e com Cast não é: quem
+toca é o Chromecast.
+
+A rota já aceita a lista como parâmetro, então o conserto é **o app mandar o
+perfil do aparelho de Cast em vez do próprio**. Nenhuma linha de servidor.
+
+Mas o selo do modo (Direct Play / Remux / Transcode) passa a falar de **outro
+aparelho**, e a tela precisa dizer isso — senão ela afirma sobre o celular uma
+coisa que é da TV, que é o §18 por outro caminho.
+
+### 4. Duas armadilhas já documentadas mordem aqui
+
+**O token de mídia.** A URL leva `?token=`, e **emitir um token novo aposenta o
+anterior** (§43). Se o app renovar enquanto o Chromecast toca, o filme morre na
+TV — e o celular não vai nem perceber.
+
+**O CORS.** É por regra de mesmo host, e a origem do Chromecast não é o host do
+servidor. Provavelmente vai precisar de `ODEON_ALLOWED_ORIGINS`.
+
+### A decisão que precisa ser tomada ANTES da primeira linha do player
+
+**Proposto, e é a razão de esta seção existir agora e não depois:** a UI do
+player deve ser escrita contra a interface **`Player`** do Media3, nunca contra
+`ExoPlayer`.
+
+O `media3-cast` entrega um `CastPlayer` que implementa a **mesma** interface.
+Escrito assim, mandar pra TV é **trocar a instância** — a timeline, o selo, os
+gestos e o preview de seek continuam funcionando sem saber que mudou de
+aparelho.
+
+Escrito contra `ExoPlayer`, cada tela que toca o player vira reescrita quando o
+Cast chegar. É o tipo de escolha que custa nada no primeiro dia e custa o dobro
+do trabalho no centésimo.
 
 ---
 
@@ -258,9 +332,10 @@ faz que um navegador no sofá não faz*.
 | **1** | **entrar e ver a biblioteca** | sem isto não há app. `auth/*` e `works` são 33 das 113 rotas, e o KMP prova que elas bastam pra uma tela |
 | **2** | **assistir** | é o produto. Plano de reprodução, Direct Play, e o selo dizendo por quê |
 | **3** | **continuar de onde parou** | é o que o celular faz melhor que tudo: você parou na TV e continua no ônibus. `/api/continue` + `playback` |
-| **4** | **a locadora** | é a alma do produto, e é onde a v1 deixa de ser "um Jellyfin bonito" |
-| **5** | **baixar pra ver sem rede** | decidido pra v1, e é o que mais separa este app da web. Depende da resposta sobre a fita vencida |
-| **6** | **para você** | recomendação com motivo, que é a tese do projeto numa tela só |
+| **4** | **mandar pra TV (Cast)** | logo depois do player, e de propósito: escrito contra `Player`, é trocar a instância. Adiado, vira reescrita |
+| **5** | **a locadora** | é a alma do produto, e é onde a v1 deixa de ser "um Jellyfin bonito" |
+| **6** | **baixar pra ver sem rede** | decidido pra v1, e é o que mais separa este app da web. Depende da resposta sobre a fita vencida |
+| **7** | **para você** | recomendação com motivo, que é a tese do projeto numa tela só |
 
 Dentro da fase 2 (**assistir**) entram PiP e sessão de mídia. Eles não são
 extras de depois: um player de Android que não faz os dois é um `<video>` com
@@ -296,6 +371,6 @@ Medido, e vale saber antes de escrever a primeira tela:
   APK assinado distribuído por link não exige nada disso.
 - **A fita vencida sem rede** (§4). É a única pergunta do §4 que sobrou, e é a
   que trava a fase 5.
-- **`Cast`, e a rede que ele exige.** Sem app de TV, é ele que responde "quero
-  ver na sala" — e depende de o servidor ser alcançável pelo aparelho de Cast,
-  que hoje vive numa tailnet.
+- **Cast fora de casa.** Ele entra na v1 como recurso de rede local (§4c). Levar
+  pra fora exige o servidor publicamente alcançável — decisão de infraestrutura,
+  não de app.

@@ -1,0 +1,46 @@
+# O typecheck e o build, a cada push.
+#
+# ## Por que `npm run build` e não `tsc --noEmit`
+#
+# O script do projeto é `tsc -b && vite build` — ele faz o typecheck **e** monta
+# o pacote. Rodar só o typecheck deixaria passar o que quebra na montagem:
+# import que o bundler não resolve, asset que não existe, plugin que falha.
+#
+# São as duas perguntas que importam antes de publicar uma interface, e o
+# projeto já tinha a resposta escrita no `package.json`. Repeti-la aqui de outro
+# jeito seria uma segunda definição do mesmo build.
+#
+# ## E os clientes Kotlin?
+#
+# Não entram. Eles estão parados no M2 e consomem 10 das ~90 rotas — montar
+# Android e iOS a cada push custaria minutos de esteira pra guardar código que
+# não muda. Quando voltarem a andar, entram.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck-e-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # A mesma do Dockerfile. Duas versões de Node entre o CI e o que roda
+          # em casa é como um "passa aqui e quebra lá" nasce.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `npm ci` e não `npm install`: ele obedece o `package-lock.json` em vez de
+      # atualizar o que achar que pode.
+      - run: npm ci
+
+      - run: npm run build

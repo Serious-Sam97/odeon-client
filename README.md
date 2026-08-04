@@ -1,5 +1,7 @@
 # Odeon — interface
 
+[![build](https://github.com/Serious-Sam97/odeon-client/actions/workflows/build.yml/badge.svg)](https://github.com/Serious-Sam97/odeon-client/actions/workflows/build.yml)
+
 A interface do [Odeon](https://github.com/Serious-Sam97/odeon-server): React +
 TypeScript + Vite, mais os clientes Kotlin Multiplatform de celular, TV e iOS.
 

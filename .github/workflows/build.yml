@@ -10,11 +10,15 @@
 # projeto já tinha a resposta escrita no `package.json`. Repeti-la aqui de outro
 # jeito seria uma segunda definição do mesmo build.
 #
-# ## E os clientes Kotlin?
+# ## Dois projetos Kotlin no repositório, e só um entra
 #
-# Não entram. Eles estão parados no M2 e consomem 10 das ~90 rotas — montar
-# Android e iOS a cada push custaria minutos de esteira pra guardar código que
-# não muda. Quando voltarem a andar, entram.
+# **`android/` entra.** É o app nativo, está sendo escrito agora, e é código que
+# muda a cada rodada — deixá-lo fora seria descobrir que quebrou na próxima vez
+# que alguém tentar compilar em casa.
+#
+# **`clients/` não entra.** O KMP está parado no M2 e consome 10 das 113 rotas.
+# Montar Android e iOS a cada push custaria minutos de esteira pra guardar código
+# que não muda. Quando voltar a andar, entra.
 name: build
 
 on:
@@ -44,3 +48,64 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+  # ------------------------------------------------------------------ Android
+  #
+  # ## Três tarefas, e nenhuma é redundante
+  #
+  #   assembleDebug        o APK sai? (recursos, manifesto, ícone, Kotlin)
+  #   testDebugUnitTest    os testes de unidade passam?
+  #   lintDebug            o lint reprova alguma coisa?
+  #
+  # A terceira é a que mais se paga. Ela já pegou, na primeira rodada, um
+  # `uses-feature` de leanback no manifesto que dizia manter o app fora da TV e
+  # fazia o contrário — defeito que `assembleDebug` compila sem reclamar.
+  #
+  # `abortOnError` fica no padrão (ligado): lint que não reprova é relatório que
+  # ninguém lê.
+  app-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # A mesma do `android/Dockerfile`, pelo mesmo motivo que o Node acima
+          # casa com o dele. E 21 não é escolha livre: o AGP 9 não aceita o
+          # openjdk 25 que vem por padrão em muita máquina.
+          java-version: "21"
+
+      # A imagem do runner já traz um SDK, mas não necessariamente a plataforma
+      # que este projeto usa. Estes são os mesmos pacotes do
+      # `android/docker-entrypoint.sh`, e a lista está duplicada de propósito —
+      # o container e o CI são duas máquinas, e nenhuma lê o script da outra.
+      #
+      # ⚠️ `android-37.1` tem ponto. O Android tem versões menores de plataforma
+      # agora, e `android-37` não existe.
+      - name: Instalar a plataforma e o build-tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-37.1" \
+            "build-tools;37.0.0"
+
+      # Cuida do cache do Gradle. Sem ele, todo push volta a baixar o AGP, o
+      # Compose e o AndroidX inteiros — que é a maior parte dos 4 minutos que um
+      # build do zero leva.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+
+      # O relatório do lint só interessa quando o build reprova — e é
+      # exatamente aí que ele não está no log, porque o log traz uma linha por
+      # achado e o HTML traz o trecho de código.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-debug
+          path: android/app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore

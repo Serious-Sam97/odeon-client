@@ -45,5 +45,52 @@ services:
       - web-modules:/app/node_modules
       - ./certs:/certs:ro,z
 
+  # A caixa de ferramentas do app Android.
+  #
+  # ## Ela não serve nada, e é de propósito
+  #
+  # Diferente do `web`, este container não sobe servidor nenhum e não abre
+  # porta. Ele existe pra receber `docker exec`, exatamente como o `odeon-api`
+  # recebe `cargo test` — porque nesta máquina nem `cargo`, nem `npx`, nem
+  # `gradle` estão no PATH do host, e o SDK do Android não estava em lugar
+  # nenhum (medido em 04/08/2026: sem `ANDROID_HOME`, sem `sdkmanager`, sem
+  # `adb`, e um `openjdk 25` que nenhum AGP aceita).
+  #
+  #   docker exec odeon-android ./gradlew :app:assembleDebug
+  #   docker exec odeon-android ./gradlew :app:testDebugUnitTest
+  #
+  # ## E o `adb`, que precisa alcançar um aparelho
+  #
+  # `network_mode: host` porque o `adb` fala com o servidor dele numa porta
+  # local (5037) e com aparelhos por TCP. Numa rede de container ele enxergaria
+  # a rede errada, e "por que o celular não aparece" viraria uma tarde.
+  #
+  # O custo é não ter DNS de serviço aqui dentro — o que não faz falta: o app
+  # aponta pro servidor pelo endereço que o **aparelho** alcança, não pelo que
+  # o container alcança.
+  android:
+    build:
+      context: ./android
+      args:
+        # O UID do dono. Sem isso o Gradle escreve `build/` como root e o
+        # editor no host não consegue mais apagar.
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    container_name: odeon-android
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      # `z` = rótulo SELinux compartilhado. Sem ele, no Fedora, o container
+      # sobe mas a pasta aparece VAZIA, sem erro claro.
+      - ./android:/app:z
+      # O SDK num volume, não na imagem: instalar um pacote a mais depois é um
+      # `sdkmanager` avulso, e não reconstruir 2 GB.
+      - android-sdk:/opt/android-sdk
+      # O cache do Gradle. É ele que se paga: sem isso, todo build volta a
+      # baixar o AGP, o Kotlin e as dependências inteiras.
+      - android-gradle:/home/gradle/.gradle
+
 volumes:
   web-modules:
+  android-sdk:
+  android-gradle:

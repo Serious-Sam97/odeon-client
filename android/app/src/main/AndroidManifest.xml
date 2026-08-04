@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      O app inteiro é um consumidor de `/api/...`. Sem esta permissão ele não é
+      nada — e ela é de instalação, não pede diálogo.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Pra saber se está online antes de decidir entre a rede e o que está
+      baixado (fase 6). Também de instalação.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      ## Não há `uses-feature` nenhum aqui, e é assim que se diz "não sou app de
+      ## TV"
+
+      A primeira versão deste arquivo declarava:
+
+          <uses-feature android:name="android.software.leanback"
+                        android:required="false" />
+          <uses-feature android:name="android.hardware.touchscreen"
+                        android:required="false" />
+
+      com um comentário afirmando que aquilo mantinha o app fora da TV, como a
+      espec decidiu (§4, "Sem TV, e é decisão").
+
+      **Fazia o contrário.** O lint reprovou o build na hora:
+
+          Error: Expecting an activity to have
+          android.intent.category.LEANBACK_LAUNCHER intent filter
+          [MissingLeanbackLauncher]
+
+      Mencionar `leanback` — mesmo com `required="false"` — declara que o app
+      **considera** a TV, e aí o Android cobra a Activity de TV que a espec
+      proibiu. E `touchscreen` com `required="false"` é justamente o que apps de
+      TV escrevem, porque TV não tem toque: aquela linha estava alargando o alvo
+      em vez de estreitá-lo.
+
+      O jeito certo é o silêncio. Sem `leanback`, o app não aparece na TV; sem
+      declarar `touchscreen`, ele fica com o padrão (obrigatório), que é o que um
+      app de celular e tablet quer.
+
+      Fica registrado porque o comentário errado era mais convincente que o
+      certo — e porque quem for "melhorar" isto vai pensar exatamente o mesmo
+      que eu pensei.
+    -->
+
+    <!--
+      ## `networkSecurityConfig`, que é a linha que decide se o app fala com o
+      ## servidor
+
+      Desde o Android 9 o HTTP puro é bloqueado por padrão. E o Odeon é um
+      servidor de casa: medido em 04/08/2026, o `odeon-api` sobe em `:8085` por
+      HTTP com o TLS desligado, e a porta `:8443` está mapeada mas não serve
+      nada.
+
+      Sem a exceção, o app instalaria, abriria, e o login falharia com um erro
+      de rede que não diz "cleartext" em lugar nenhum — o §8b em pessoa:
+      **errar em silêncio é o defeito**.
+
+      A exceção não é global e não é gratuita: o `res/xml/config_de_rede.xml`
+      explica quem ela alcança, por quê, e o que custa.
+    -->
+    <application
+        android:name=".OdeonApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/nome_do_app"
+        android:networkSecurityConfig="@xml/config_de_rede"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Odeon">
+
+        <!--
+          `configChanges`: sem ele, girar o aparelho **destrói e recria** a
+          Activity. Num app de vídeo isso é o filme reiniciando ao virar pra
+          paisagem — que é exatamente o gesto que a pessoa faz pra assistir.
+
+          `screenSize` e `smallestScreenSize` entram junto porque sem eles a
+          declaração não vale de API 13 pra cima, e `layoutDirection` porque o
+          `supportsRtl` acima faz essa mudança existir.
+        -->
+        <activity
+            android:name=".AtividadePrincipal"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|layoutDirection"
+            android:exported="true"
+            android:theme="@style/Theme.Odeon">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>

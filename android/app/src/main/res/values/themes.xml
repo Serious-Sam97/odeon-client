@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O tema do sistema, que é diferente do tema do Compose.
+
+  ## Por que os dois existem
+
+  O Compose desenha tudo o que se vê, e as cores dele estão em `ui/Tema.kt`. Mas
+  a janela existe **antes** do primeiro quadro de Compose: entre tocar no ícone
+  e a primeira composição, quem pinta a tela é o `android:windowBackground`
+  daqui.
+
+  Se este tema fosse claro, todo abrir do app seria um lampejo branco antes do
+  fundo escuro aparecer. Num app de cinema, num quarto escuro, isso é a coisa
+  mais visível que o app faz.
+
+  As cores vêm do `res/values/colors.xml`, que por sua vez vêm do
+  `web/src/styles.css`. Um app com outra paleta seria outro produto.
+-->
+<resources>
+
+    <style name="Theme.Odeon" parent="android:Theme.Material.NoActionBar">
+        <!-- O fundo da casa. É este pixel que se vê antes do Compose acordar. -->
+        <item name="android:windowBackground">@color/fundo</item>
+
+        <!--
+          Barra de status e de navegação transparentes: o Compose desenha
+          debaixo delas, e é o que faz um pôster ocupar a tela inteira em vez de
+          parar numa faixa preta.
+        -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <!--
+          `false` = ícones claros. O fundo é escuro; ícones escuros sobre ele
+          desapareceriam. O irmão deste item, o da barra de navegação, só existe
+          de API 27 em diante e está em `values-v27/`.
+        -->
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+</resources>

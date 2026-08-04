@@ -64,11 +64,22 @@ that combination and explains it, instead of looking like the server went down.
 ```
 web/              React + TS + Vite — the eleven screens
   src/api.ts      the contract with the server, written by hand
+android/          the native Android app (see android/README.md)
+  app/            Kotlin + Compose · minSdk 26 · phone and tablet
 clients/          Kotlin Multiplatform (see clients/README.md)
   shared/         models + Ktor + repository, no UI
   composeApp/     Compose MP: Android phone + iOS
   tv/             Android TV, D-pad focus
 ```
+
+`android/` and `clients/` are **two separate Gradle projects**, on purpose: the
+native app was decided from scratch, Android only, and it does not import the
+KMP's `commonMain`. Each has its own wrapper and version catalogue; the KMP
+stays parked where it is.
+
+The app's specification lives in [`docs/APP-ANDROID.md`](docs/APP-ANDROID.md)
+(in Portuguese), and it is at phase 0: it builds, it installs, and it opens a
+screen that says it is a skeleton.
 
 Each of the eleven screens has an address, in Portuguese like the rest of the
 project — `/biblioteca`, `/colecoes`, `/locadora`, `/guia`, `/ao-vivo`,

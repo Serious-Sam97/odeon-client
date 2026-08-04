@@ -52,11 +52,21 @@ de login deixa trocar de servidor à mão.
 ```
 web/              React + TS + Vite — as onze telas
   src/api.ts      o contrato com o servidor, escrito à mão
+android/          o app Android nativo (ver android/README.md)
+  app/            Kotlin + Compose · minSdk 26 · celular e tablet
 clients/          Kotlin Multiplatform (ver clients/README.md)
   shared/         modelos + Ktor + repositório, sem UI
   composeApp/     Compose MP: celular Android + iOS
   tv/             Android TV, foco por D-pad
 ```
+
+`android/` e `clients/` são **dois projetos Gradle diferentes**, e é de
+propósito: o app nativo foi decidido do zero, só Android, e não importa o
+`commonMain` do KMP. Cada um tem o seu wrapper e o seu catálogo de versões; o
+KMP fica parado onde está.
+
+A espec do app está em [`docs/APP-ANDROID.md`](docs/APP-ANDROID.md), e ele está
+na fase 0: compila, instala e abre uma tela que diz que é um esqueleto.
 
 **`web/src/api.ts` é a única cópia de contrato que existe** — e ela já era uma
 cópia antes de os repositórios se separarem. Não há tipo compartilhado, não há

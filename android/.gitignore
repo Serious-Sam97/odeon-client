@@ -1,0 +1,42 @@
+# O que o build do Android produz, e que não vai pro repositório.
+#
+# O `.gitignore` da raiz já cobre o `clients/` (o KMP). Este cobre o projeto
+# Gradle daqui, que é outro — outro wrapper, outro catálogo, outro `build/`.
+
+# ------------------------------------------------------------------- o Gradle
+.gradle/
+build/
+*/build/
+
+# Ele aponta pro SDK numa máquina específica. Aqui o SDK está no container, em
+# `ANDROID_HOME`, e nenhum caminho de host tem o que fazer neste repositório.
+local.properties
+
+# ------------------------------------------------------------------ o Kotlin
+.kotlin/
+
+# ---------------------------------------------------------------- o resultado
+#
+# Um APK versionado é um binário de 30 MB que muda a cada commit e que ninguém
+# consegue revisar. Quem quiser um, compila — ou pega o assinado, quando houver
+# publicação (§7 da espec, ainda em aberto).
+*.apk
+*.aab
+
+# --------------------------------------------------------------- a assinatura
+#
+# A chave que assina o release NUNCA entra aqui.
+#
+# Este repositório é **público**, e o susto já aconteceu uma vez: um backup de
+# `.env` com a chave do TMDB, a do Groq e a senha do Postgres entrou num `git
+# add` a caminho do push, e foi pego no crivo. Uma chave de assinatura vazada é
+# pior — ela deixa qualquer um publicar um APK que o Android aceita como sendo
+# este app.
+*.jks
+*.keystore
+keystore.properties
+
+# ------------------------------------------------------------------ editores
+.idea/
+*.iml
+.cxx/

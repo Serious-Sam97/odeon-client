@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Idêntico ao `ic_launcher.xml`, e é o certo. Ver lá a nota sobre por que esta
+  pasta não leva o qualificador `-v26`.
+
+  `android:roundIcon` é de quando o Android pedia um PNG já recortado em
+  círculo. Com ícone adaptativo quem recorta é o sistema, então o mesmo desenho
+  serve às duas entradas — e o manifesto declara as duas porque alguns
+  lançadores ainda procuram a segunda.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/fundo_do_icone" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

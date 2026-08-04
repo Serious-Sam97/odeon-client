@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  As cores que o **sistema** precisa em XML: o fundo da janela antes do Compose,
+  e o fundo do ícone adaptativo.
+
+  A paleta de verdade — a que a interface usa — está em `ui/Tema.kt`, em Kotlin.
+  Estas três são as que não têm como estar lá, porque quem as lê é o Android e
+  não o app.
+
+  Todas saem do `web/src/styles.css`. Mudar uma aqui sem mudar lá faz o app
+  abrir numa cor e continuar em outra.
+
+  Nota de sintaxe: as variáveis do CSS aparecem abaixo **sem os dois hifens
+  iniciais**. Não é descuido — o XML proíbe dois hifens seguidos dentro de um
+  comentário, e escrevê-los faz o `mergeResources` falhar. Custou um build.
+-->
+<resources>
+    <!-- a variável `bg` -->
+    <color name="fundo">#0A0A0C</color>
+    <!-- a variável `accent`: o dourado do filamento -->
+    <color name="destaque">#E0B062</color>
+    <!-- a variável `bg-sunken`: o fundo do ícone adaptativo, um degrau mais fundo -->
+    <color name="fundo_do_icone">#050507</color>
+</resources>

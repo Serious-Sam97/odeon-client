@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O ícone, e ele é **provisório** — dito para não passar por decidido.
+
+  A espec deixa a identidade em aberto (§7: «Nome e identidade do módulo.
+  `dev.odeon.android`? E o ícone?»). O nome foi fechado; o desenho não. O que
+  está aqui é o mínimo pra o app ter um ícone que não é o robozinho verde
+  genérico: um carretel visto de frente, no dourado da casa.
+
+  ## As medidas, que não são escolha
+
+  O ícone adaptativo é 108x108dp, e o sistema recorta em máscaras diferentes
+  conforme o fabricante — círculo, quadrado arredondado, gota. Só os **72dp
+  centrais** sobrevivem a todas: é a "zona segura", e é por isso que o carretel
+  tem raio 26 num viewport de 108 em vez de encostar na borda.
+
+  Desenhar até a borda é como um ícone fica com o topo cortado num aparelho e
+  inteiro noutro.
+
+  ## A cor vem de `@color/destaque`, e não do hexadecimal
+
+  Estava escrita como `#E0B062` aqui dentro, o que fazia duas coisas ruins: o
+  dourado da casa passava a ter duas fontes, e o lint apontava
+  `R.color.destaque` como recurso não usado — o aviso estava certo, e o defeito
+  não era o recurso sobrando, era este arquivo não o usando.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- O aro do carretel. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/destaque"
+        android:strokeWidth="6"
+        android:pathData="M 54,28 A 26,26 0 1 1 53.99,28 Z" />
+
+    <!-- O eixo, no centro. -->
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 54,47 A 7,7 0 1 1 53.99,47 Z" />
+
+    <!-- Os quatro vazios do carretel, em cruz. -->
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 54,30.5 A 5.5,5.5 0 1 1 53.99,30.5 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 54,66.5 A 5.5,5.5 0 1 1 53.99,66.5 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 36,48.5 A 5.5,5.5 0 1 1 35.99,48.5 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 72,48.5 A 5.5,5.5 0 1 1 71.99,48.5 Z" />
+
+</vector>

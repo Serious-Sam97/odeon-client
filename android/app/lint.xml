@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O que o lint pode calar, e o motivo de cada um.
+
+  ## Por que aqui, e não `lint { disable += ... }` no Gradle
+
+  Desligar uma regra no `build.gradle.kts` a desliga no **módulo inteiro**. Este
+  arquivo desliga por caminho, o que é a diferença entre "esta pasta tem um
+  motivo" e "não queremos mais ouvir sobre isso".
+
+  E o `abortOnError` continua ligado: lint que reprova build é lint que serve.
+  Já valeu a pena uma vez — foi ele que pegou o `uses-feature` de leanback no
+  manifesto, que dizia fazer o oposto do que fazia.
+-->
+<lint>
+
+    <!--
+      ## `ObsoleteSdkInt` na pasta do ícone
+
+      O aviso diz que `mipmap-anydpi-v26` é redundante com `minSdk` 26 e manda
+      renomear pra `mipmap-anydpi`.
+
+      **Medido com AGP 9.3.1 / build-tools 37.0.0: seguir o conselho quebra o
+      build.** Sem o `-v26`, o merge de recursos descarta a pasta — os XML não
+      chegam em `merged_res/` — e o AAPT reprova:
+
+          error: resource mipmap/ic_launcher not found
+
+      O experimento foi feito nos dois sentidos, com `build/` apagado entre eles,
+      pra descartar cache. Ver o comentário dentro do próprio `ic_launcher.xml`.
+
+      Só esta pasta está isenta. Em `values-v27/` o mesmo aviso não aparece — e
+      se aparecesse, seria pra ouvir.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+
+</lint>

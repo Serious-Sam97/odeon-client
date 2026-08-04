@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  `windowLightNavigationBar` só existe de API 27 em diante, e o `minSdk` é 26.
+
+  Declará-lo no `values/themes.xml` faria o lint reclamar em todo build, e o
+  aviso que se aprende a ignorar é o aviso que deixa de servir. Aqui ele vale
+  onde existe, e some onde não existe — sem ninguém precisar ignorar nada.
+-->
+<resources>
+    <style name="Theme.Odeon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

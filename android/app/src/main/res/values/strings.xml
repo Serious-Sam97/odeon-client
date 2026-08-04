@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O texto do app fica aqui, em português, que é o idioma do projeto.
+
+  Não há `values-en/` e isso é de propósito: traduzir uma tela que ainda muda
+  toda semana é escrever a tradução de um texto que vai mudar. Quando o app
+  parar de se mexer, e havendo quem queira em inglês, este arquivo é o molde.
+
+  ## Por que só o nome do app está aqui
+
+  O resto do texto da fase 1 é frase de erro, e frase de erro é **decidida onde
+  o erro acontece** — o `ModeloDeLogin` sabe quais endereços foram tentados, e
+  "não respondeu em https://rog:8443 nem http://rog:8080" não é um recurso
+  estático: é uma frase montada com o que se sabe naquele instante.
+
+  Mandá-la pra cá viraria um `%1$s` que esconde justamente a parte útil.
+-->
+<resources>
+    <string name="nome_do_app">Odeon</string>
+</resources>

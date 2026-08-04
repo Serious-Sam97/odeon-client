@@ -155,31 +155,63 @@ em teste até um aparelho específico travar.
 O Media3 não é caixa-preta: `Renderer`, `DataSource`, `MediaSource` e o seletor
 de faixa são substituíveis. Faltando alguma coisa, troca-se **a peça**.
 
-### Offline na v1, e a pergunta que ele abre
+### Offline na v1, e a fita vencida
 
-**Decidido.** E é a decisão que mais muda este documento: puxa banco local
-(Room), fila de download com retomada, e política de espaço.
+**Decidido.** É a decisão que mais muda este documento: puxa banco local (Room),
+fila de download com retomada e política de espaço.
 
-**E abre uma pergunta que não é técnica, e continua em aberto:**
+E abre uma pergunta de produto, que também está decidida:
 
 > *O que acontece com um filme baixado quando o empréstimo vence e o aparelho
 > está sem rede?*
 
-A escassez (§66) decide o acesso pelo empréstimo **em aberto**, e o servidor
-revoga no mesmo instante em que a fita volta — sem revogação em separado, porque
-`devolvido_em IS NULL` é a autorização inteira. Um arquivo no disco do celular
-não tem como saber disso.
+**Decidido: o prazo viaja com o arquivo.** O download guarda o `vence_em`, e o
+app para de tocar quando ele passa — mesmo offline, mesmo sem nunca ter falado
+com o servidor de novo.
 
-As saídas não são equivalentes, e nenhuma é neutra:
+A escassez (§66) decide o acesso pelo empréstimo em aberto, e o servidor revoga
+no instante em que a fita volta, sem revogação em separado. Um arquivo no disco
+do celular não tem como saber disso — então ele carrega a única coisa que dá
+pra saber de antemão: **quando acaba**.
 
-| | |
+#### O que essa escolha NÃO garante, e precisa estar escrito
+
+**Ela honra o prazo, não a escassez.** São coisas diferentes:
+
+| | o offline sabe? |
 |---|---|
-| o download carrega um prazo e para de tocar sozinho | honra a escassez, e o aparelho vira juiz de uma regra que é do servidor |
-| o baixado toca até você reconectar | honesto sobre quem manda, e abre uma janela em que a fita "voltou" e continua tocando |
-| só baixa o que está emprestado, e apaga na devolução | exige rede pra apagar — o que é o mesmo problema com outro nome |
+| o prazo de 7 dias venceu | **sim** — a data viajou junto |
+| você devolveu antes, de outro aparelho | não |
+| alguém pediu de volta e você aceitou | não |
+| o administrador desligou a escassez | não |
 
-**Fica pra quem decide.** É a mesma classe da decisão do §66 (a regra vale pro
-admin), e por isso não é minha.
+Ou seja: uma fita devolvida cedo continua tocando no celular offline até a data
+original. **Isso é vazamento, e é aceito** — o alternativo seria o aparelho
+consultar o servidor pra tocar, que é exatamente o que "offline" nega.
+
+#### O relógio, que é a parte frágil
+
+O celular decide pela **hora dele**, e a hora dele é editável. Atrasar o relógio
+estenderia o empréstimo.
+
+**Proposto:** guardar junto o **maior instante já visto** — do relógio e de todo
+cabeçalho `Date` que o servidor mandou. Se a hora atual for menor que esse
+máximo, vale o máximo. O relógio pode andar pra frente à vontade; pra trás, não
+anda.
+
+Não é criptografia, e não pretende ser: quem quer burlar o próprio servidor de
+casa consegue de dez jeitos. É o suficiente pra o acidente — fuso trocado,
+relógio errado depois de bateria zerada — não virar bloqueio nem brecha.
+
+#### E o arquivo, apaga?
+
+**Proposto: não.** Vencido, ele para de tocar e fica no disco marcado como
+vencido. Se você pegar a fita de novo, volta a tocar **sem baixar de novo** — e
+um filme de 4 GB rebaixado por causa de um empréstimo que voltou é o tipo de
+coisa que faz alguém desligar o offline.
+
+Quem apaga é você, na tela de downloads, ou a política de espaço quando o disco
+apertar.
 
 ### Sem TV, e é decisão
 
@@ -334,7 +366,7 @@ faz que um navegador no sofá não faz*.
 | **3** | **continuar de onde parou** | é o que o celular faz melhor que tudo: você parou na TV e continua no ônibus. `/api/continue` + `playback` |
 | **4** | **mandar pra TV (Cast)** | logo depois do player, e de propósito: escrito contra `Player`, é trocar a instância. Adiado, vira reescrita |
 | **5** | **a locadora** | é a alma do produto, e é onde a v1 deixa de ser "um Jellyfin bonito" |
-| **6** | **baixar pra ver sem rede** | decidido pra v1, e é o que mais separa este app da web. Depende da resposta sobre a fita vencida |
+| **6** | **baixar pra ver sem rede** | decidido pra v1, e é o que mais separa este app da web. O prazo viaja com o arquivo (§4) |
 | **7** | **para você** | recomendação com motivo, que é a tese do projeto numa tela só |
 
 Dentro da fase 2 (**assistir**) entram PiP e sessão de mídia. Eles não são
@@ -369,8 +401,6 @@ Medido, e vale saber antes de escrever a primeira tela:
   contrato da API vira uma cópia a mais.
 - **Publicação.** Play Store exige conta, política de privacidade e revisão. Um
   APK assinado distribuído por link não exige nada disso.
-- **A fita vencida sem rede** (§4). É a única pergunta do §4 que sobrou, e é a
-  que trava a fase 5.
 - **Cast fora de casa.** Ele entra na v1 como recurso de rede local (§4c). Levar
   pra fora exige o servidor publicamente alcançável — decisão de infraestrutura,
   não de app.

@@ -2,6 +2,11 @@ package dev.odeon.android.ui.locadora
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -204,6 +209,58 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
     /// A espessura da caixa, na proporção da web: 28 de 104 é 27%.
     val espessura = 38.dp
 
+    /// ## Arrastar pra baixo devolve a fita — R8
+    ///
+    /// É o gesto que fecha a metáfora: a caixa **volta pra estante**, e a mão
+    /// faz o movimento em vez de procurar um botão.
+    ///
+    /// ### ⚠️ Ele só existe nas minhas
+    ///
+    /// `aoDevolver` é nulo nas caixas dos outros, e aí nem o detector é montado.
+    /// Um arrasto que devolvesse a fita de alguém seria o §11 na pior versão —
+    /// e "sem querer" não é desculpa quando o dado é de outra pessoa.
+    ///
+    /// ### O limite é alto de propósito, e a tela avisa antes
+    ///
+    /// 96dp é quase metade da altura da caixa. Um limite curto transformaria
+    /// qualquer rolagem mal-agarrada numa devolução — e devolver **escreve no
+    /// acervo de três pessoas**, então o gesto tem que ser deliberado.
+    ///
+    /// E ele não é secreto: a caixa acompanha o dedo, e passado o limite aparece
+    /// a frase "solte pra devolver". Gesto escondido que faz coisa grave é o §8b
+    /// ao contrário — errar em silêncio é ruim, mas acertar em silêncio numa
+    /// ação destrutiva é pior.
+    ///
+    /// ### ⚠️ Ele é o ÚNICO item desta leva que **não foi visto rodando**
+    ///
+    /// O código está escrito, compila e passa no lint. Mas exercitá-lo exige uma
+    /// fita emprestada na tela, e em 04/08/2026 não deu pra conseguir uma: uma
+    /// tentativa de pegar voltou **HTTP 403** do servidor, e as seguintes não
+    /// registraram no automatismo de toque.
+    ///
+    /// Fica registrado assim de propósito. A lição mais cara deste projeto é que
+    /// «compilar e passar no lint não é ter visto», e a pior coisa que este
+    /// comentário poderia fazer é deixar o próximo achar que foi.
+    ///
+    /// **O que falta conferir:** que o limite de 96dp não dispara sem querer ao
+    /// rolar, que a frase aparece antes do fato, e que a fita some da prateleira
+    /// ao soltar.
+    ///
+    /// ### O que ele custa, e vale dizer
+    ///
+    /// A tela rola na vertical, e um arrasto vertical que começa **na caixa**
+    /// passa a ser dela. Ou seja: não dá pra rolar a página agarrando uma caixa
+    /// minha — tem que agarrar o resto da tela. É o preço do gesto, e é o mesmo
+    /// que qualquer app de lista com deslizar-pra-apagar paga.
+    var arrasto by remember { mutableFloatStateOf(0f) }
+    val limiteDeDevolucao = with(LocalDensity.current) { 96.dp.toPx() }
+    val passouDoLimite = arrasto > limiteDeDevolucao
+    val descida by animateFloatAsState(
+        targetValue = arrasto,
+        animationSpec = spring(),
+        label = "descida da caixa",
+    )
+
     Column(
         modifier = Modifier.width(140.dp + espessura),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -212,6 +269,39 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
             modifier = Modifier
                 .width(140.dp + espessura)
                 .aspectRatio((140f + 38f) / 210f)
+                /// A caixa desce com o dedo e desbota — o desbotar é o que diz
+                /// "isto está saindo daqui" sem escrever nada.
+                .graphicsLayer {
+                    translationY = descida
+                    alpha = 1f - (descida / (limiteDeDevolucao * 2f)).coerceIn(0f, 0.45f)
+                }
+                .then(
+                    if (aoDevolver == null || devolvendo) {
+                        Modifier
+                    } else {
+                        Modifier.pointerInput(fita.id) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    if (arrasto > limiteDeDevolucao) {
+                                        /// A batida da R5 no fim do gesto —
+                                        /// a mesma de tocar em "devolver".
+                                        haptico.performHapticFeedback(
+                                            HapticFeedbackType.LongPress,
+                                        )
+                                        aoDevolver()
+                                    }
+                                    arrasto = 0f
+                                },
+                                onDragCancel = { arrasto = 0f },
+                                onVerticalDrag = { _, delta ->
+                                    /// Só pra baixo: arrastar pra cima não
+                                    /// desdevolve nada, então não move nada.
+                                    arrasto = (arrasto + delta).coerceAtLeast(0f)
+                                },
+                            )
+                        }
+                    },
+                )
                 /// ⚠️ **O giro é do objeto inteiro, e mora aqui — não na capa.**
                 ///
                 /// A primeira versão punha o `giro` na `rotationY` da capa, que
@@ -417,13 +507,23 @@ private fun Caixa(fita: Emprestada, arte: String?, aoDevolver: (() -> Unit)?, de
             }
         }
 
-        Text(
-            text = fita.titulo,
-            style = MaterialTheme.typography.bodySmall,
-            color = Cores.texto,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        /// A frase só aparece depois do limite, e é o aviso antes do fato.
+        if (passouDoLimite) {
+            Text(
+                text = "solte pra devolver",
+                style = MaterialTheme.typography.labelSmall,
+                color = Cores.destaque,
+                maxLines = 1,
+            )
+        } else {
+            Text(
+                text = fita.titulo,
+                style = MaterialTheme.typography.bodySmall,
+                color = Cores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

@@ -13,6 +13,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
@@ -37,6 +47,7 @@ import dev.odeon.android.dados.ArquivoDeMidia
 import dev.odeon.android.dados.PlanoDeReproducao
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.MolduraDoCartaz
+import dev.odeon.android.ui.inclinacao
 import dev.odeon.android.ui.PilulaDeEtiqueta
 import dev.odeon.android.ui.corDeHex
 
@@ -90,13 +101,110 @@ fun TelaDaObra(
         return
     }
 
+    /// A paralaxe da R8: a arte se move dentro da moldura conforme o aparelho
+    /// inclina. Ver `Inclinacao.kt` — inclusive o porquê de ela sumir sozinha
+    /// pra quem desligou animação no sistema.
+    val tilt by inclinacao()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        /// O backdrop, **borda a borda** — R8.
+        ///
+        /// ## Ele sobe até debaixo da barra de status, e o texto não
+        ///
+        /// É a única forma de "borda a borda" que vale a pena: arte encostando
+        /// no topo do vidro, e **conteúdo** respeitando as áreas seguras. Fazer
+        /// o contrário — texto sob o relógio — é borda a borda que ninguém
+        /// pediu.
+        ///
+        /// Por isso o `safeDrawingPadding` saiu do `AppOdeon` só pra esta tela:
+        /// lá ele empurrava a tela inteira, backdrop incluído, e uma arte que
+        /// começa 60dp abaixo do topo é uma arte com uma tarja preta em cima.
+        ///
+        /// ## Sem backdrop, isto não desenha nada
+        ///
+        /// §24. Uma faixa de 220dp vazia no topo de metade das fichas seria pior
+        /// que não ter faixa — e é metade mesmo: 8.598 das 17.930 obras não têm
+        /// arte nenhuma.
+        val backdrop = modelo.capa(obra.artwork["backdrop"])
+        if (backdrop != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    /// ⚠️ **`clipToBounds` é obrigatório aqui**, e o screenshot
+                    /// mostrou por quê: a arte é desenhada 4% maior pra a
+                    /// paralaxe ter folga, e sem recorte ela **vaza** os 220dp
+                    /// da faixa — aparecia uma tira de pôster solta abaixo do
+                    /// degradê, com uma aresta dura no meio da tela.
+                    .clipToBounds(),
+            ) {
+                AsyncImage(
+                    model = backdrop,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        /// A paralaxe: 6dp de deslocamento sobre uma arte 4%
+                        /// maior que a moldura. A folga é o que evita a borda
+                        /// aparecer quando a arte anda — sem ela, inclinar
+                        /// mostraria o fundo num dos lados.
+                        .graphicsLayer {
+                            translationX = tilt.x * 6.dp.toPx()
+                            translationY = tilt.y * 6.dp.toPx()
+                            scaleX = 1.04f
+                            scaleY = 1.04f
+                        },
+                )
+                /// A lavagem que dá chão ao que vem embaixo, e escurece a arte
+                /// sob a barra de status pros ícones do sistema continuarem
+                /// legíveis — que é a parte de "borda a borda" que costuma ser
+                /// esquecida.
+                /// A lavagem, e os três pontos dela têm motivo.
+                ///
+                /// | | por quê |
+                /// |---|---|
+                /// | topo a 55% | escurece a arte **sob a barra de status**, pros ícones do sistema continuarem legíveis — a parte de "borda a borda" que costuma ser esquecida |
+                /// | meio a 25% | o screenshot mostrou o problema: com o meio **transparente**, um backdrop claro (a neve do 007) vira uma faixa branca gritando no meio da tela escura |
+                /// | base opaca | é o que faz a faixa **acabar** em vez de ser cortada |
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            0f to Cores.fundo.copy(alpha = 0.55f),
+                            0.45f to Cores.fundo.copy(alpha = 0.25f),
+                            1f to Cores.fundo,
+                        ),
+                    ),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                /// ⚠️ **O topo sai do inset quando há backdrop**, e o screenshot
+                /// mostrou o defeito: com o `safeDrawing` inteiro, o conteúdo
+                /// ganhava a altura da barra de status **de novo**, embaixo de
+                /// uma faixa que já tinha passado por baixo dela. O resultado era
+                /// um vão de ~40dp entre a arte e o "‹ biblioteca".
+                ///
+                /// Sem backdrop o topo volta pro inset, porque aí não há nada
+                /// desenhado sob a barra de status pra abrir espaço.
+                .windowInsetsPadding(
+                    if (backdrop != null) {
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                        )
+                    } else {
+                        WindowInsets.safeDrawing
+                    },
+                )
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         TextButton(onClick = aoVoltar, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
             Text("‹ biblioteca", color = Cores.destaque)
         }
@@ -247,6 +355,7 @@ fun TelaDaObra(
             escolhido = estado.arquivo,
             aoEscolher = modelo::escolherArquivo,
         )
+        }
     }
 }
 

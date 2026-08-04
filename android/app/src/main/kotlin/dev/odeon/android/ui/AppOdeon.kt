@@ -266,7 +266,18 @@ fun AppOdeon() {
                         if (voltasDoPlayer > 0) modelo.relerSeJaTem()
                     }
                     BackHandler { onde = Onde.Biblioteca }
-                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    /// **Sem `safeDrawingPadding` aqui, e é a R8.**
+                    ///
+                    /// A ficha é borda a borda: o backdrop sobe até debaixo da
+                    /// barra de status. Com o padding neste `Box`, a arte
+                    /// começaria ~60dp abaixo do topo e a faixa de cima viraria
+                    /// uma tarja preta — que é o oposto do item.
+                    ///
+                    /// Quem respeita as áreas seguras agora é a **própria tela**,
+                    /// e só no conteúdo: `windowInsetsPadding` no `Column` de
+                    /// dentro, backdrop de fora. É o mesmo arranjo do player, que
+                    /// já dispensava o padding pelo mesmo motivo.
+                    Box(Modifier.fillMaxSize()) {
                         TelaDaObra(
                             modelo = modelo,
                             moldura = molduraDoCartaz,

@@ -11,7 +11,7 @@ de `web/` e `clients/`.
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
-**Estado: a v1 inteira está feita, e o redesenho entrou até a R8 pela metade.**
+**Estado: a v1 inteira está feita, e o redesenho entrou até a R8.**
 
 As sete fases da §5 da espec foram escritas **e vistas rodando em aparelho**,
 tela a tela — não só compiladas. O Cast é a única com ressalva: ele está escrito,
@@ -30,7 +30,12 @@ Depois delas entraram as **levas 1 a 4 do [`docs/REDESENHO.md`](docs/REDESENHO.m
 | R5 | a **fita vira coisa**: caixa em três quartos com lombada e verniz, e o háptico com dois pesos |
 | R7 | a **transição compartilhada** — o pôster tocado cresce e vira o pôster da ficha |
 | R6 | o **herói** do para-você, com as lâmpadas da marquise. O grão foi testado e **reprovou** |
-| R8 | **um quarto**: o detente háptico no seek. Giroscópio, borda a borda e o gesto de devolver ficaram |
+| R8 | o **corpo do aparelho**: paralaxe por acelerômetro na ficha, ficha borda a borda, e o detente háptico no seek |
+
+⚠️ **Um item do redesenho está escrito e não foi visto rodando**: o gesto de
+arrastar a caixa pra baixo pra devolver a fita (R8). Exercitá-lo exige uma fita
+emprestada na tela, e uma tentativa de pegar voltou HTTP 403 do servidor. Todo o
+resto foi percorrido em aparelho.
 
 ⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
 rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade

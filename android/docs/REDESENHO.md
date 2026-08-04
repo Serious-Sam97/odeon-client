@@ -463,10 +463,34 @@ não é opcional.
 > A chave que esta fase pede continua necessária **só pro giroscópio**, que lê
 > sensor e não passa por esse caminho.
 >
-> ### O que da R8 ainda não entrou
+> ### ✅ A R8 fechou — com um item declarado como não visto
 >
-> Paralaxe por giroscópio, borda a borda na ficha, e o gesto de arrastar a caixa
-> pra baixo pra devolver. Só o detente foi feito.
+> **Paralaxe.** O sensor certo é o **acelerômetro**, não o giroscópio: o
+> giroscópio mede velocidade angular, e integrar isso pra achar posição acumula
+> deriva em segundos. O acelerômetro em repouso mede a gravidade, e dela sai a
+> inclinação absoluta sem integrar nada. Verificado alimentando o emulador com
+> `adb emu sensor set acceleration`: entre −8 e +8 no eixo x a arte desloca
+> visivelmente dentro da moldura.
+>
+> A primeira leitura vira o zero, e não a vertical — senão quem lê deitado veria
+> o pôster encostado no canto o tempo todo.
+>
+> **A chave é lida à mão aqui**, e é o único lugar do redesenho onde precisou:
+> sensor não passa por `MotionDurationScale`. Com a preferência em zero o
+> listener **nem é registrado** — não é o valor que vira zero, é o sensor que não
+> liga.
+>
+> **Borda a borda.** O backdrop sobe até debaixo da barra de status; o conteúdo
+> respeita as áreas seguras. Três defeitos que o screenshot pegou: a arte 4%
+> maior pra a paralaxe **vazava** os 220dp sem `clipToBounds`; o `safeDrawing`
+> inteiro no conteúdo abria um vão de 40dp porque somava a barra de status **de
+> novo**; e com o meio do degradê transparente, um backdrop claro virava uma
+> faixa branca gritando.
+>
+> **⚠️ O gesto de devolver está escrito e NÃO foi visto rodando.** Exercitá-lo
+> exige uma fita emprestada na tela, e não deu pra conseguir uma: uma tentativa
+> de pegar voltou **HTTP 403** do servidor. É o único item de todo o redesenho
+> nessa condição, e está marcado no comentário do `Caixa`.
 
 ---
 

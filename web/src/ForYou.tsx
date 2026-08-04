@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import Desafios from "./Desafios";
-import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useTocarOuPegar } from "./liberadas";
 import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
@@ -359,9 +358,6 @@ function HeroCard({
   onPlay: (w: WorkListItem) => void;
   onChanged: () => void;
 }) {
-  /// R50 — tocar, ou levar onde a fita se pega.
-  const { pode, aoClicar } = useTocarOuPegar(onPlay);
-  const liberada = pode(item);
 
   const art = wideArt(item);
   const [principal, ...resto] = item.reasons;
@@ -374,9 +370,9 @@ function HeroCard({
 
       <div className="hero-inner">
         <button
-          className={liberada ? "hero-poster" : "hero-poster pegar"}
-          onClick={() => aoClicar(item)}
-          title={liberada ? item.title : POR_QUE_PEGAR}
+          className="hero-poster"
+          onClick={() => item.media_file_id && onPlay(item)}
+          title={item.title}
         >
           {item.poster && <img src={api.artworkUrl(item.poster)} alt="" />}
         </button>
@@ -395,22 +391,18 @@ function HeroCard({
           )}
 
           <div className="hero-actions">
-            {/* R50 — com a escassez ligada o botão continua existindo e muda
-                de destino. Desabilitá-lo diria "não" sem dizer onde se resolve,
-                que é a parede que o §35 recusou. */}
+            {/* R56 — o botão voltou a ter um destino só. O "pegar na locadora"
+                que ele virava com a escassez ligada saiu com a regra (§71).
+
+                O único "não" que sobrou é o de obra sem arquivo, e esse diz por
+                quê: um botão apagado sem explicação é o §8b. */}
             <button
-              className={liberada ? "play" : "play pegar"}
-              onClick={() => aoClicar(item)}
-              disabled={liberada && !item.media_file_id}
-              title={
-                !liberada
-                  ? POR_QUE_PEGAR
-                  : item.media_file_id
-                    ? undefined
-                    : "nenhum arquivo tocável nesta obra"
-              }
+              className="play"
+              onClick={() => item.media_file_id && onPlay(item)}
+              disabled={!item.media_file_id}
+              title={item.media_file_id ? undefined : "nenhum arquivo tocável nesta obra"}
             >
-              {liberada ? "▸ Assistir" : `▸ ${PEGAR_NA_LOCADORA}`}
+              ▸ Assistir
             </button>
             <Feedback id={item.id} onChanged={onChanged} />
           </div>
@@ -436,16 +428,12 @@ function PickCard({
   rank: number;
   onPlay: (w: WorkListItem) => void;
 }) {
-  /// R50 — tocar, ou levar onde a fita se pega.
-  const { pode, aoClicar } = useTocarOuPegar(onPlay);
-  const liberada = pode(item);
 
   return (
     <article className="pick" style={tintOf(item)}>
       <button
-        className={liberada ? "pick-art" : "pick-art pegar"}
-        onClick={() => aoClicar(item)}
-        title={liberada ? undefined : POR_QUE_PEGAR}
+        className="pick-art"
+        onClick={() => item.media_file_id && onPlay(item)}
       >
         <span className="pick-rank">{rank}</span>
         {item.poster ? (
@@ -475,17 +463,13 @@ function QueueRow({
   rank: number;
   onPlay: (w: WorkListItem) => void;
 }) {
-  /// R50 — tocar, ou levar onde a fita se pega.
-  const { pode, aoClicar } = useTocarOuPegar(onPlay);
-  const liberada = pode(item);
 
   return (
     <div className="qrow" style={tintOf(item)}>
       <span className="qrank">{String(rank).padStart(2, "0")}</span>
       <button
-        className={liberada ? "qposter" : "qposter pegar"}
-        onClick={() => aoClicar(item)}
-        title={liberada ? undefined : POR_QUE_PEGAR}
+        className="qposter"
+        onClick={() => item.media_file_id && onPlay(item)}
       >
         {item.poster ? (
           <img src={api.artworkUrl(item.poster)} alt="" loading="lazy" />
@@ -609,9 +593,6 @@ function CartaoSimples({
   onPlay: (w: WorkListItem) => void;
   progresso?: boolean;
 }) {
-  /// R50 — tocar, ou levar onde a fita se pega.
-  const { pode, aoClicar } = useTocarOuPegar(onPlay);
-  const liberada = pode(work);
 
   const arte = progresso ? (work.still ?? work.backdrop ?? work.poster) : work.poster;
   const feito =
@@ -621,9 +602,8 @@ function CartaoSimples({
 
   return (
     <button
-      className={liberada ? "pv-card" : "pv-card pegar"}
-      onClick={() => aoClicar(work)}
-      title={liberada ? undefined : POR_QUE_PEGAR}
+      className="pv-card"
+      onClick={() => work.media_file_id && onPlay(work)}
     >
       <span className="pv-arte">
         {arte && <img src={api.artworkUrl(arte)} alt="" loading="lazy" />}

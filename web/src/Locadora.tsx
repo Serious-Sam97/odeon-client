@@ -13,7 +13,19 @@ import { duracao, ficha, paraLista } from "./Details";
 import { RuidoDeFita } from "./RuidoDeFita";
 import MenuDVD from "./MenuDVD";
 import { useArrastoDeFileira } from "./arrasto";
-import { POR_QUE_PEGAR } from "./liberadas";
+
+/// Por que uma caixa que não está com você não abre — **aqui dentro**.
+///
+/// ## Ela morava em `liberadas.ts`, e mudou de dono na R56
+///
+/// A R50 espalhou esta frase por nove telas, porque a regra valia em nove. A
+/// R56 devolveu a biblioteca ao modo livre (§71) e a exigência ficou sendo o que
+/// o pedido dizia desde o começo: uma regra **da locadora**.
+///
+/// Com um lugar só, ela mora no lugar. O arquivo que a guardava existia pra
+/// sincronizar a resposta entre telas que não perguntam mais.
+const POR_QUE_PEGAR =
+  "a locadora está no modo escassez: uma cópia por caixa, e assistir exige pegar a fita";
 
 /// A locadora: a biblioteca vista como uma loja de aluguel.
 ///

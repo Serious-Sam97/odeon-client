@@ -6,7 +6,6 @@ import Details, { paraLista } from "./Details";
 import Admin from "./Admin";
 import Avatar from "./Avatar";
 import { useArrastoDeFileira } from "./arrasto";
-import { conferirLiberada } from "./liberadas";
 import Gerenciar from "./Gerenciar";
 import Guia from "./Guia";
 import Locadora from "./Locadora";
@@ -524,23 +523,24 @@ export default function App() {
     });
   }, [me, recarregarSala]);
 
-  /// R50 — o funil de dar play, e ele é a **garantia**.
+  /// Dar play. **R56: sem funil, porque não há mais o que afunilar.**
   ///
-  /// Os nove botões já não oferecem o que a regra nega (§53) — mas eles decidem
-  /// com o que a loja local sabia no último quadro. Aqui a pergunta é refeita
-  /// antes de abrir o vídeo, e um "não" leva **pra locadora** em vez de virar um
-  /// 403 dentro do player.
+  /// A R50 punha aqui um `conferirLiberada` que reperguntava ao servidor antes
+  /// de abrir o vídeo e, num "não", desviava pra locadora. Era a garantia de que
+  /// nenhum dos nove botões abriria um player sem bytes.
   ///
-  /// Sem isto, a corrida existiria de verdade: alguém devolve a sua fita pelo
-  /// "pedir de volta", o evento ainda não chegou, e o clique abriria um player
-  /// que não recebe bytes — a pior forma de dizer não, porque parece defeito.
-  const tocar = useCallback((w: WorkListItem) => {
-    void conferirLiberada(w.id).then((ok) => {
-      if (ok) return setPlaying(w);
-      setPlaying(null);
-      navigate(CAMINHO_DE.locadora);
-    });
-  }, [navigate]);
+  /// A R56 desfez a regra que ele guardava: **a biblioteca é modo livre**. Um
+  /// morador toca o que quiser, e o servidor não nega mais — então uma pergunta
+  /// que só pode ser respondida com "sim" é uma ida à rede antes de todo play,
+  /// pra nada.
+  ///
+  /// O que sobrou de "não" é do `guest`, e ele nunca passou por aqui: a
+  /// biblioteca de convidado já é filtrada antes, e o 403 do servidor continua
+  /// de pé pra ele.
+  ///
+  /// A locadora não perdeu nada — ela nunca usou este caminho. Os botões dela
+  /// decidem com `comigo`, que é o estado da caixa na sua mão.
+  const tocar = useCallback((w: WorkListItem) => setPlaying(w), []);
 
   useEffect(() => {
     if (!auth.token()) {

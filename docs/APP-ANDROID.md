@@ -174,6 +174,25 @@ no instante em que a fita volta, sem revogação em separado. Um arquivo no disc
 do celular não tem como saber disso — então ele carrega a única coisa que dá
 pra saber de antemão: **quando acaba**.
 
+> ### ⚠️ Em aberto: o §71 abalou a premissa desta decisão
+>
+> Em 04/08/2026 a escassez **deixou de decidir o acesso** — a biblioteca virou
+> modo livre, e a exigência de empréstimo ficou sendo regra da locadora (§71).
+>
+> Isso desmonta o raciocínio acima para o **morador**: se ele toca qualquer coisa
+> online sem empréstimo, um arquivo baixado que **para** de tocar quando o prazo
+> vence é o app sendo mais restrito offline do que online. Ninguém pede um
+> aparelho que trava o que a rede libera.
+>
+> Sobram três caminhos, e a escolha é do dono:
+>
+> 1. **O prazo só vale pro `guest`**, que é pra quem a regra ainda existe
+> 2. **O prazo vale pra quem baixou pela locadora**, e não pra quem baixou pela
+>    biblioteca — o app sabe de onde veio, mesmo que o servidor não saiba
+> 3. **O prazo some**, e o download é livre como a biblioteca
+>
+> Nada disso bloqueia as fases 1 a 5. Precisa estar decidido **antes** da fase 6.
+
 #### O que essa escolha NÃO garante, e precisa estar escrito
 
 **Ela honra o prazo, não a escassez.** São coisas diferentes:
@@ -388,7 +407,7 @@ Medido, e vale saber antes de escrever a primeira tela:
 | **o endereço da API** | a web deduz da página; no app é o usuário digitando o host, e os clientes Kotlin **já tentam https antes de http** |
 | **o token de mídia** | é separado do de sessão e curto (8h). E **emitir um novo aposenta o anterior** (§43) — um app que renova no meio de um filme derruba o próprio player |
 | **o barramento** | `/api/events` é SSE, e o token vai na query porque `EventSource` não manda header. **Uma conexão pro app inteiro** (§62) |
-| **a escassez** | com ela ligada, assistir exige empréstimo em aberto — inclusive para o admin (§66). O app tem que perguntar `locadora/liberadas` antes de oferecer play, ou vai mostrar um botão que leva 403 |
+| **a escassez** | ⚠️ **revogado em 04/08/2026 (§71).** Ela exigia empréstimo em aberto pra assistir, inclusive para o admin (§66) — e o app tinha que perguntar `locadora/liberadas` antes de oferecer play. Não mais: **a biblioteca é modo livre**, e a exigência ficou sendo regra da locadora. O `guest` não mudou, e a rota continua existindo pra fase 5 |
 | **o preview de seek** | é uma folha de sprites, uma imagem por arquivo. O app baixa uma vez e arrasta sem nenhuma requisição |
 
 ---

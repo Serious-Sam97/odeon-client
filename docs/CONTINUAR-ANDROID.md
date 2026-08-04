@@ -390,9 +390,31 @@ você.
 O servidor fica no `serious-server` e você não vai mexer nele daí — mas estas
 explicam sintomas que aparecem no app.
 
-**A escassez está ligada.** Assistir exige empréstimo em aberto, **inclusive pro
-admin** (§66). Perguntar `/api/locadora/liberadas` **antes** de desenhar o botão
-de play, ou a tela oferece um 403. Isso morde na fase 2.
+**A escassez NÃO barra mais o play, e isso mudou depois do seu pedido.**
+
+Este documento dizia, até 04/08/2026, que assistir exigia empréstimo em aberto
+inclusive pro admin (§66), e que o app tinha que perguntar
+`/api/locadora/liberadas` antes de desenhar o botão de play. **Estava certo, e
+deixou de estar.**
+
+Você reportou que `/api/playback/{arquivo}/plan` negava com 403 e travava a fase
+2 inteira. O dono decidiu: *"a biblioteca é um modo livre"* — a exigência de
+empréstimo era pra valer **dentro da locadora**, não sobre os bytes. O §71
+registra a mudança e o porquê.
+
+O que isso significa pra você:
+
+- **não pergunte `liberadas` antes de desenhar o play.** Um morador (`admin` ou
+  `user`) toca qualquer coisa, com a escassez ligada ou não
+- `/plan` e `/session` não negam mais por empréstimo
+- a rota `/api/locadora/liberadas` **continua existindo** e continua verdadeira —
+  ela diz quais obras os seus empréstimos cobrem. Serve à locadora (fase 5), não
+  ao player
+- o 403 sobrou pro `guest`, que nunca foi dono do disco. Se o app um dia entrar
+  com conta de convidado, a regra vale
+
+Medido em 04/08/2026: `sam`, em *007: A Serviço Secreto de Sua Majestade*, sem
+empréstimo e com a escassez ligada — antes `false`, agora `true`.
 
 **O token de mídia é separado e curto (8h).** Vai em `?token=` na URL porque
 `<img>` e o player não mandam header. **Emitir um novo aposenta o anterior**

@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useLiberadas } from "./liberadas";
 import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
@@ -634,14 +632,11 @@ function Cabeca({
 
   const tocar = () => onPlay?.(paraLista(work, arquivo, serie));
 
-  /// R50 — esta obra está liberada pra mim agora?
-  const { pode } = useLiberadas();
-  const liberada = pode(work.id);
-  const navegar = useNavigate();
-  const onLocadora = () => {
-    onClose();
-    navegar("/locadora");
-  };
+  /// R56 — a ficha é biblioteca, e biblioteca é modo livre.
+  ///
+  /// Havia aqui um `useLiberadas()` que trocava o ▸ assistir por um "pegar na
+  /// locadora" quando a fita não estava com você. A regra saiu (§71): o
+  /// empréstimo é da brincadeira da locadora, não um cadeado sobre a ficha.
 
   return (
     <>
@@ -673,25 +668,16 @@ function Cabeca({
           <p className="cartaz-linha">{linha}</p>
 
           <div className="cartaz-acoes">
-            {/* R50 — com a escassez ligada, o ▸ assistir vira a porta da
-                locadora. Não é o mesmo botão desabilitado: um botão apagado
-                convida a tentar, e este **leva onde se resolve** (§53). */}
-            {liberada ? (
-              <button className="cartaz-play" onClick={tocar} disabled={!arquivo}>
-                {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
-              </button>
-            ) : (
-              <button className="cartaz-play pegar" onClick={onLocadora} title={POR_QUE_PEGAR}>
-                ▸ {PEGAR_NA_LOCADORA}
-              </button>
-            )}
+            <button className="cartaz-play" onClick={tocar} disabled={!arquivo}>
+              {retomando ? `▸ continuar · faltam ${duracao(restam)}` : "▸ assistir"}
+            </button>
             {/* R46 — a porta do assistir junto. Ela fica ao lado do assistir
                 porque é a mesma decisão vista de outro jeito: "isto agora, e
                 com gente". Só aparece com arquivo, como o play.
 
-                R50: e só com a fita na mão — abrir uma sala pra um filme que
-                você não pode tocar convidaria gente pra uma tela preta. */}
-            {onJunto && arquivo && liberada && (
+                R56: a condição da fita na mão saiu junto com a regra — com a
+                biblioteca livre, não há filme que você não possa tocar. */}
+            {onJunto && arquivo && (
               <button
                 className="cartaz-junto"
                 title="abre uma sala e avisa seus amigos"

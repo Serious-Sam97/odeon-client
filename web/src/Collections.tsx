@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { PEGAR_NA_LOCADORA, POR_QUE_PEGAR, useLiberadas } from "./liberadas";
 import {
   api,
   COLLECTION_KINDS,
@@ -240,9 +238,8 @@ function CollectionView({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<number | null>(null);
-  /// R50 — o que dá pra tocar agora.
-  const { pode } = useLiberadas();
-  const navegar = useNavigate();
+  /// R56 — coleções são biblioteca, e biblioteca é modo livre. O `useLiberadas`
+  /// que decidia entre tocar e mandar pra locadora saiu com a regra (§71).
 
   const load = useCallback(() => {
     api.collection(id).then(setData).catch((e) => setError(String(e)));
@@ -347,17 +344,13 @@ function CollectionView({
               {ordenada && <span className="alca" title="arraste pra reordenar">⠿</span>}
               <span className="position">{index + 1}</span>
 
-              {/* R50 — a linha inteira continua clicável, e o que muda é o
-                  que ela faz: com a fita na mão ela toca; sem, ela leva onde a
-                  fita se pega. Um item que não faz nada seria o §8b. */}
+              {/* A linha inteira é clicável, e ela toca. O `disabled` é o
+                  único "não" que sobrou aqui, e é honesto: obra sem arquivo não
+                  tem o que tocar (§8b — nada de clique que não faz nada). */}
               <button
-                className={`item-main${pode(work.id) ? "" : " pegar"}`}
-                title={pode(work.id) ? undefined : POR_QUE_PEGAR}
-                onClick={() =>
-                  pode(work.id)
-                    ? work.media_file_id && onPlay(work)
-                    : navegar("/locadora")
-                }
+                className="item-main"
+                disabled={!work.media_file_id}
+                onClick={() => work.media_file_id && onPlay(work)}
               >
                 {work.poster ? (
                   <img src={api.artworkUrl(work.poster)} alt="" />
@@ -367,11 +360,7 @@ function CollectionView({
                 <div>
                   <strong>{work.title}</strong>
                   <p className="muted small">
-                    {[
-                      work.year,
-                      formatDuration(work.duration_seconds),
-                      pode(work.id) ? null : PEGAR_NA_LOCADORA,
-                    ]
+                    {[work.year, formatDuration(work.duration_seconds)]
                       .filter((p) => p && p !== "—")
                       .join(" · ")}
                   </p>

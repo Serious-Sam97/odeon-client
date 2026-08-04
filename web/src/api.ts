@@ -965,6 +965,12 @@ export interface ScanStatus {
 }
 
 export interface MatchStatus {
+  /// R55 — quantas obras ainda não entraram nos contadores da biblioteca.
+  /// Elas foram varridas e não identificadas, e é a tag `format:` (que só a
+  /// identificação escreve) que os contadores filtram. Fora da conta: o que
+  /// nunca vai ser identificado (`provider_hint: none`) e o que já foi
+  /// decidido (`ignored`) — pendência é o que ainda pode entrar.
+  nao_identificadas: number;
   running: boolean;
   tmdb_enabled: boolean;
   current: string | null;

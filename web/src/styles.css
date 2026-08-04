@@ -11577,3 +11577,23 @@ a.cur-fonte:focus-visible {
 .item-main.pegar strong {
   color: var(--fg-muted);
 }
+
+/* R55: o que falta pros contadores contarem tudo. Contorno e não preenchimento:
+   não é um filtro — é a explicação de por que os filtros ao lado somam menos
+   do que o acervo. */
+.chip-pendentes {
+  display: inline-block;
+  margin-top: 6px;
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--fg-muted);
+  font: 400 11px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.chip-pendentes:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}

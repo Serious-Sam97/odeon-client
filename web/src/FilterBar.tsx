@@ -17,9 +17,14 @@ const SORTS = [
 export default function FilterBar({
   filters,
   onChange,
+  naoIdentificadas = 0,
+  aoAbrirRevisao,
 }: {
   filters: Filters;
   onChange: (next: Filters) => void;
+  /// R55 — obras varridas que ainda não entraram nestes contadores.
+  naoIdentificadas?: number;
+  aoAbrirRevisao?: () => void;
 }) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [namespaces, setNamespaces] = useState<TagNamespace[]>([]);
@@ -134,6 +139,23 @@ export default function FilterBar({
                   );
                 })}
               </div>
+
+              {/* R55 — POR QUE ESTES NÚMEROS NÃO SÃO O SEU ACERVO.
+                  Eles filtram pela tag `format:`, e ela só é escrita na
+                  identificação: uma obra varrida e não identificada existe no
+                  acervo e não aparece aqui. A tela dizia "filme 713" com 936
+                  filmes no disco, sem nada explicando a diferença.
+
+                  Fica só no grupo `format`, porque é dele que a conta é;
+                  pendurar isso em `genre` e `mood` seria repetir um aviso que
+                  não é sobre eles.
+
+                  §24: com a fila zerada, a linha some — não vira "0 pendentes". */}
+              {ns.namespace === "format" && naoIdentificadas > 0 && (
+                <button className="chip-pendentes" onClick={aoAbrirRevisao}>
+                  · {naoIdentificadas.toLocaleString("pt-BR")} sem identificar →
+                </button>
+              )}
             </div>
           ))}
 

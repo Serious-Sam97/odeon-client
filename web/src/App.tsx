@@ -304,6 +304,7 @@ function BarraDeCima({
         <span className="brand-name">ODEON</span>
       </button>
 
+
       {/* As abas também são uma lista horizontal — só que só rolam em janela
           estreita, onde elas viram uma linha inteira (o `@media` de 900px). O
           gancho fica inerte enquanto couberem, e por isso não precisa de
@@ -733,7 +734,15 @@ export default function App() {
 
       {match?.running && (
         <div className="scanbar">
-          <strong>{match.works_seen}</strong> obras · <strong>{match.matched_auto}</strong> casadas ·{" "}
+          {/* R55 — o DENOMINADOR era o que faltava aqui. A faixa dizia "63
+              obras" e a pessoa não tinha como saber se eram 63 de 70 ou de
+              5.000 — foi o que fez o contador parado em 713 parecer errado em
+              vez de inacabado. */}
+          <strong>{match.works_seen}</strong>
+          {match.nao_identificadas > 0 && (
+            <span className="muted"> de {match.works_seen + match.nao_identificadas}</span>
+          )}{" "}
+          obras · <strong>{match.matched_auto}</strong> casadas ·{" "}
           <strong>{match.needs_review}</strong> pra revisar
           <span className="scanfile">{match.current}</span>
         </div>
@@ -828,7 +837,14 @@ export default function App() {
               </div>
             )}
 
-            <FilterBar filters={filters} onChange={setFilters} />
+            <FilterBar
+              filters={filters}
+              onChange={setFilters}
+              /* R55 — o que falta pros contadores contarem tudo. Vem do status
+                 da identificação, que esta tela já pergunta. */
+              naoIdentificadas={match?.nao_identificadas ?? 0}
+              aoAbrirRevisao={() => setTab("review")}
+            />
 
             {resume.length > 0 && (
               <section>

@@ -519,14 +519,21 @@ não é opcional.
   > o widget parecendo certo e o acervo parecendo sem pôster. E "faltam 141min"
   > truncava nos 64dp da coluna; ficou só o número, que é o dado.
   >
-  > **Pendência:** ele não se atualiza ao assistir. O launcher repede a cada 30
-  > minutos (o mínimo que o Android respeita) e nada empurra do app. O conserto
-  > é `WidgetDeContinuar().updateAll(ctx)` ao voltar do player.
+  > ✅ **Ele se atualiza ao assistir.** O `AppOdeon` chama `updateAll` ao voltar
+  > do player, na mesma carona do `voltasDoPlayer` que a ficha e a fileira de
+  > continuar já usavam. Verificado: assistir 3 minutos e voltar mudou o widget
+  > de "141 min" pra "138 min" em segundos — sem isso, o launcher só repediria
+  > em até 30 minutos, e um widget cujo assunto é "onde eu parei" mostrando
+  > posição velha é o §18.
 - **Atalhos** ao segurar o ícone: continuar, locadora, baixados. ✅ **Feito**,
   estáticos — eles levam a lugares, não a obras, então não mudam. O dinâmico
   ("continuar assistindo *Drive*", com capa) fica em aberto.
-  ⚠️ Trocar de aba com o app **já aberto** cai no `onNewIntent` e ainda não
-  funciona.
+  ✅ Trocar de aba com o app **já aberto** funciona. Exigiu duas coisas: um
+  `onNewIntent` que empurre o extra pra um `MutableState`, e —
+  **`android:launchMode="singleTop"`** no manifesto, sem o qual o `onNewIntent`
+  nunca é chamado. O `am start` chega a dizer «intent has been delivered to
+  currently running top-most instance», o que engana: o que foi entregue é a
+  ordem de trazer pra frente, não o `Intent` com o extra.
 - **A arte no controle de mídia**: hoje a notificação da sessão sobe sem capa.
   O `MediaSession` aceita `artworkUri`, e o app já tem a URL. ✅ **Feito** — e o
   buraco era maior do que a fase dizia: a `MediaItem` não declarava

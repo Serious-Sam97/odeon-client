@@ -1,5 +1,6 @@
 package dev.odeon.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,15 +46,34 @@ class AtividadePrincipal : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        abaPedida.value = intent?.getStringExtra("aba")
+
         setContent {
-            /// O atalho pede uma aba, e ela chega como extra da intenção — R9.
-            ///
-            /// `intent` e não `savedInstanceState`: quem toca num atalho com o
-            /// app já aberto cai no `onNewIntent`, e não aqui. Está anotado como
-            /// pendência no `AppOdeon` — trocar de aba **com o app em segundo
-            /// plano** ainda não funciona, e o conserto é um `onNewIntent` que
-            /// empurre o valor pra um fluxo.
-            AppOdeon(abaPedida = intent?.getStringExtra("aba"))
+            AppOdeon(abaPedida = abaPedida)
         }
+    }
+
+    /// A aba que o atalho pediu, como estado observável.
+    ///
+    /// ## Por que não basta ler o `intent` no `onCreate`
+    ///
+    /// Porque com o app **já aberto** o toque no atalho não passa pelo
+    /// `onCreate`: a Activity é reusada e o sistema entrega o novo `Intent`
+    /// aqui embaixo. A primeira versão lia só no `onCreate`, e o efeito era
+    /// silencioso e chato de perceber — o atalho funcionava perfeitamente na
+    /// primeira vez do dia e não fazia nada nas outras.
+    ///
+    /// `MutableState` e não `StateFlow` porque quem lê é composição, e um
+    /// `State` é o que o Compose observa sem ponte nenhuma. Quem consome zera o
+    /// valor depois de usar — senão a mesma aba seria pedida de novo a cada
+    /// recomposição, e o app trancaria naquela aba.
+    private val abaPedida = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        /// `setIntent` pra o `intent` da Activity passar a ser este. Sem isso,
+        /// qualquer código que releia `intent` depois veria o da abertura.
+        setIntent(intent)
+        abaPedida.value = intent.getStringExtra("aba")
     }
 }

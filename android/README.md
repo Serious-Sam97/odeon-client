@@ -7,6 +7,10 @@ de `web/` e `clients/`.
 > as decisões todas, com o porquê de cada uma e a sequência em sete fases. Este
 > arquivo é só como rodar.
 >
+> **Os pedidos pendentes ao servidor estão em
+> [`docs/PEDIDOS-AO-SERVIDOR.md`](docs/PEDIDOS-AO-SERVIDOR.md)**, no formato da
+> §1b — prontos pro dono levar. São dois, e nenhum bloqueia o app.
+>
 > **O redesenho está em [`docs/REDESENHO.md`](docs/REDESENHO.md)** — a proposta
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.

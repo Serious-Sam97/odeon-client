@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.glance.appwidget.updateAll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -51,6 +52,7 @@ import dev.odeon.android.ui.obra.ModeloDaObra
 import dev.odeon.android.ui.obra.TelaDaObra
 import dev.odeon.android.ui.player.ModeloDoPlayer
 import dev.odeon.android.ui.player.TelaDoPlayer
+import dev.odeon.android.widget.WidgetDeContinuar
 
 /// Onde o app está.
 ///
@@ -142,6 +144,14 @@ private enum class Aba(val rotulo: String, val icone: Int, val destino: Onde) {
     ParaVoce("para você", R.drawable.ic_aba_paravoce, Onde.ParaVoce),
 }
 
+/// O destino de um nome de aba vindo de um atalho — ou `null` se não houver.
+///
+/// Comparação sem diferenciar maiúsculas porque o nome vem de um XML escrito à
+/// mão (`res/xml/atalhos.xml`), e um `Locadora` com maiúscula lá viraria um
+/// atalho que não faz nada — em silêncio, que é o §8b.
+private fun abaDe(nome: String?): Onde? =
+    nome?.let { pedido -> Aba.entries.firstOrNull { it.name.equals(pedido, true) }?.destino }
+
 /// Em que aba este lugar está — ou `null`, se ele não é aba nenhuma.
 ///
 /// O `null` é o que decide se a barra aparece. Login, ficha e player devolvem
@@ -156,7 +166,7 @@ private val Onde.aba: Aba?
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun AppOdeon(abaPedida: String? = null) {
+fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) {
     val app = LocalContext.current.applicationContext as OdeonApp
     var onde: Onde by remember { mutableStateOf(Onde.Decidindo) }
 
@@ -177,9 +187,7 @@ fun AppOdeon(abaPedida: String? = null) {
             /// direto na tela de login pareceria que o app esqueceu o que ele
             /// mesmo ofereceu — e o §53 vale aqui do lado de fora: não oferecer
             /// o que a validação vai negar.
-            Aba.entries.firstOrNull { it.name.equals(abaPedida, ignoreCase = true) }
-                ?.destino
-                ?: Onde.Biblioteca
+            abaDe(abaPedida?.value).also { abaPedida?.value = null } ?: Onde.Biblioteca
         } else {
             Onde.Login
         }
@@ -192,6 +200,51 @@ fun AppOdeon(abaPedida: String? = null) {
     /// `when` escrito duas vezes, um destino novo entraria num lugar e não no
     /// outro, e o sintoma seria uma tela em branco em vez de um erro de
     /// compilação.
+    /// O widget é avisado ao voltar do player — R9.
+    ///
+    /// ## Sem isto ele mente por até 30 minutos
+    ///
+    /// O launcher repede o conteúdo a cada `updatePeriodMillis`, e 30 minutos é
+    /// o **mínimo** que o Android respeita — pedir menos não diminui. Ou seja:
+    /// quem assiste meia hora de um filme, sai, e olha a tela inicial, vê a
+    /// posição velha. Num widget cujo assunto inteiro é "onde eu parei", isso é
+    /// o §18: ele afirma um progresso que não é mais verdade.
+    ///
+    /// `voltasDoPlayer` já existia como sinal — a ficha e a fileira de continuar
+    /// se releem por ele. O widget entra na mesma carona, e é a razão de ele
+    /// morar aqui e não no `TelaDoPlayer`: este é o lugar que já sabe que se
+    /// **voltou**, e voltar é quando o progresso terminou de ser gravado.
+    ///
+    /// `updateAll` é `suspend` e varre todas as instâncias — quem tiver dois
+    /// widgets na tela recebe os dois atualizados. Falhar não pode derrubar a
+    /// volta do player, então vai dentro de `runCatching`: um widget
+    /// desatualizado é chato; um app que fecha ao sair do filme, não.
+    val contexto = LocalContext.current
+    LaunchedEffect(voltasDoPlayer) {
+        if (voltasDoPlayer > 0) {
+            runCatching { WidgetDeContinuar().updateAll(contexto) }
+        }
+    }
+
+    /// O atalho pedido **depois** de o app já estar aberto — R9.
+    ///
+    /// O `onCreate` cobre o caso de abrir do zero; este cobre o de tocar no
+    /// atalho com o app em segundo plano, que é o caso comum depois do primeiro
+    /// uso do dia. O `AtividadePrincipal.onNewIntent` escreve no estado, e isto
+    /// reage.
+    ///
+    /// ⚠️ Consumir é zerar. Sem o `= null` depois de aplicar, a aba pedida
+    /// continuaria valendo e qualquer recomposição jogaria a pessoa de volta pra
+    /// ela — o app trancaria numa aba, e o sintoma seria "não consigo sair dos
+    /// baixados".
+    LaunchedEffect(abaPedida?.value) {
+        val destino = abaDe(abaPedida?.value)
+        if (destino != null && onde !is Onde.Assistindo) {
+            onde = destino
+            abaPedida?.value = null
+        }
+    }
+
     /// O corpo recebe a **moldura** do pôster como parâmetro, e não a lê de uma
     /// variável de fora.
     ///

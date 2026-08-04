@@ -118,8 +118,25 @@
           PiP também dispara: sem eles, entrar na janelinha recriaria a Activity
           e reiniciaria o filme — o mesmo defeito que girar o aparelho causava.
         -->
+        <!-- ⚠️ `launchMode="singleTop"`, e sem ele o `onNewIntent` nunca é
+             chamado.
+
+             Com o `standard` (o padrão), tocar num atalho com o app já aberto
+             **não** entrega o `Intent` novo à instância que está rodando: o
+             sistema traz a tarefa pra frente e pronto. O log do `am start` até
+             diz "intent has been delivered to currently running top-most
+             instance", o que engana — o que chegou foi a ordem de trazer pra
+             frente, não o `Intent` com o extra.
+
+             O sintoma: o atalho de "baixados" funcionava do zero e não fazia
+             nada com o app aberto. Silencioso, que é o §8b.
+
+             `singleTop` é o modo certo pra este app de qualquer forma: ele tem
+             **uma** Activity e a intenção é que continue tendo, então duas
+             instâncias empilhadas nunca seriam o que se quer. -->
         <activity
             android:name=".AtividadePrincipal"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|layoutDirection"
             android:exported="true"
             android:resizeableActivity="true"

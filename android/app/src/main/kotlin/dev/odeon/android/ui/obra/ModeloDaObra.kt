@@ -152,9 +152,45 @@ class ModeloDaObra(
         viewModelScope.launch {
             val recado = runCatching { odeon.alugar(obraId) }.fold(
                 onSuccess = { "fita pega — vence em ${it.venceEmDias} dias" },
-                onFailure = { it.message ?: "não deu pra pegar a fita" },
+                onFailure = { recadoDaFalha(it) },
             )
             _estado.update { it.copy(pegando = false, recadoDaLocadora = recado) }
+        }
+    }
+
+    /// A frase de quando pegar a fita falha.
+    ///
+    /// ## ⚠️ O app mostrava `HTTP 403 Forbidden`, e isso é meio erro
+    ///
+    /// O §8b manda o erro ser **visível**, e ele era — mas visível não é legível.
+    /// «HTTP 403 Forbidden» é status de protocolo: ele diz que houve recusa e não
+    /// diz o quê, pra quem não sabe o que é um 403. Numa tela que oferece o botão
+    /// e depois recusa, a frase é a única coisa que a pessoa tem.
+    ///
+    /// ## Cada código é um caso diferente, e a frase diz qual
+    ///
+    /// | | o que quer dizer |
+    /// |---|---|
+    /// | 403 | o servidor recusou aquela obra. Ver `docs/PEDIDOS-AO-SERVIDOR.md` §1 — o app **não tem como prever** isto hoje |
+    /// | 409 | conflito: alguém pegou a última cópia entre a tela desenhar e o toque |
+    /// | 401 | a sessão venceu no meio |
+    /// | rede | nem chegou lá |
+    ///
+    /// ⚠️ Isto **não conserta** o defeito de produto, e é importante não achar
+    /// que conserta: uma frase boa sobre uma recusa evitável continua sendo uma
+    /// recusa evitável. O conserto é a ficha não oferecer o botão, e ele depende
+    /// de um dado que o servidor ainda não manda.
+    private fun recadoDaFalha(erro: Throwable): String {
+        val texto = erro.message.orEmpty()
+        return when {
+            "403" in texto ->
+                "esta obra não está na locadora — dá pra assistir pela biblioteca"
+            "409" in texto ->
+                "a última cópia acabou de sair. Tente de novo mais tarde"
+            "401" in texto ->
+                "a sessão venceu — entre de novo"
+            else ->
+                "não deu pra pegar a fita"
         }
     }
 

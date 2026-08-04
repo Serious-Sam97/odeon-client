@@ -22,9 +22,10 @@ primeira está respondida: o app funciona, e ele ainda não se parece com o Odeo
 | onde ficam os destinos (§6) | **barra inferior adaptativa** — e não a opção 3, que era a preferência escrita abaixo |
 | a fonte serifada (R1) | **embutir no APK** |
 
-E as **levas 1, 2 e 3 estão feitas e vistas em aparelho**: a decisão da §6, e as
-fases R1, R2, R3, R4, R5 e R7. As R6, R8 e R9 continuam sendo proposta, e a §6
-abaixo fica como registro do que se pesou.
+E as **levas 1, 2 e 3 estão feitas e vistas em aparelho**, mais a **R6 inteira**
+e **um quarto da R8**: a decisão da §6, e as fases R1, R2, R3, R4, R5, R6 e R7.
+O resto da R8 e a R9 continuam sendo proposta, e a §6 abaixo fica como registro
+do que se pesou.
 
 > ### ⚠️ A régua de fps da R4 não é aplicável no emulador — e isso precisa ser
 > ### resolvido antes da leva 3
@@ -344,6 +345,48 @@ arte, que é o que a web sugere sem fazer.
 entrar atrás de uma chave, medir com screenshot em três pôsteres (claro, escuro,
 ilustrado), e só ficar se sobreviver aos três.
 
+> ### ⚠️ A premissa da perfuração estava errada, e a folha é que disse
+>
+> A fase diz «a perfuração de película nas bordas do cartão de destaque do "para
+> você", **como na web**». Fui buscar os números na folha pra copiar, e ela não
+> existe: o `.pick-art` (`styles.css:2317`) é arte com uma lavagem radial e mais
+> nada, e não há `repeating-radial-gradient` de furo em lugar nenhum do arquivo.
+>
+> O que o herói do "para você" tem, e o `ForYou.tsx:369` põe exatamente ali, é a
+> **`.bulbs`** — as lâmpadas da marquise com a luz correndo por elas. O
+> comentário dela na folha diz: «é o efeito mais da casa que este projeto tem».
+>
+> **Foi ela que entrou, e é substituição — vetável.** A perfuração continua
+> sendo uma ideia legítima e são umas 20 linhas; ela só não é «como na web».
+>
+> Entrou junto o **herói**, porque a fase pressupunha um "cartão de destaque"
+> que o app não tinha: o primeiro da lista virou cartaz 16:9 com a arte a 32% de
+> brilho (o `brightness(0.32)` da `.hero-art`), título em letreiro serifado e o
+> motivo em destaque. Sem ele, "para você" era uma lista ordenada por `score` —
+> e uma lista ordenada por score é indistinguível de "os mais recentes".
+>
+> ### ✅ O grão foi testado como a fase mandou, e **reprovou**
+>
+> Dois screenshots do mesmo recorte da grade, com e sem a camada, ampliados
+> 1,8× — a grade mostra os três casos lado a lado, então não foram três telas:
+>
+> | pôster | o que aconteceu |
+> |---|---|
+> | **claro** — capa de neve branca | **reprovou.** A neve fica manchada. É a sujeira que esta fase previu |
+> | **escuro** — Cassino Royale | some no preto. Nem ajuda nem atrapalha |
+> | **ilustrado** | embarra de leve; a trama da ilustração e a do grão brigam |
+>
+> Um pior, um neutro, nenhum melhor — e o critério escrito era sobreviver aos
+> três. E o caso que reprova é o mais comum do acervo: **8.598 obras (48%) não
+> têm pôster** e caem no fundo chapado da cor dominante, que é onde grão mais
+> aparece e menos tem o que texturizar.
+>
+> Fica escrito e desligado em `Grao.LIGADO`, não apagado — reavaliar custa
+> trocar `false` por `true`.
+>
+> ⚠️ É **julgamento visual sobre um A/B**, não número. Não há régua numérica pra
+> "parece sujo", e inventar uma seria pior que assumir o julgamento.
+
 ---
 
 ### R7 — O movimento com sentido
@@ -395,7 +438,11 @@ O experimental de verdade, e o que só existe aqui.
 - **Borda a borda** na ficha: o backdrop sobe até debaixo da barra de status,
   com o texto respeitando as áreas seguras.
 - **Detente háptico no seek**: um tique a cada 10 minutos de filme arrastados —
-  a timeline passa a ter textura.
+  a timeline passa a ter textura. ✅ **Feito.** O passo ganhou piso: o menor
+  entre 10 minutos e um vinte avos da duração, senão um episódio de 22 minutos
+  daria dois tiques, o que é enfeite e não textura. O tique é o **seco**
+  (`TextHandleMove`), pelo mesmo motivo da escala da R5: arrastar não escreve
+  nada, e a batida está reservada pros gestos que mudam o acervo.
 - **Gesto de devolver**: arrastar a caixa pra baixo devolve a fita, com o
   háptico do R5 no fim.
 
@@ -403,6 +450,23 @@ O experimental de verdade, e o que só existe aqui.
 acessível pra quem tem sensibilidade a movimento, e o Android tem a preferência
 do sistema pra isso (`Settings.Global.ANIMATOR_DURATION_SCALE` = 0). Respeitá-la
 não é opcional.
+
+> ### O que já respeita a preferência, e de graça
+>
+> Tudo que passa por `animate*AsState`, `AnimatedContent` e
+> `rememberInfiniteTransition` lê o `MotionDurationScale` do contexto, que no
+> Android sai justamente do `ANIMATOR_DURATION_SCALE`. Ou seja: o afundar do
+> cartaz (R4), a transição compartilhada (R7) e a luz correndo na marquise (R6)
+> **já somem** pra quem desligou animação nos ajustes, sem uma linha escrita
+> pra isso.
+>
+> A chave que esta fase pede continua necessária **só pro giroscópio**, que lê
+> sensor e não passa por esse caminho.
+>
+> ### O que da R8 ainda não entrou
+>
+> Paralaxe por giroscópio, borda a borda na ficha, e o gesto de arrastar a caixa
+> pra baixo pra devolver. Só o detente foi feito.
 
 ---
 
@@ -494,7 +558,7 @@ desfazer isso:
 | **1** ✅ | decisão da §6 + R1 + R2 | o app **parece** o Odeon, sem nada se mexer |
 | **2** ✅ | R3 + R4 | a biblioteca vira acervo, com filtro e metadado |
 | **3** ✅ | R5 + R7 | as coisas viram objetos, e as telas se ligam |
-| **4** | R6 + R8 | o experimental — película, giroscópio, háptico |
+| **4** ◐ | R6 + R8 | o experimental — película, giroscópio, háptico |
 | **5** | R9 | o app sai do app |
 
 A leva 1 é a que mais muda a impressão por linha escrita. A 4 é a mais

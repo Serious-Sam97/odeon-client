@@ -27,6 +27,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -535,6 +538,9 @@ private fun Controles(
             Linha(
                 fracao = if (arrastando) posicaoDoArrasto
                 else if (duracao > 0) posicao.toFloat() / duracao else 0f,
+                /// O detente da R8: um tique a cada **10 minutos de filme**
+                /// arrastados. Ver o comentário em `Linha`.
+                duracaoMs = duracao,
                 aoComecarArrasto = { arrastando = true; visiveis = true },
                 aoArrastar = { posicaoDoArrasto = it },
                 aoSoltar = {
@@ -575,14 +581,74 @@ private fun Controles(
 /// ondulação e faixa de toque próprios, e nenhum deles combina com uma barra
 /// fina por cima de um filme. E o arrasto aqui precisa avisar **quando começa**,
 /// pra a miniatura nascer junto — coisa que o `Slider` não conta.
+/// ## O detente háptico — R8
+///
+/// > «Um tique a cada 10 minutos de filme arrastados — a timeline passa a ter
+/// > textura.»
+///
+/// O que ele conserta é concreto: arrastar uma timeline de 2h22 numa tela de
+/// 1080px significa que **cada pixel vale 8 segundos**, e o dedo cobre uns 40.
+/// Sem retorno, procurar um ponto é olhar o relógio e corrigir; com o tique, a
+/// mão conta os passos.
+///
+/// ## 10 minutos é do documento, mas a régua é outra
+///
+/// Num filme de 2h22 dá 14 tiques ao longo da tela — um a cada ~77px, ou ~7 por
+/// segundo num arrasto de velocidade normal. É denso, e é o ponto: a timeline
+/// tem que **parecer** uma superfície com sulcos, não um botão que confirma.
+///
+/// ⚠️ **Num episódio de 22 minutos daria dois tiques**, o que não é textura, é
+/// enfeite. Por isso o passo tem piso: o menor entre 10 minutos e um vinte avos
+/// da duração, o que garante ~20 tiques na tela inteira em qualquer duração.
+///
+/// ## O tique é o seco
+///
+/// `TextHandleMove`, o mesmo de virar a caixa da locadora — e pelo mesmo motivo
+/// da escala que a R5 montou: arrastar não escreve nada, e o `LongPress` está
+/// reservado pros gestos que mudam o acervo. Um seek que batesse como uma
+/// devolução ensinaria a mão errado.
 @Composable
 private fun Linha(
     fracao: Float,
+    duracaoMs: Long,
     aoComecarArrasto: () -> Unit,
     aoArrastar: (Float) -> Unit,
     aoSoltar: () -> Unit,
 ) {
     var largura by remember { mutableFloatStateOf(1f) }
+    val haptico = LocalHapticFeedback.current
+
+    /// Em que "casa" o arrasto estava no evento anterior. `Int.MIN_VALUE` é o
+    /// "ainda não começou" — sem ele, o primeiro toque cairia na casa 0 e o
+    /// primeiro tique só sairia ao **sair** dela, o que soa como atraso.
+    var casaAnterior by remember { mutableIntStateOf(Int.MIN_VALUE) }
+
+    /// Quantas casas a timeline inteira tem.
+    ///
+    /// Sem duração conhecida não há detente nenhum — e isso acontece de verdade:
+    /// em HLS de transcodificação a duração só chega depois do primeiro plano.
+    /// Um detente calculado sobre duração zero daria divisão por zero ou um
+    /// tique por pixel.
+    val casas = if (duracaoMs > 0) {
+        val passoMs = minOf(10 * 60 * 1000L, duracaoMs / 20)
+        (duracaoMs / passoMs.coerceAtLeast(1L)).toInt().coerceIn(1, 200)
+    } else {
+        0
+    }
+
+    /// Dá o tique se o arrasto mudou de casa. Devolve a fração intacta.
+    fun tiquear(f: Float): Float {
+        if (casas > 0) {
+            val casa = (f * casas).toInt()
+            if (casa != casaAnterior) {
+                if (casaAnterior != Int.MIN_VALUE) {
+                    haptico.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+                casaAnterior = casa
+            }
+        }
+        return f
+    }
 
     Box(
         modifier = Modifier
@@ -596,11 +662,16 @@ private fun Linha(
                 detectHorizontalDragGestures(
                     onDragStart = { toque: Offset ->
                         aoComecarArrasto()
-                        aoArrastar((toque.x / largura).coerceIn(0f, 1f))
+                        /// A casa é zerada aqui e não no fim: cada arrasto novo
+                        /// começa sem memória do anterior, senão pegar a
+                        /// timeline no mesmo ponto de onde se soltou não daria
+                        /// tique nenhum ao andar o primeiro passo.
+                        casaAnterior = Int.MIN_VALUE
+                        aoArrastar(tiquear((toque.x / largura).coerceIn(0f, 1f)))
                     },
                     onDragEnd = { aoSoltar() },
                     onHorizontalDrag = { mudanca, _ ->
-                        aoArrastar((mudanca.position.x / largura).coerceIn(0f, 1f))
+                        aoArrastar(tiquear((mudanca.position.x / largura).coerceIn(0f, 1f)))
                     },
                 )
             },

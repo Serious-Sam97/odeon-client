@@ -120,6 +120,7 @@ fun TelaDaObra(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

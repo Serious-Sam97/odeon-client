@@ -26,6 +26,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.Recomendacao
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.LampadasDaMarquise
 import dev.odeon.android.ui.PilulaDeFiltro
 import dev.odeon.android.ui.Tipo
 
@@ -154,7 +159,22 @@ fun TelaParaVoce(
             )
         }
 
-        estado.itens.forEach { item ->
+        /// O primeiro é **herói**, e o resto é fila — a mesma divisão do
+        /// `ForYou.tsx` (`heroi = items[0]`).
+        ///
+        /// Sem ela, "para você" é uma lista ordenada por `score`, e uma lista
+        /// ordenada por score é indistinguível de "os mais recentes" — que é o
+        /// que o comentário lá em cima diz que esta tela não pode ser. O herói é
+        /// a tela **escolhendo**, em vez de listar.
+        estado.itens.firstOrNull()?.let { primeiro ->
+            CartaoHeroi(
+                item = primeiro,
+                arte = modelo.arte(primeiro),
+                aoTocar = { aoAbrirObra(primeiro.id) },
+            )
+        }
+
+        estado.itens.drop(1).forEach { item ->
             Cartao(
                 item = item,
                 arte = modelo.arte(item),
@@ -168,6 +188,101 @@ fun TelaParaVoce(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Cores.textoApagado,
             )
+        }
+    }
+}
+
+/// O herói — o primeiro da lista, desenhado como cartaz de marquise.
+///
+/// ## As lâmpadas são o item da R6, e o porquê está em `Marquise.kt`
+///
+/// Resumo: a R6 pedia perfuração de película «como na web», a folha não tem
+/// perfuração nenhuma, e o que o herói do `ForYou.tsx` tem é a `.bulbs` — as
+/// lâmpadas da marquise, com a luz correndo. É substituição medida, e vetável.
+///
+/// ## A arte entra escura, e é a folha que diz quanto
+///
+/// `.hero-art` (`styles.css:2075`) aplica `brightness(0.32) saturate(0.85)` e
+/// põe por cima a `.hero-wash`, três gradientes empilhados. O motivo é o §18 por
+/// outro caminho: sobre a arte crua, o título e o **motivo** ficariam ilegíveis
+/// em metade dos pôsteres — e o motivo é a coisa que esta tela veio dizer.
+///
+/// Aqui a arte vai a 32% de brilho por `ColorFilter`, e a lavagem é um gradiente
+/// vertical da cor de fundo. Não são os três da web: os outros dois dependem da
+/// `--accent-work`, que é a cor dominante da obra, e o `Recomendacao` a traz —
+/// mas empilhar três camadas sobre a arte num cartão que rola é onde o enfeite
+/// começa a custar quadro. Fica um, que é o que sustenta o texto.
+@Composable
+private fun CartaoHeroi(item: Recomendacao, arte: String?, aoTocar: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Cores.fundoElevado)
+            .clickable(onClick = aoTocar),
+    ) {
+        if (arte != null) {
+            AsyncImage(
+                model = arte,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                /// `brightness(0.32)` da `.hero-art`, traduzido: cada canal
+                /// multiplicado por 0,32. O `saturate(0.85)` fica de fora — ele
+                /// pede outra matriz, e o ganho não paga a linha.
+                colorFilter = ColorFilter.colorMatrix(
+                    ColorMatrix(
+                        floatArrayOf(
+                            0.32f, 0f, 0f, 0f, 0f,
+                            0f, 0.32f, 0f, 0f, 0f,
+                            0f, 0f, 0.32f, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        /// A lavagem: o fundo sobe da base e some no meio, pra o texto ter chão.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.45f to Cores.fundo.copy(alpha = 0.55f),
+                        1f to Cores.fundo.copy(alpha = 0.92f),
+                    ),
+                ),
+        )
+
+        /// A marquise, no topo — o mesmo lugar da web (`top: 0`).
+        LampadasDaMarquise(Modifier.align(Alignment.TopCenter))
+
+        Column(
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            /// `headlineSmall` é o slot serifado da R1, e o `.hero-title` da web
+            /// também é `--font-display`. É o único lugar do "para você" onde o
+            /// título é letreiro, e é o que separa o herói da fila.
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Cores.texto,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            item.porque?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Cores.destaque,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

@@ -9,6 +9,16 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.glance.appwidget.updateAll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.CircularProgressIndicator
@@ -536,44 +546,28 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
 
 /// A barra que muda de forma conforme a tela.
 ///
-/// Barra embaixo no celular em pé; **trilho na lateral** em paisagem e em
-/// tablet.
+/// ## ⚠️ O `NavigationSuiteScaffold` saiu, e o motivo é o facho
 ///
-/// ## ⚠️ O padrão do Material faz o contrário disso em paisagem, e foi
-/// ## o screenshot que denunciou
+/// Ele resolvia bem duas coisas — as duas formas (barra e trilho) e os encaixes
+/// de inset —, e o comentário no `libs.versions.toml` defendia isso. O que ele
+/// **não** deixa fazer é desenhar **atrás** dos itens, e o facho é exatamente
+/// isso: uma luz que nasce fora da barra e a atravessa.
 ///
-/// `NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo` escolhe **barra
-/// inferior** quando a altura é compacta — e altura compacta é exatamente o
-/// celular deitado. Medido no emulador em 04/08/2026, com a primeira versão
-/// desta tela, que confiava no padrão:
+/// O que ficou dele: a decisão de forma pelo `WindowSizeClass`, que continua
+/// sendo dele — `currentWindowAdaptiveInfo` ainda é quem responde se a altura
+/// está espremida.
 ///
-/// | | medido |
-/// |---|---|
-/// | tela em paisagem | 2400×1080 |
-/// | a barra, com rótulo | **230px dos 1080 — 21%** |
-/// | fileiras da grade visíveis | **nenhuma** |
+/// E saiu um defeito junto. A cápsula do item selecionado era pintada com
+/// `secondaryContainer`, que **nunca foi definido** no `EsquemaEscuro`: ela caía
+/// no lilás de fábrica do Material 3, `#4A4458`. O menu inferior era a única
+/// peça do app pintada por outra pessoa.
 ///
-/// Ou seja: sobrava o título, a contagem, a fileira de "continuar" e mais nada
-/// do acervo. É o mesmo defeito que fez o cabeçalho fixo sair deste app, que
-/// custava 17% — este custava mais.
+/// ## Em paisagem continua trilho, e ele não leva facho
 ///
-/// O comentário que estava aqui, e o do `libs.versions.toml`, afirmavam que o
-/// artefato resolvia isso sozinho. Não resolve: ele resolve **as duas formas** e
-/// a troca entre elas, que continua sendo o motivo de ele existir. Qual forma
-/// usar em altura compacta é escolha de produto, e num app de pôsteres a
-/// resposta é trilho — ele custa ~80dp de **largura** (9% dos 872dp) e devolve
-/// a altura inteira.
-///
-/// `isHeightAtLeastBreakpoint` e não `windowHeightSizeClass`: o segundo está
-/// depreciado no `window-core` 1.5.
-///
-/// ## As cores, e por que a barra não é da cor do fundo
-///
-/// `fundoElevado` (`--bg-raised`), e não `fundo`. A barra é uma coisa que está
-/// **em cima** do acervo, e uma barra da cor exata do fundo é uma barra que
-/// flutua sem chão — o rótulo e o ícone ficariam pendurados no nada quando a
-/// grade rolasse por baixo.
-@OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class)
+/// Um facho horizontal saindo da lateral não é uma janela de projeção: é uma
+/// luz vindo da parede. A metáfora só funciona de baixo pra cima, então o
+/// trilho fica com a gramática do `Luz.kt` — quente no escolhido, filamento
+/// frio nos outros — sem o cone.
 @Composable
 private fun EsqueletoComAbas(
     atual: Aba,
@@ -584,43 +578,58 @@ private fun EsqueletoComAbas(
     val alturaEspremida = !info.windowSizeClass
         .isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
 
-    NavigationSuiteScaffold(
-        layoutType = if (alturaEspremida) {
-            NavigationSuiteType.NavigationRail
-        } else {
-            NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(info)
-        },
-        navigationSuiteItems = {
-            Aba.entries.forEach { aba ->
-                item(
-                    selected = aba == atual,
-                    /// Tocar na aba em que já se está não faz nada, e é de
-                    /// propósito: reatribuir o mesmo destino trocaria o estado
-                    /// por um igual e jogaria fora a rolagem da grade — 8.316
-                    /// entradas de volta ao topo por um toque que não pedia isso.
-                    onClick = { if (aba != atual) aoTrocar(aba) },
-                    /// `contentDescription = null` porque o rótulo ao lado já
-                    /// diz o nome, e o `NavigationSuiteScaffold` sempre o
-                    /// desenha. Descrever o ícone também faria o leitor de tela
-                    /// anunciar "biblioteca biblioteca".
-                    icon = {
-                        Icon(
-                            painter = painterResource(aba.icone),
-                            contentDescription = null,
-                        )
-                    },
-                    label = { Text(aba.rotulo) },
-                )
+    if (alturaEspremida) {
+        Row(Modifier.fillMaxSize()) {
+            NavigationRail(
+                containerColor = Cores.fundo,
+                modifier = Modifier.windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Start + WindowInsetsSides.Vertical,
+                    ),
+                ),
+            ) {
+                Aba.entries.forEach { aba ->
+                    NavigationRailItem(
+                        selected = aba == atual,
+                        onClick = { if (aba != atual) aoTrocar(aba) },
+                        icon = {
+                            Icon(painterResource(aba.icone), contentDescription = null)
+                        },
+                        label = { Text(aba.rotulo, style = Tipo.pilula, maxLines = 1) },
+                        colors = NavigationRailItemDefaults.colors(
+                            selectedIconColor = Cores.destaqueQuente,
+                            selectedTextColor = Cores.destaqueQuente,
+                            unselectedIconColor = Cores.destaqueApagado,
+                            unselectedTextColor = Cores.textoApagado,
+                            /// Transparente, e é o conserto do lilás: sem isto o
+                            /// trilho volta a pintar a cápsula com o
+                            /// `secondaryContainer` de fábrica.
+                            indicatorColor = Color.Transparent,
+                        ),
+                    )
+                }
             }
-        },
-        containerColor = Cores.fundo,
-        contentColor = Cores.texto,
-        navigationSuiteColors = NavigationSuiteDefaults.colors(
-            navigationBarContainerColor = Cores.fundoElevado,
-            navigationRailContainerColor = Cores.fundoElevado,
-        ),
-        content = conteudo,
-    )
+            Box(Modifier.weight(1f)) { conteudo() }
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) { conteudo() }
+        BarraDoFacho(
+            destinos = Aba.entries.map { aba ->
+                DestinoDoFacho(
+                    rotulo = aba.rotulo,
+                    icone = painterResource(aba.icone),
+                    selecionado = aba == atual,
+                    aoTocar = { if (aba != atual) aoTrocar(aba) },
+                )
+            },
+            modifier = Modifier.windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+            ),
+        )
+    }
 }
 
 /// A fábrica dos dois modelos.

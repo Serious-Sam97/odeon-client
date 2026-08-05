@@ -1,0 +1,256 @@
+package dev.odeon.android.ui
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+
+/// Um destino da barra, do jeito que o facho precisa saber dele.
+data class DestinoDoFacho(
+    val rotulo: String,
+    val icone: Painter,
+    val selecionado: Boolean,
+    val aoTocar: () -> Unit,
+)
+
+/// A barra inferior como **facho de projetor** — e não como fileira de abas.
+///
+/// ## Por que a `NavigationBar` do Material saiu
+///
+/// Ela não deixa desenhar **atrás** dos itens. O facho é uma luz que nasce na
+/// aresta de baixo e abre sobre o item escolhido, atravessando a barra inteira —
+/// e o indicador do Material é uma cápsula presa a um item, não uma luz que
+/// varre a barra.
+///
+/// Junto com ela saiu um defeito: a cápsula era pintada com `secondaryContainer`,
+/// que **nunca foi definido** no `EsquemaEscuro`. Ela caía no lilás de fábrica do
+/// Material 3 — `#4A4458`, uma cor que não existe na paleta do Odeon. O menu
+/// inferior era a única peça do app pintada por outra pessoa.
+///
+/// ## O que a luz faz, e por que cada pedaço existe
+///
+/// | | o que é |
+/// |---|---|
+/// | **a lente** | o ponto quente colado na aresta de baixo. É de onde a luz sai — sem ele o facho é um degradê, não um facho |
+/// | **o cone** | o radial que abre pra cima a partir da lente |
+/// | **a poeira** | os pontos suspensos dentro do cone. É o que faz a luz ter **ar** dentro |
+///
+/// A poeira não é elemento: são círculos desenhados no mesmo `Canvas`, com o
+/// alfa caindo conforme a distância ao eixo do facho. Nenhum nó entra na árvore.
+///
+/// ## A piscada
+///
+/// Trocar de destino **acende a lâmpada de novo**: o facho pisca como um
+/// projetor firmando o arco antes de estabilizar. Os tempos abaixo não são
+/// aleatórios — é a curva de uma lâmpada de arco: apaga quase tudo, dá um pico
+/// **acima** do normal, cai, e assenta.
+///
+/// ⚠️ Ela é **curta de propósito** (300ms). Piscada longa em barra de navegação
+/// deixa de ser cinema e vira defeito de renderização — a pessoa acha que a tela
+/// travou.
+///
+/// E ela some sozinha pra quem desligou animação: `Animatable` e
+/// `animateFloatAsState` leem o `MotionDurationScale`, que no Android vem do
+/// `ANIMATOR_DURATION_SCALE`. Com a preferência em zero o facho salta pro lugar
+/// aceso, sem pulsar.
+@Composable
+fun BarraDoFacho(
+    destinos: List<DestinoDoFacho>,
+    modifier: Modifier = Modifier,
+) {
+    if (destinos.isEmpty()) return
+    val quantos = destinos.size
+    val escolhido = destinos.indexOfFirst { it.selecionado }.coerceAtLeast(0)
+
+    /// A panorâmica: o facho **desliza** até o destino novo em vez de saltar.
+    /// A curva é a mesma da chegada das caixas — sai rápido e assenta.
+    val posicao by animateFloatAsState(
+        targetValue = escolhido.toFloat(),
+        animationSpec = tween(380, easing = CubicBezierEasing(0.2f, 0.7f, 0.3f, 1f)),
+        label = "panorâmica do facho",
+    )
+
+    val brilho = remember { Animatable(1f) }
+    LaunchedEffect(escolhido) {
+        brilho.snapTo(0.12f)
+        brilho.animateTo(
+            targetValue = 1f,
+            animationSpec = keyframes {
+                durationMillis = 300
+                /// A lâmpada de arco: quase apagada, pico **acima** do normal,
+                /// queda, e assenta. O pico em 1.28 é o que faz o olho ler
+                /// "acendeu" em vez de "apareceu".
+                0.12f at 0
+                1.28f at 60
+                0.34f at 115
+                1.12f at 175
+                0.76f at 225
+                1f at 300
+            },
+        )
+    }
+
+    Box(modifier.fillMaxWidth().background(Cores.fundo)) {
+        Canvas(Modifier.matchParentSize()) {
+            val larguraDaAba = size.width / quantos
+            val eixo = larguraDaAba * (posicao + 0.5f)
+            /// A lente fica **abaixo** da borda: a luz entra na barra vinda de
+            /// fora dela, que é o que uma janela de projeção faz.
+            val base = size.height + 4.dp.toPx()
+            val forca = brilho.value
+
+            /// ⚠️ **Sete paradas e raio grande, contra o banding.**
+            ///
+            /// A primeira versão tinha três paradas e raio de 1,45×. O
+            /// screenshot mostrou exatamente o risco que a proposta previu: uma
+            /// **aresta vertical** no lado esquerdo do cone. Não era o desenho —
+            /// era a queda de alfa cruzando o degrau de 8 bits num fundo quase
+            /// preto, e o olho lê isso como borda.
+            ///
+            /// Duas medidas juntas: mais paradas fazem a queda ser gradual em
+            /// vez de linear por trecho, e o raio maior joga o fim do degradê
+            /// **pra fora** da barra — a aresta continua existindo, só que onde
+            /// não há pixel pra mostrá-la. A poeira ajuda de brinde: ruído sobre
+            /// degradê é o remédio clássico de banding.
+            drawRect(
+                brush = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0.00f to Cores.destaque.copy(alpha = 0.42f * forca),
+                        0.18f to Cores.destaque.copy(alpha = 0.30f * forca),
+                        0.34f to Cores.destaque.copy(alpha = 0.19f * forca),
+                        0.50f to Cores.destaque.copy(alpha = 0.11f * forca),
+                        0.66f to Cores.destaque.copy(alpha = 0.055f * forca),
+                        0.82f to Cores.destaque.copy(alpha = 0.02f * forca),
+                        1.00f to Color.Transparent,
+                    ),
+                    center = Offset(eixo, base),
+                    radius = size.height * 2.6f,
+                ),
+            )
+
+            /// A poeira suspensa. O alfa cai com a distância ao eixo **e** com a
+            /// altura — pó no ar só brilha onde a luz passa.
+            ///
+            /// ⚠️ **Cada grão sai do lugar, e o screenshot é que exigiu.** A
+            /// primeira versão punha os pontos numa grade de 19×13 exatos, e o
+            /// resultado lia como **trama**, não como pó: o olho acha a repetição
+            /// antes de achar a luz.
+            ///
+            /// O deslocamento vem de uma função de espalhamento sobre as
+            /// coordenadas — determinística, sem `Random`. Isso importa por dois
+            /// motivos: sorteio por quadro faria a poeira **cintilar** (que é
+            /// chuvisco de TV, não poeira em suspensão), e sorteio por
+            /// composição mudaria o desenho a cada recomposição, tirando o
+            /// screenshot de comparação.
+            val passoX = 19.dp.toPx()
+            val passoY = 13.dp.toPx()
+            var linha = 0
+            var y = passoY / 2
+            while (y < size.height) {
+                var coluna = 0
+                var x = passoX / 2
+                while (x < size.width) {
+                    /// Espalhamento barato: dois primos, o resto vira fração.
+                    val semente = (coluna * 73856093) xor (linha * 19349663)
+                    val rx = ((semente shr 3) and 0xFF) / 255f - 0.5f
+                    val ry = ((semente shr 11) and 0xFF) / 255f - 0.5f
+                    val px = x + rx * passoX * 0.85f
+                    val py = y + ry * passoY * 0.85f
+
+                    val dist = abs(px - eixo) / (size.width / quantos)
+                    val altura = 1f - (py / size.height)
+                    /// O tamanho também varia: grão de pó não tem calibre.
+                    val calibre = 0.6f + (((semente shr 19) and 0x3F) / 63f) * 0.7f
+                    val alfa = ((1f - dist) * altura * 0.5f * forca).coerceIn(0f, 1f)
+                    if (alfa > 0.02f) {
+                        drawCircle(
+                            color = Cores.destaqueQuente,
+                            radius = calibre.dp.toPx(),
+                            center = Offset(px, py),
+                            alpha = alfa,
+                        )
+                    }
+                    x += passoX
+                    coluna++
+                }
+                y += passoY
+                linha++
+            }
+
+            /// A lente.
+            val largura = 26.dp.toPx()
+            val altura = 5.dp.toPx()
+            drawOval(
+                color = Cores.destaqueQuente,
+                topLeft = Offset(eixo - largura / 2, size.height - altura / 2),
+                size = Size(largura, altura),
+                alpha = forca.coerceAtMost(1f),
+            )
+        }
+
+        Row(Modifier.fillMaxWidth()) {
+            destinos.forEach { destino ->
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .selectable(
+                            selected = destino.selecionado,
+                            role = Role.Tab,
+                            /// Sem ondulação: ela desenharia um círculo cinza
+                            /// por cima da luz, que é o oposto do que a barra
+                            /// inteira está tentando fazer.
+                            indication = null,
+                            interactionSource = remember {
+                                androidx.compose.foundation.interaction.MutableInteractionSource()
+                            },
+                            onClick = destino.aoTocar,
+                        )
+                        .padding(top = 12.dp, bottom = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        painter = destino.icone,
+                        contentDescription = null,
+                        tint = if (destino.selecionado) Cores.destaqueQuente else Cores.destaqueApagado,
+                    )
+                    Box(Modifier.height(5.dp))
+                    Text(
+                        text = destino.rotulo,
+                        style = Tipo.pilula,
+                        color = if (destino.selecionado) Cores.destaqueQuente else Cores.textoApagado,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}

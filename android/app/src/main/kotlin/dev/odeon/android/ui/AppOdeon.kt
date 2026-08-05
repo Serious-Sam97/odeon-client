@@ -57,10 +57,14 @@ import dev.odeon.android.ui.baixados.ModeloDosBaixados
 import dev.odeon.android.ui.baixados.TelaDosBaixados
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
 import dev.odeon.android.ui.biblioteca.TelaDaBiblioteca
+import dev.odeon.android.ui.guia.ModeloDoGuia
+import dev.odeon.android.ui.guia.TelaDoGuia
 import dev.odeon.android.ui.locadora.ModeloDaLocadora
 import dev.odeon.android.ui.locadora.TelaDaLocadora
 import dev.odeon.android.ui.login.ModeloDeLogin
 import dev.odeon.android.ui.login.TelaDeLogin
+import dev.odeon.android.ui.mural.ModeloDoMural
+import dev.odeon.android.ui.mural.TelaDoMural
 import dev.odeon.android.ui.paravoce.ModeloParaVoce
 import dev.odeon.android.ui.paravoce.TelaParaVoce
 import dev.odeon.android.ui.obra.ModeloDaObra
@@ -107,8 +111,20 @@ private sealed interface Onde {
     /// e o player não estão, e é o que os deixa serem tela cheia.
     data object Biblioteca : Onde
     data object Locadora : Onde
-    data object Baixados : Onde
+    data object Mural : Onde
+    data object Guia : Onde
     data object ParaVoce : Onde
+
+    /// ⚠️ **Baixados saiu da barra e continua existindo.**
+    ///
+    /// Ele nunca foi um lugar — é um **estado** do acervo («o que está no
+    /// aparelho»), e a biblioteca é onde alguém procura um filme, baixado ou
+    /// não. Virou um atalho no cabeçalho da biblioteca, e a tela é a mesma.
+    ///
+    /// A conta que forçou a decisão: com mural e guia entrando seriam seis abas,
+    /// e a seis cada uma fica com 68,5dp — «biblioteca» ocupa 61dp a 12sp, ou
+    /// seja **não cabe** com o respiro. Medido em 04/08/2026.
+    data object Baixados : Onde
 
     data class Assistindo(
         /// A obra **e** o arquivo. O player toca o arquivo, mas quem recebe a
@@ -155,7 +171,8 @@ private sealed interface Onde {
 private enum class Aba(val rotulo: String, val icone: Int, val destino: Onde) {
     Biblioteca("biblioteca", R.drawable.ic_aba_biblioteca, Onde.Biblioteca),
     Locadora("locadora", R.drawable.ic_aba_locadora, Onde.Locadora),
-    Baixados("baixados", R.drawable.ic_aba_baixados, Onde.Baixados),
+    Mural("mural", R.drawable.ic_aba_mural, Onde.Mural),
+    Guia("guia", R.drawable.ic_aba_guia, Onde.Guia),
     ParaVoce("para você", R.drawable.ic_aba_paravoce, Onde.ParaVoce),
 }
 
@@ -337,6 +354,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         TelaDaBiblioteca(
                             modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
+                            aoAbrirBaixados = { onde = Onde.Baixados },
                             moldura = molduraDoCartaz,
                         )
                     }
@@ -356,6 +374,22 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         TelaDosBaixados(modelo = modelo)
+                    }
+                }
+
+                Onde.Mural -> {
+                    val modelo: ModeloDoMural = viewModel(factory = fabricaDoMural(app.odeon))
+                    BackHandler { onde = Onde.Biblioteca }
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        TelaDoMural(modelo = modelo, aoAbrirObra = { onde = Onde.Ficha(it) })
+                    }
+                }
+
+                Onde.Guia -> {
+                    val modelo: ModeloDoGuia = viewModel(factory = fabricaDoGuia(app.odeon))
+                    BackHandler { onde = Onde.Biblioteca }
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        TelaDoGuia(modelo = modelo)
                     }
                 }
 
@@ -653,6 +687,14 @@ private fun fabricaDosBaixados(app: OdeonApp) = viewModelFactory {
 
 private fun fabricaParaVoce(odeon: RepositorioOdeon) = viewModelFactory {
     initializer { ModeloParaVoce(odeon) }
+}
+
+private fun fabricaDoMural(odeon: RepositorioOdeon) = viewModelFactory {
+    initializer { ModeloDoMural(odeon) }
+}
+
+private fun fabricaDoGuia(odeon: RepositorioOdeon) = viewModelFactory {
+    initializer { ModeloDoGuia(odeon) }
 }
 
 private fun fabricaDaLocadora(odeon: RepositorioOdeon) = viewModelFactory {

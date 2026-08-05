@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O guia — os eixos que cruzam.
+
+  O guia não é um livro nem uma lupa: ele é o acervo olhado **por outro eixo** —
+  por diretor, por gênero, por década. Duas faixas que se cruzam é o desenho
+  dessa ideia, e o quadrado no encontro é onde a resposta está.
+
+  ⚠️ É o único dos seis ícones que não desenha um objeto. Os outros cinco são
+  coisas — grade, caixa, seta, estrela, papéis. Este é uma relação, e não há
+  objeto que a represente sem mentir: um livro diria "leia", uma lupa diria
+  "procure", e o guia não é nenhum dos dois.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,9.5h18v2.2h-18z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9.5,3h2.2v18h-2.2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14.5,14.5h5.5v5.5h-5.5z" />
+</vector>

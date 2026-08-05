@@ -585,3 +585,109 @@ data class SessaoDeTranscodificacao(
     val reasons: List<String> = emptyList(),
     @SerialName("playlist_url") val urlDaPlaylist: String,
 )
+
+// ------------------------------------------------------------------ o mural
+//
+// `GET /api/feed`. Conferido contra `Mural` e `Acontecimento` do
+// `web/src/api.ts:2076`.
+
+/// Uma coisa que aconteceu na casa.
+///
+/// ## `tipo` é lista fechada, e o que a tela não sabe **some**
+///
+/// O comentário da web é a regra e ela vale aqui igual: «`terminou` | `pegou` |
+/// `devolveu` | `pediu` | `avaliou`. Lista fechada: um tipo que a tela não sabe
+/// dizer não vira linha muda, some.»
+///
+/// É o §18 aplicado a um feed: melhor uma linha a menos que uma linha que diz
+/// «alguém fez algo com alguma coisa».
+@Serializable
+data class Acontecimento(
+    val tipo: String,
+    val quando: String,
+    val quem: String,
+    @SerialName("quem_id") val quemId: String,
+    val meu: Boolean = false,
+    val titulo: String,
+    @SerialName("obra_id") val obraId: String? = null,
+    val poster: String? = null,
+    val detalhe: String? = null,
+) {
+    /// A frase, montada aqui porque ela é **desenho** e não dado.
+    ///
+    /// O servidor manda o verbo em código (`pegou`) e os sujeitos; a frase em
+    /// português é da tela. Fazer o servidor mandar texto pronto amarraria o
+    /// idioma da API ao idioma do cliente — e o `detalhe` já vem pronto porque
+    /// aquele **é** conteúdo (uma nota, um recado).
+    ///
+    /// `null` quando o tipo é desconhecido, e aí a linha não desenha.
+    val frase: String?
+        get() = when (tipo) {
+            "terminou" -> "terminou"
+            "pegou" -> "pegou a fita de"
+            "devolveu" -> "devolveu"
+            "pediu" -> "pediu de volta"
+            "avaliou" -> "avaliou"
+            else -> null
+        }
+}
+
+@Serializable
+data class Mural(
+    val acontecimentos: List<Acontecimento> = emptyList(),
+    /// Quantas pessoas apareceram no mural.
+    ///
+    /// ⚠️ O comentário da web explica por que este número existe e é desenhado:
+    /// «um mural com um nome só não é uma conversa — e a tela diz isso em vez de
+    /// parecer completa». É o §8b numa métrica.
+    val vozes: Int = 0,
+    /// Quantas poderiam aparecer: você mais os seus.
+    val pessoas: Int = 0,
+)
+
+// ------------------------------------------------------------------- o guia
+//
+// `GET /api/guia`. Conferido contra `GuiaEixos` do `web/src/api.ts:841`.
+
+/// Uma pessoa do guia — direção, elenco ou trilha.
+@Serializable
+data class PessoaDoGuia(
+    val id: String,
+    val name: String,
+    @SerialName("image_path") val imagem: String? = null,
+    @SerialName("known_for") val conhecidaPor: String? = null,
+    val obras: Int = 0,
+    val terminadas: Int = 0,
+    val comecadas: Int = 0,
+    val posters: List<String>? = null,
+    val total: Int = 0,
+)
+
+/// Um eixo que não é pessoa: gênero, década ou país.
+@Serializable
+data class FaixaDoGuia(
+    val rotulo: String,
+    /// O que iria pro filtro da biblioteca — `genre:Terror`, ou o ano da década.
+    /// Declarado mesmo sem tela que filtre ainda: é ele que liga o guia ao
+    /// acervo, e é a próxima coisa óbvia a fazer aqui.
+    val chave: String,
+    val obras: Int = 0,
+    val posters: List<String>? = null,
+)
+
+/// `GET /api/guia` — os eixos pelos quais o acervo pode ser olhado.
+@Serializable
+data class GuiaDeEixos(
+    val direcao: List<PessoaDoGuia> = emptyList(),
+    val elenco: List<PessoaDoGuia> = emptyList(),
+    val trilha: List<PessoaDoGuia> = emptyList(),
+    val generos: List<FaixaDoGuia> = emptyList(),
+    val decadas: List<FaixaDoGuia> = emptyList(),
+    val paises: List<FaixaDoGuia> = emptyList(),
+    /// Quantos filmes **não** são dos Estados Unidos.
+    ///
+    /// O comentário da web diz por que ele vem junto: «sem ele o eixo diz
+    /// "Estados Unidos 491" e o resto vira rodapé. Este é o número que faz a
+    /// região valer uma seção».
+    @SerialName("fora_de_hollywood") val foraDeHollywood: Int = 0,
+)

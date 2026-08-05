@@ -100,6 +100,16 @@ interface OdeonApi {
     /// O que está fora da estante. **Só lê.**
     /// A loja: as estantes com as caixas expostas. Ver `Loja` — é a rota que
     /// faz a locadora ser uma loja e não uma lista de empréstimos.
+    /// O mural — o que aconteceu na casa. `GET /api/feed`, e o nome da rota é
+    /// `feed` mesmo: é a única do app cujo endereço não está em português, e é
+    /// do servidor, não nosso.
+    @GET("api/feed")
+    suspend fun mural(@Query("limit") limite: Int = 40): Mural
+
+    /// O guia — os eixos pelos quais o acervo pode ser olhado.
+    @GET("api/guia")
+    suspend fun guia(): GuiaDeEixos
+
     @GET("api/locadora/estantes")
     suspend fun estantes(): Loja
 

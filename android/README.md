@@ -43,6 +43,24 @@ Depois delas entraram as **levas 1 a 4 do [`docs/REDESENHO.md`](docs/REDESENHO.m
 
 | R9 | o app **sai do app**: arte e título no controle de mídia, atalhos ao segurar o ícone, e o **widget** de continuar assistindo |
 
+## As cinco abas
+
+`biblioteca · locadora · mural · guia · para você`, com o menu inferior desenhado
+como **facho de projetor** — a luz nasce fora da barra, abre sobre o destino
+escolhido, e **pisca como lâmpada de arco** ao trocar.
+
+⚠️ **Baixados saiu da barra** e virou o atalho «no aparelho ›» no cabeçalho da
+biblioteca. A conta: com mural e guia entrando seriam seis abas, e a seis cada
+uma fica com 68,5dp — «biblioteca» ocupa 61dp a 12sp, ou seja não cabe. E o
+corte foi nele porque baixados nunca foi um **lugar**, é um **estado** do
+acervo.
+
+**Mural e guia são versões primeiras e honestas.** O mural da web tem 811 linhas
+e o guia 647; aqui cada um é um `GET` desenhado. O que falta está escrito nos
+comentários das telas — escrever post, comentar e as salas do "junto" no mural;
+e no guia, tocar num eixo ainda não filtra a biblioteca, porque a biblioteca não
+tem filtro.
+
 ⚠️ **A régua de fps da R4 ficou sem resposta.** Ela manda tirar o enfeite se a
 rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade
 **com ou sem** enfeite — a variância entre execuções ficou maior que a diferença

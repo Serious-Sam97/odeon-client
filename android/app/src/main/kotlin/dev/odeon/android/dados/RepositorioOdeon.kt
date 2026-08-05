@@ -181,6 +181,18 @@ class RepositorioOdeon(private val cofre: Cofre) {
         exigirApi().prateleira()
     }
 
+    /// O mural. Falha devolve mural vazio — a tela diz "ainda não aconteceu
+    /// nada" em vez de morrer, e as duas coisas são indistinguíveis pra quem
+    /// olha, o que aqui é aceitável: nos dois casos não há o que mostrar.
+    suspend fun mural(): Mural = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().mural() }.getOrDefault(Mural())
+    }
+
+    /// O guia.
+    suspend fun guia(): GuiaDeEixos = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().guia() }.getOrDefault(GuiaDeEixos())
+    }
+
     /// A loja: as estantes com as caixas expostas.
     ///
     /// Falha devolve loja **vazia** em vez de estourar. A locadora tem duas

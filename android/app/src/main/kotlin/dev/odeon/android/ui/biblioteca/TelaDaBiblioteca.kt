@@ -52,6 +52,7 @@ import dev.odeon.android.ui.MolduraDoCartaz
 import dev.odeon.android.ui.LampadasDaMarquise
 import dev.odeon.android.ui.Luz
 import dev.odeon.android.ui.RotuloDeSecao
+import dev.odeon.android.ui.Tipo
 import dev.odeon.android.ui.pegaLuz
 import dev.odeon.android.ui.corDeHex
 import kotlin.math.max
@@ -72,6 +73,7 @@ import androidx.compose.foundation.layout.width
 fun TelaDaBiblioteca(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit = {},
+    aoAbrirBaixados: () -> Unit = {},
     /// Como marcar o pôster pra transição compartilhada — ver `MolduraDoCartaz`.
     moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
 ) {
@@ -151,6 +153,7 @@ fun TelaDaBiblioteca(
                 Cabecalho(
                     quantos = estado.itens.size,
                     total = estado.total,
+                    aoAbrirBaixados = aoAbrirBaixados,
                 )
             }
 
@@ -226,6 +229,7 @@ fun TelaDaBiblioteca(
 private fun Cabecalho(
     quantos: Int,
     total: Int?,
+    aoAbrirBaixados: () -> Unit,
 ) {
     /// Sem padding lateral próprio: dentro da grade quem alinha é o
     /// `contentPadding` de 16.dp dela, e somar os dois afastaria o título dos
@@ -265,6 +269,33 @@ private fun Cabecalho(
         /// Agora eles estão no `EsqueletoComAbas` do `AppOdeon`, que vira trilho
         /// lateral em paisagem e em tablet — o que responde à objeção de altura
         /// justamente onde ela doía.
+        ///
+        /// ## E um deles voltou pra cá: **baixados**
+        ///
+        /// Com mural e guia entrando seriam seis abas, e a seis cada uma fica
+        /// com 68,5dp — «biblioteca» ocupa 61dp a 12sp, ou seja não cabe com o
+        /// respiro. Medido em 04/08/2026.
+        ///
+        /// O corte foi em baixados, e não é só aritmética: ele nunca foi um
+        /// **lugar**, é um **estado** do acervo — «o que está no aparelho». E é
+        /// aqui que alguém procura um filme, baixado ou não.
+        ///
+        /// Fica como atalho no cabeçalho porque a tela continua existindo e é
+        /// boa: ela mostra o que baixou, o quanto falta e o que venceu. O que
+        /// mudou é que ela deixou de disputar um dos cinco lugares permanentes
+        /// com o mural e o guia, que são lugares de verdade.
+        ///
+        /// ⚠️ O próximo passo óbvio é ele virar **filtro** e não atalho — uma
+        /// pílula «no aparelho» ao lado de um «tudo», e a grade filtra. Aí
+        /// baixados deixa de ser tela. Não foi feito porque a grade ainda não
+        /// tem filtro nenhum, e inventar um só pra isto seria construir a
+        /// metade errada primeiro.
+        TextButton(
+            onClick = aoAbrirBaixados,
+            contentPadding = PaddingValues(vertical = 4.dp),
+        ) {
+            Text("no aparelho ›", color = Cores.destaque, style = Tipo.pilula)
+        }
     }
 }
 

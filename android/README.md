@@ -7,6 +7,12 @@ de `web/` e `clients/`.
 > as decisões todas, com o porquê de cada uma e a sequência em sete fases. Este
 > arquivo é só como rodar.
 >
+> **⚠️ Pegando o projeto agora? Comece por
+> [`docs/CONTINUAR-2.md`](docs/CONTINUAR-2.md)** — ele é o traspasse mais
+> recente, e a primeira seção dele é a tarefa que está em aberto: o guia foi
+> construído contra a rota errada e precisa virar a **revista semanal** que a
+> web tem.
+>
 > **Os pedidos pendentes ao servidor estão em
 > [`docs/PEDIDOS-AO-SERVIDOR.md`](docs/PEDIDOS-AO-SERVIDOR.md)**, no formato da
 > §1b — prontos pro dono levar. São dois, e nenhum bloqueia o app.

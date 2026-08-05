@@ -11,9 +11,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -43,9 +47,34 @@ import kotlin.math.abs
 /// peças a mais; uma constante que as duas pontas leem é o contrato mais curto
 /// que resolve.
 ///
-/// 72dp é a soma do que está lá dentro: 12 de respiro, 24 de ícone, 5 de vão,
-/// ~15 de rótulo e 16 embaixo.
-val ALTURA_DA_FILEIRA = 72.dp
+/// ## 54dp, e ela encolheu **duas vezes** em 05/08/2026
+///
+/// Eram 72: 12 de respiro, 24 de ícone, 5 de vão, ~15 de rótulo e **16 embaixo**.
+/// A queixa do dono foi «o menu de baixo está com uma faixa preta muito grande» —
+/// e medindo, a barra ocupava 72dp de fileira **mais** os ~25dp do inset do
+/// gesto: **97dp**, contra os 80 que o Material reserva pra barra inteira, insets
+/// incluídos.
+///
+/// | | fileira | com o inset |
+/// |---|---|---|
+/// | antes | 72dp | 97dp |
+/// | primeiro corte | 64dp | 89dp |
+/// | **agora** | **54dp** | **79dp** |
+///
+/// Ficou `6 + 22 + 3 + ~17 + 5 = 53`, e as três folgas que sobravam eram: os 16dp
+/// de baixo, que existiam pra afastar o rótulo da borda da tela — trabalho que é
+/// do inset do sistema, logo abaixo —, o respiro de cima, e o ícone de 24dp, que
+/// é o tamanho de fábrica do `Icon` e não uma escolha desta barra.
+///
+/// **79dp é o piso desta forma.** Abaixo disso o rótulo teria de sair, e aí a
+/// barra deixa de dizer o que cada aba é — outra conversa, não um ajuste de
+/// número.
+///
+/// ⚠️ **Mas o que a foto mostrava não era só altura.** Ver o cabeçalho do
+/// `BarraDoFacho`: o fundo da barra parava na fileira e o inset ficava preto
+/// chapado, sem o degradê nem a luz — uma tarja entre a barra acesa e a borda do
+/// aparelho. Encolher tira dp; o degradê descer até a borda tira a tarja.
+val ALTURA_DA_FILEIRA = 54.dp
 
 /// A faixa **só de luz**, acima da fileira.
 ///
@@ -54,15 +83,23 @@ val ALTURA_DA_FILEIRA = 72.dp
 ///
 /// ## O número sai de uma conta, e a primeira tentativa errou
 ///
-/// O cone tem raio de `2,6 × ALTURA_DA_FILEIRA` — 187dp — e nasce colado na
-/// aresta de baixo. Pra ele **fechar dentro da caixa**, sobra `187 − 72 = 115`.
+/// O cone tem raio de `2,6 × ALTURA_DA_FILEIRA` e nasce colado na aresta de
+/// baixo da fileira. Pra ele **fechar dentro da caixa**, sobra `raio − fileira`.
 /// A primeira versão pôs 68dp «de olho», e o screenshot mostrou a luz batendo no
 /// teto outra vez: uma aresta mais fraca que a antiga, mas reta do mesmo jeito.
+///
+/// ⚠️ **Este número é derivado, e por isso ele encolheu junto** — duas vezes, em
+/// 05/08/2026. Com a fileira em 54dp o raio virou `54 × 2,6 = 140`, e sobra
+/// `140 − 54 = 86`. Ficaram **89**, a mesma folga de 3dp que os 118 tinham sobre
+/// os 115 da conta original.
+///
+/// Mexer na fileira sem mexer aqui é como a aresta reta volta — e ela é um
+/// defeito que uma rodada anterior já consertou uma vez, com foto.
 ///
 /// ⚠️ **Ela não come toque.** A faixa não tem `pointerInput` nenhum, e no Compose
 /// quem não pede evento não recebe: o dedo atravessa pro cartaz que está atrás.
 /// Só a fileira, lá embaixo, é clicável.
-val ALTURA_DA_LUZ = 118.dp
+val ALTURA_DA_LUZ = 89.dp
 
 /// Um destino da barra, do jeito que o facho precisa saber dele.
 data class DestinoDoFacho(
@@ -197,10 +234,26 @@ fun BarraDoFacho(
         )
     }
 
+    /// ## ⚠️ O inset do gesto entra **dentro** da barra — 05/08/2026
+    ///
+    /// Antes quem aplicava esta margem era o `AppOdeon`, por fora: a barra
+    /// inteira subia, e o que ficava entre ela e a borda do aparelho era o fundo
+    /// da tela, preto e chapado. O resultado na foto era uma **tarja** de ~25dp
+    /// separando a barra acesa da borda — e foi ela, mais que a altura, que o
+    /// dono viu.
+    ///
+    /// Trazendo o inset pra cá, o degradê e o cone passam a ser desenhados até a
+    /// borda, e **só a fileira** recua. A barra do gesto do sistema flutua sobre
+    /// a luz, que é o que um app de tela cheia faz.
+    ///
+    /// O `Canvas` cresce junto, e a lente desce com ele até a borda do aparelho —
+    /// ver o comentário em cima dele.
+    val insetBaixo = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+
     Box(
         modifier
             .fillMaxWidth()
-            .height(ALTURA_DA_LUZ + ALTURA_DA_FILEIRA)
+            .height(ALTURA_DA_LUZ + ALTURA_DA_FILEIRA + insetBaixo)
             /// O escuro **entra** em vez de começar.
             ///
             /// Transparente no topo, `Cores.fundo` quando a fileira começa, e
@@ -221,7 +274,10 @@ fun BarraDoFacho(
             .background(
                 Brush.verticalGradient(
                     colorStops = run {
-                        val total = ALTURA_DA_LUZ.value + ALTURA_DA_FILEIRA.value
+                        /// O inset entra no **total**, e não nas frações: as duas
+                        /// paradas continuam medindo da luz, então o escuro fecha
+                        /// onde a fileira começa e segue sólido daí até a borda.
+                        val total = ALTURA_DA_LUZ.value + ALTURA_DA_FILEIRA.value + insetBaixo.value
                         val comeco = (ALTURA_DA_LUZ.value - 46f) / total
                         val fim = ALTURA_DA_LUZ.value / total
                         arrayOf(
@@ -236,6 +292,20 @@ fun BarraDoFacho(
                 ),
             ),
     ) {
+        /// ⚠️ **O `Canvas` cobre a caixa inteira, inset incluído — e eu tinha
+        /// escrito o contrário aqui uma hora antes.**
+        ///
+        /// A primeira versão prendeu o desenho à altura da luz mais a fileira,
+        /// com o argumento de que «a luz nasce na aresta da fileira, não na do
+        /// aparelho». A foto desmentiu: o cone terminava numa **linha horizontal
+        /// visível** na base da fileira, com a faixa do inset preta embaixo — a
+        /// mesma tarja que esta rodada veio tirar, só que 25dp mais curta.
+        ///
+        /// E o argumento certo já estava escrito três linhas abaixo, desde que
+        /// esta barra nasceu: «a lente fica **abaixo** da borda: a luz entra na
+        /// barra vinda de fora dela, que é o que uma janela de projeção faz». Com
+        /// o `Canvas` inteiro, a lente cai na borda do aparelho e o cone preenche
+        /// o inset — não sobra aresta pra ver.
         Canvas(Modifier.matchParentSize()) {
             val larguraDaAba = size.width / quantos
             val eixo = larguraDaAba * (posicao + 0.5f)
@@ -350,6 +420,11 @@ fun BarraDoFacho(
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
+                /// ⚠️ **A ordem destes dois importa.** `padding` antes de
+                /// `height` envolve: o nó fica com `fileira + inset` e o conteúdo
+                /// com a fileira inteira. Invertidos, o `height` fixaria 64dp no
+                /// total e o inset comeria o rótulo por dentro.
+                .padding(bottom = insetBaixo)
                 .height(ALTURA_DA_FILEIRA),
         ) {
             destinos.forEach { destino ->
@@ -368,15 +443,24 @@ fun BarraDoFacho(
                             },
                             onClick = destino.aoTocar,
                         )
-                        .padding(top = 12.dp, bottom = 16.dp),
+                        /// Os 16dp de baixo viraram 5: eles afastavam o rótulo da
+                        /// borda da tela, e quem faz isso é o inset do sistema,
+                        /// que agora mora logo abaixo desta fileira.
+                        .padding(top = 6.dp, bottom = 5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
                         painter = destino.icone,
                         contentDescription = null,
                         tint = if (destino.selecionado) Cores.destaqueQuente else Cores.destaqueApagado,
+                        /// ⚠️ **22dp, e o padrão do `Icon` é 24.** É o último dp
+                        /// que dava pra tirar sem mexer no rótulo — e os ícones
+                        /// desta barra são desenhos de duas ou três formas
+                        /// cheias, que aguentam a redução sem virar borrão do
+                        /// jeito que um ícone de traço fino viraria.
+                        modifier = Modifier.size(22.dp),
                     )
-                    Box(Modifier.height(5.dp))
+                    Box(Modifier.height(3.dp))
                     Text(
                         text = destino.rotulo,
                         style = Tipo.pilula,

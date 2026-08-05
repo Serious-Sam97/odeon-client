@@ -187,6 +187,59 @@ private enum class Aba(val rotulo: String, val icone: Int, val destino: Onde) {
     ParaVoce("para você", R.drawable.ic_aba_paravoce, Onde.ParaVoce),
 }
 
+/// Como uma aba **se apresenta agora**.
+///
+/// ## Por que ela existe, e não bastava o enum
+///
+/// A `Aba` é fixa: cinco entradas com nome e ícone de nascença. Mas a primeira
+/// **muda de cara** — em baixados ela vira `baixados`, com o ícone próprio, e o
+/// toque dela deixa de não fazer nada e passa a voltar pra grade.
+///
+/// Sem isto, os dois desenhos (a barra do facho e o trilho de paisagem) teriam
+/// cada um a sua cópia do «se estiver em baixados, escreva outra coisa» — duas
+/// cópias que divergem no dia em que a terceira sub-tela aparecer.
+private data class FaceDaAba(
+    val rotulo: String,
+    val icone: Int,
+    val selecionada: Boolean,
+    val aoTocar: () -> Unit,
+)
+
+/// As cinco faces, do jeito que a tela atual pede.
+///
+/// ## ⚠️ Tocar na aba acesa **volta à raiz da seção**
+///
+/// É o conserto de um defeito que eu mesmo previ e deixei passar: com baixados
+/// acendendo `biblioteca`, tocar em «biblioteca» não fazia nada — o guarda era
+/// `if (aba != atual)`. O comentário dizia «sair de baixados é o voltar, como
+/// sempre foi», e isso é o §8b escrito com outras palavras: a única saída
+/// visível da tela não respondia.
+///
+/// O padrão que resolve é o de sempre, no Android e no iOS: **tocar na aba já
+/// selecionada leva ao começo daquela seção**. Aqui a seção é a biblioteca e o
+/// começo é a grade.
+///
+/// E o rótulo muda junto, por pedido do dono: em baixados a primeira aba **diz
+/// `baixados`**, com o `ic_aba_baixados` que já existia no projeto desde quando
+/// baixados foi aba de verdade. A barra passa a dizer onde você está em vez de
+/// dizer em que seção você está — e o caminho de volta fica óbvio porque o nome
+/// que ela mostra é o do lugar que você quer deixar.
+private fun facesDasAbas(onde: Onde, aoIr: (Onde) -> Unit): List<FaceDaAba> =
+    Aba.entries.map { aba ->
+        val virouBaixados = onde == Onde.Baixados && aba == Aba.Biblioteca
+        FaceDaAba(
+            rotulo = if (virouBaixados) "baixados" else aba.rotulo,
+            icone = if (virouBaixados) R.drawable.ic_aba_baixados else aba.icone,
+            selecionada = aba == onde.aba,
+            aoTocar = {
+                when {
+                    virouBaixados -> aoIr(Onde.Biblioteca)
+                    aba != onde.aba -> aoIr(aba.destino)
+                }
+            },
+        )
+    }
+
 /// O destino de um nome de aba vindo de um atalho — ou `null` se não houver.
 ///
 /// Comparação sem diferenciar maiúsculas porque o nome vem de um XML escrito à
@@ -201,7 +254,26 @@ private fun abaDe(nome: String?): Onde? =
 /// `null` e por isso são desenhados fora do esqueleto: os dois últimos são tela
 /// cheia, e uma barra de abas por cima de um filme é o oposto do que se quer.
 private val Onde.aba: Aba?
-    get() = Aba.entries.firstOrNull { it.destino == this }
+    get() = when (this) {
+        /// ## ⚠️ Baixados **não é aba**, e mesmo assim acende uma — 05/08/2026
+        ///
+        /// O dono pediu o menu inferior nesta tela. Ela não é um dos cinco
+        /// destinos, e o `BarraDoFacho` acende a aba selecionada — sem nenhuma
+        /// selecionada ele cairia na primeira por padrão (`coerceAtLeast(0)`), e
+        /// a barra diria «biblioteca» com a pessoa em baixados por acidente de
+        /// implementação, não por decisão.
+        ///
+        /// A decisão é acender **biblioteca**, e ela tem base: baixados é
+        /// sub-tela dela — chega-se pelo `no aparelho ›` do cabeçalho da grade, e
+        /// o `BackHandler` daqui volta pra lá. O facho fica na **seção**, não na
+        /// tela, que é o que a web faz com sub-rota.
+        ///
+        /// Tocar em «biblioteca» com o facho já aceso ali não faz nada — o
+        /// `BarraDoFacho` só chama `aoTocar` quando a aba é outra. Sair de
+        /// baixados é o voltar, como sempre foi.
+        Onde.Baixados -> Aba.Biblioteca
+        else -> Aba.entries.firstOrNull { it.destino == this }
+    }
 
 /// O `@OptIn` aqui é pelo mesmo motivo do `TelaDoPlayer`: a tela dos baixados
 /// segura o `DownloadManager` do Media3, que fica **abaixo** da fronteira que o
@@ -459,6 +531,20 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                             modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
                             aoAbrirBaixados = { onde = Onde.Baixados },
+                            /// ⚠️ **Relido a cada visita à biblioteca**, e não
+                            /// uma vez na montagem: quem baixa um filme pela
+                            /// ficha volta pra cá, e uma pastilha que ainda
+                            /// dissesse «0» seria o app negando o que a pessoa
+                            /// acabou de fazer.
+                            ///
+                            /// `baixados.lista()` lê o índice do Media3, que é
+                            /// SQLite local — barato o bastante pra uma leitura
+                            /// por entrada na tela, e caro demais pra uma por
+                            /// recomposição. Por isso está num `remember` com o
+                            /// contador de voltas como chave.
+                            quantosBaixados = remember(voltasDoPlayer, onde) {
+                                runCatching { app.baixados.lista().size }.getOrDefault(0)
+                            },
                             moldura = molduraDoCartaz,
                         )
                     }
@@ -494,7 +580,30 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         viewModel(factory = fabricaDosBaixados(app))
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        TelaDosBaixados(modelo = modelo)
+                        TelaDosBaixados(
+                            modelo = modelo,
+                            /// ## ⚠️ Assistir passou a existir aqui — 05/08/2026
+                            ///
+                            /// A tela não recebia callback nenhum: um filme
+                            /// baixado pra ver sem rede só podia ser **apagado**
+                            /// a partir dela. Quem quisesse assistir tinha de
+                            /// voltar à biblioteca e procurar a obra.
+                            ///
+                            /// O `ondeParou` vem resolvido pelo modelo: com
+                            /// rede ele pergunta, sem rede cai em zero. O porquê
+                            /// — e o dado que a primeira versão apagava — está
+                            /// em `ModeloDosBaixados.tocar`.
+                            aoTocar = { item, ondeParou ->
+                                indoAssistir = Onde.Assistindo(
+                                    obraId = item.ficha.obraId,
+                                    arquivoId = item.ficha.arquivoId,
+                                    titulo = item.ficha.titulo,
+                                    ondeParou = ondeParou,
+                                    capaUrl = item.ficha.poster,
+                                    duracaoEmSegundos = item.ficha.duracaoEmSegundos,
+                                )
+                            },
+                        )
                     }
                 }
 
@@ -702,8 +811,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     val abaAtual = if (sobreposicaoCheia) null else alvo.aba
                     if (abaAtual != null) {
                         EsqueletoComAbas(
-                            atual = abaAtual,
-                            aoTrocar = { onde = it.destino },
+                            faces = facesDasAbas(alvo) { onde = it },
                             conteudo = { corpo(moldura) },
                             /// A gaveta do canto — o único pedaço de cromo que
                             /// existe em toda aba. Ela fica **fora** do
@@ -769,8 +877,9 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
 /// frio nos outros — sem o cone.
 @Composable
 private fun EsqueletoComAbas(
-    atual: Aba,
-    aoTrocar: (Aba) -> Unit,
+    /// As cinco, já resolvidas — ver `facesDasAbas`. O esqueleto **desenha**, e
+    /// não decide mais o que cada aba diz nem o que o toque dela faz.
+    faces: List<FaceDaAba>,
     conteudo: @Composable () -> Unit,
     /// A gaveta do "eu", desenhada por cima do conteúdo e alinhada ao canto de
     /// cima à direita — nas duas formas, barra e trilho. Em paisagem o trilho
@@ -813,14 +922,14 @@ private fun EsqueletoComAbas(
                     ),
                 ),
             ) {
-                Aba.entries.forEach { aba ->
+                faces.forEach { face ->
                     NavigationRailItem(
-                        selected = aba == atual,
-                        onClick = { if (aba != atual) aoTrocar(aba) },
+                        selected = face.selecionada,
+                        onClick = face.aoTocar,
                         icon = {
-                            Icon(painterResource(aba.icone), contentDescription = null)
+                            Icon(painterResource(face.icone), contentDescription = null)
                         },
-                        label = { Text(aba.rotulo, style = Tipo.pilula, maxLines = 1) },
+                        label = { Text(face.rotulo, style = Tipo.pilula, maxLines = 1) },
                         colors = NavigationRailItemDefaults.colors(
                             selectedIconColor = Cores.destaqueQuente,
                             selectedTextColor = Cores.destaqueQuente,
@@ -856,19 +965,26 @@ private fun EsqueletoComAbas(
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().padding(bottom = recuo)) { corpoComGaveta() }
         BarraDoFacho(
-            destinos = Aba.entries.map { aba ->
+            destinos = faces.map { face ->
                 DestinoDoFacho(
-                    rotulo = aba.rotulo,
-                    icone = painterResource(aba.icone),
-                    selecionado = aba == atual,
-                    aoTocar = { if (aba != atual) aoTrocar(aba) },
+                    rotulo = face.rotulo,
+                    icone = painterResource(face.icone),
+                    selecionado = face.selecionada,
+                    aoTocar = face.aoTocar,
                 )
             },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
-                ),
+            /// ⚠️ **Sem `windowInsetsPadding` aqui desde 05/08/2026**, e a
+            /// margem não sumiu: ela passou pra **dentro** da barra.
+            ///
+            /// Aplicada por fora, ela subia a barra inteira e deixava o fundo da
+            /// tela — preto chapado — entre ela e a borda do aparelho. Na foto era
+            /// uma tarja de ~25dp separando a barra acesa da beirada, e foi ela,
+            /// mais que a altura, o que o dono chamou de «faixa preta muito
+            /// grande».
+            ///
+            /// Agora o degradê e o cone descem até a borda e só a fileira recua.
+            /// Ver `BarraDoFacho`.
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
 }
@@ -889,7 +1005,7 @@ private fun fabrica(odeon: RepositorioOdeon) = viewModelFactory {
 /// fechado na fábrica, cada `key` do `viewModel(...)` recebe a sua.
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 private fun fabricaDosBaixados(app: OdeonApp) = viewModelFactory {
-    initializer { ModeloDosBaixados(app.baixados, app.cofre) }
+    initializer { ModeloDosBaixados(app.baixados, app.cofre, app.odeon) }
 }
 
 private fun fabricaParaVoce(odeon: RepositorioOdeon) = viewModelFactory {

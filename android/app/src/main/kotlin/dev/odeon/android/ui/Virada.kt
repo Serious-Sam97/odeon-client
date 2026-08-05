@@ -62,6 +62,36 @@ fun prazoDoEmprestimo(iso: String?, agora: Instant = Instant.now()): Pair<String
     return frase to dias
 }
 
+/// Isto aconteceu **hoje**?
+///
+/// ## O que ela resolve, e por que não é um corte em N
+///
+/// O balcão listava todas as devoluções que o servidor mandasse — nove, no
+/// servidor de casa, e as nove com a mesma cara. A reação óbvia é cortar em três
+/// e pôr um «mais 6». Ela mente nos dois sentidos: num dia em que voltaram cinco
+/// fitas, esconde duas notícias; num dia parado, promove a histórico o que
+/// aconteceu na semana passada.
+///
+/// O corte certo é o tempo, e ele **já chegava**: `devolvido_em` vem em toda
+/// devolução e não era lido por ninguém — nem aqui, nem na web, onde ele só
+/// serve de chave de lista. Era o sétimo campo do §8, e o único que não desenhava
+/// nem escondia nada: **datava**.
+///
+/// ## Por que dia local, e não «faz menos de 24h»
+///
+/// «Hoje» numa casa é o dia do calendário, não uma janela deslizante. Uma fita
+/// devolvida às 23h ontem não é notícia de hoje às 8h da manhã, mesmo tendo nove
+/// horas de idade — e uma devolvida às 00h10 é, mesmo tendo dez minutos.
+///
+/// `false` quando a data não veio ou não parseia: sem carimbo, a devolução cai no
+/// histórico. É o §18 — o app não promove a notícia o que ele não sabe quando
+/// aconteceu.
+fun ehDeHoje(iso: String?, agora: Instant = Instant.now()): Boolean {
+    val quando = instanteDe(iso) ?: return false
+    val fuso = ZoneId.systemDefault()
+    return quando.atZone(fuso).toLocalDate() == agora.atZone(fuso).toLocalDate()
+}
+
 /// O `vira_em` em instante.
 ///
 /// Duas formas porque o servidor manda as duas conforme a rota: a data seca

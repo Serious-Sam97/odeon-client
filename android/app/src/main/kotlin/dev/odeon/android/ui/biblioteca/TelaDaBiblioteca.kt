@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemDaBiblioteca
@@ -81,6 +82,11 @@ fun TelaDaBiblioteca(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit = {},
     aoAbrirBaixados: () -> Unit = {},
+    /// Quantos filmes estão no aparelho — a pastilha acesa da fileira de
+    /// filtros. Vem do `AppOdeon`, que já segura o `Baixados`: dar ao modelo da
+    /// biblioteca uma dependência de download só pra contar seria acoplar a
+    /// grade ao Media3 por um número.
+    quantosBaixados: Int = 0,
     /// Como marcar o pôster pra transição compartilhada — ver `MolduraDoCartaz`.
     moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
 ) {
@@ -125,6 +131,19 @@ fun TelaDaBiblioteca(
             return@Column
         }
 
+        /// ## A barra que condensa fica **por cima** da grade
+        ///
+        /// O cabeçalho continua sendo item da grade e sobe junto com a primeira
+        /// fileira — a decisão de 04/08/2026 sobre os 180px continua valendo.
+        /// O que muda é que, depois que ele sai de vista, uma barra fina toma o
+        /// lugar dele **flutuando**, e não empurrando a grade pra baixo.
+        ///
+        /// É o «condensar por rolagem» que o §1.1 do `PARIDADE` lista como coisa
+        /// que a web faz e o app não. E o que ela mantém é a **busca**, por
+        /// pedido do dono: o comentário do `CampoDeBusca` dizia que «quem vai
+        /// buscar volta ao topo, que é um gesto só» — verdade, e um gesto a mais
+        /// do que não precisar voltar.
+        Box(Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             state = grade,
             /// `Adaptive` e não um número fixo de colunas: o mesmo código serve
@@ -162,7 +181,6 @@ fun TelaDaBiblioteca(
                     total = estado.total,
                     busca = estado.filtros.busca,
                     aoBuscar = modelo::mudouBusca,
-                    aoAbrirBaixados = aoAbrirBaixados,
                     serie = estado.serie,
                     aoSairDaSerie = modelo::sairDaSerie,
                 )
@@ -182,6 +200,8 @@ fun TelaDaBiblioteca(
                         aberto = estado.painelAberto,
                         aoAlternarPainel = modelo::alternarPainel,
                         aoMudar = modelo::mudouFiltros,
+                        quantosBaixados = quantosBaixados,
+                        aoAbrirBaixados = aoAbrirBaixados,
                     )
                 }
             }
@@ -332,6 +352,123 @@ fun TelaDaBiblioteca(
                 }
             }
         }
+
+        /// ## Ela aparece quando o cabeçalho sai de vista
+        ///
+        /// `firstVisibleItemIndex > 0` — o cabeçalho é o item 0, e o teste é
+        /// «ele já subiu?». Dentro de um `derivedStateOf` porque a rolagem muda
+        /// o índice a cada quadro, e sem ele a tela recomporia sessenta vezes
+        /// por segundo pra responder um booleano que muda uma vez.
+        ///
+        /// ⚠️ **Não aparece dentro da série.** Lá o cabeçalho é o nome da série e
+        /// o chip de saída, e não há filtro nenhum — uma barra fixa com busca e
+        /// `filtros ▾` ofereceria dois controles que aquela lista não tem (§53).
+        val condensado by remember {
+            derivedStateOf { grade.firstVisibleItemIndex > 0 }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = condensado && !estado.dentroDaSerie,
+            enter = androidx.compose.animation.fadeIn() +
+                androidx.compose.animation.slideInVertically { -it },
+            exit = androidx.compose.animation.fadeOut() +
+                androidx.compose.animation.slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            BarraCondensada(
+                busca = estado.filtros.busca,
+                aoBuscar = modelo::mudouBusca,
+                filtrosLigados = estado.filtros.quantosLigados,
+                aoAbrirFiltros = modelo::alternarPainel,
+                quantosBaixados = quantosBaixados,
+                aoAbrirBaixados = aoAbrirBaixados,
+            )
+        }
+        }
+    }
+}
+
+/// A barra fina que substitui o cabeçalho depois da primeira rolada.
+///
+/// ## O que ela mantém, e por quê
+///
+/// | | |
+/// |---|---|
+/// | **a busca** | inteira, e foi pedido do dono: buscar sem voltar ao topo |
+/// | **`filtros`** | com a pílula do número — filtrar é o gesto de quem está folheando |
+/// | **`⤓ N`** | só o ícone e o número: «no aparelho» por extenso deixaria a busca com menos da metade da largura |
+///
+/// O que **não** sobe é o título e a contagem: os dois são contexto de chegada.
+/// Quem já rolou sabe que está na biblioteca, e `60 de 8.316` só muda quando se
+/// filtra — momento em que o painel se abre e a contagem volta a ser lida no topo.
+///
+/// ## O fundo é sólido, e não translúcido
+///
+/// Ela flutua sobre cartazes que passam por baixo. Um fundo com alfa deixaria
+/// pôster aparecendo atrás do texto do campo — o mesmo defeito que o menu de
+/// disco cobrou («Tocar disputando espaço com uma camiseta vermelha»). A borda de
+/// baixo é o que separa a barra da grade sem ela precisar de sombra.
+@Composable
+private fun BarraCondensada(
+    busca: String,
+    aoBuscar: (String) -> Unit,
+    filtrosLigados: Int,
+    aoAbrirFiltros: () -> Unit,
+    quantosBaixados: Int,
+    aoAbrirBaixados: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Cores.fundo)
+            /// ⚠️ **68dp reservados à direita, e não 16 — a insígnia mora ali.**
+            ///
+            /// A `GavetaDoEu` é desenhada pelo `AppOdeon` no canto de cima à
+            /// direita, **por cima de toda tela**, e a primeira versão desta
+            /// barra ignorou isso: a foto mostrou a pastilha `⤓ 1` desaparecendo
+            /// atrás do rosto.
+            ///
+            /// É a pendência que o `PARIDADE` já tinha anotado por outro
+            /// sintoma — «a insígnia do canto rouba o toque nos 48dp do canto
+            /// superior direito». Aqui ela cobriu o desenho, não só o toque, e o
+            /// conserto é o mesmo dos dois lados: **quem desenha no topo recua**.
+            ///
+            /// 68 = os 48 da insígnia + os 12 de respiro dela + 8 de folga.
+            .padding(start = 16.dp, end = 68.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) {
+            CampoDeBusca(valor = busca, aoMudar = aoBuscar, compacto = true)
+        }
+
+        Text(
+            text = if (filtrosLigados > 0) "filtros $filtrosLigados" else "filtros ▾",
+            style = Tipo.pilula,
+            color = if (filtrosLigados > 0) Cores.destaque else Cores.texto,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(percent = 50))
+                .background(Cores.fundoElevado)
+                .clickable(onClick = aoAbrirFiltros)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+        )
+
+        /// A mesma pastilha acesa da fileira de baixo, encolhida ao ícone e ao
+        /// número — e com a mesma regra: sem download, ela não nasce (§24).
+        if (quantosBaixados > 0) {
+            Text(
+                text = "↓ $quantosBaixados",
+                style = Tipo.pilula,
+                color = Cores.fundo,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Cores.destaque)
+                    .clickable(onClick = aoAbrirBaixados)
+                    .padding(horizontal = 11.dp, vertical = 7.dp),
+            )
+        }
     }
 }
 
@@ -453,7 +590,6 @@ private fun Cabecalho(
     total: Int?,
     busca: String,
     aoBuscar: (String) -> Unit,
-    aoAbrirBaixados: () -> Unit,
     serie: SerieAberta?,
     aoSairDaSerie: () -> Unit,
 ) {
@@ -462,26 +598,56 @@ private fun Cabecalho(
     /// cartazes que ele encabeça. O espaço até a primeira fileira também já vem
     /// de graça, do `verticalArrangement`.
     Column {
-        Text(
-            /// Dentro da série, o título **é a série**. Manter «biblioteca» com
-            /// os episódios de *Breaking Bad* embaixo faria a tela mentir sobre
-            /// onde se está — e o chip logo abaixo é o caminho de volta.
-            text = serie?.titulo ?: "biblioteca",
-            style = MaterialTheme.typography.headlineSmall,
-            color = Cores.texto,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        /// A contagem só aparece quando existe.
+        /// ## O título e a contagem dividem a linha — 05/08/2026
         ///
-        /// §24: linha vazia **some**, não vira "—". E enquanto o total é nulo,
-        /// escrever "0 de 0" seria afirmar que o acervo está vazio.
-        if (total != null) {
+        /// Eram duas linhas, e a de baixo era `60 de 8316` em cinza de 12sp: o
+        /// mesmo peso de um rodapé. Hoje a porta da locadora e o cabeçalho dos
+        /// baixados deram **serifa dourada** a esta classe de número, e a
+        /// biblioteca — que é a tela que mais conta acervo — era a única onde ele
+        /// era nota de pé de página.
+        ///
+        /// Juntá-los numa linha não é só economia de 42px: `biblioteca 60 de
+        /// 8.316` é **uma frase**, e era isso que as duas linhas estavam
+        /// separando.
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "$quantos de $total",
-                style = MaterialTheme.typography.bodySmall,
-                color = Cores.textoApagado,
+                /// Dentro da série, o título **é a série**. Manter «biblioteca»
+                /// com os episódios de *Breaking Bad* embaixo faria a tela mentir
+                /// sobre onde se está — e o chip logo abaixo é o caminho de volta.
+                text = serie?.titulo ?: "biblioteca",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Cores.texto,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                /// ⚠️ `weight(1f, fill = false)` e não `weight(1f)`: com um título
+                /// de série curto, o `fill` empurraria a contagem pro fim da
+                /// linha, longe da palavra que ela conta.
+                modifier = Modifier.weight(1f, fill = false),
             )
+            /// A contagem só aparece quando existe.
+            ///
+            /// §24: linha vazia **some**, não vira "—". E enquanto o total é
+            /// nulo, escrever "0 de 0" seria afirmar que o acervo está vazio.
+            if (total != null) {
+                val numero = MaterialTheme.typography.headlineSmall.copy(fontSize = 17.sp)
+                Text("$quantos", style = numero, color = Cores.destaque)
+                Text(
+                    text = "de",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Cores.textoApagado,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+                /// ⚠️ **Com ponto de milhar**, que a versão anterior não tinha:
+                /// `8316` obriga a contar os algarismos pra saber a ordem de
+                /// grandeza. É a mesma razão que fez a temporada `1 3` virar `13`
+                /// numa rodada anterior — número é quantidade, e quantidade se lê
+                /// de relance ou não se lê.
+                Text(
+                    text = "%,d".format(total).replace(',', '.'),
+                    style = numero,
+                    color = Cores.destaque,
+                )
+            }
         }
 
         /// O chip «Dentro de» — o caminho de volta, e o único que existe aqui.
@@ -544,17 +710,27 @@ private fun Cabecalho(
         /// mudou é que ela deixou de disputar um dos cinco lugares permanentes
         /// com o mural e o guia, que são lugares de verdade.
         ///
-        /// ⚠️ O próximo passo óbvio é ele virar **filtro** e não atalho — uma
-        /// pílula «no aparelho» ao lado de um «tudo», e a grade filtra. Aí
-        /// baixados deixa de ser tela. Não foi feito porque a grade ainda não
-        /// tem filtro nenhum, e inventar um só pra isto seria construir a
-        /// metade errada primeiro.
-        TextButton(
-            onClick = aoAbrirBaixados,
-            contentPadding = PaddingValues(vertical = 4.dp),
-        ) {
-            Text("no aparelho ›", color = Cores.destaque, style = Tipo.pilula)
-        }
+        /// ## ⚠️ E o atalho saiu daqui — 05/08/2026
+        ///
+        /// Era um `TextButton` com «no aparelho ›» numa linha só dele, e a
+        /// queixa do dono foi exata: «tão simples e escondido que ninguém vai
+        /// ver». Ele é a **única porta** pra tela de baixados, e parecia uma
+        /// legenda.
+        ///
+        /// Faltava-lhe o que todo o resto do app tem: **um número**. «no
+        /// aparelho ›» é uma palavra; «⤓ 1 no aparelho» é um lugar com coisa
+        /// dentro.
+        ///
+        /// Ele foi pra fileira dos filtros, e o motivo não é onde sobrava
+        /// espaço — **`no aparelho` é um filtro do acervo**. «Me mostre o que
+        /// está aqui» é o mesmo gesto que `filtros ▾` e `em destaque ▾`:
+        /// estreitar 8.316 entradas. Ele estava fora da fileira onde mora o seu
+        /// próprio tipo de ação, e é o que este comentário previa três linhas
+        /// acima («o próximo passo óbvio é ele virar filtro») — meio caminho
+        /// andado: ele ainda abre tela em vez de filtrar a grade.
+        ///
+        /// O ganho é duplo: mais visível **e** uma linha a menos, porque ele
+        /// entra numa fileira que já existia. Ver `BarraDeFiltros`.
     }
 }
 
@@ -579,7 +755,7 @@ private fun Cabecalho(
 /// `EsquemaEscuro` cai no padrão de fábrica. Foi assim que a cápsula da barra
 /// virou lilás. Aqui são quatro cores da casa e nada mais.
 @Composable
-private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit) {
+private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit, compacto: Boolean = false) {
     val foco = LocalFocusManager.current
 
     BasicTextField(
@@ -593,14 +769,18 @@ private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit) {
         /// O que a tecla faz é **guardar o teclado**, que é o que sobrou pra ela
         /// fazer e o que a pessoa quer nesse momento: ver a grade.
         keyboardActions = KeyboardActions(onSearch = { foco.clearFocus() }),
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = if (compacto) 0.dp else 4.dp),
         decorationBox = { campo ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(percent = 50))
                     .background(Cores.fundoElevado)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    /// ⚠️ **Dois respiros, e o compacto é o da barra que
+                    /// condensa.** Não é gosto: com 10dp em cima e embaixo a
+                    /// barra fixa passa de 52dp, e aí ela come mais tela do que
+                    /// o cabeçalho inteiro devolveu ao rolar.
+                    .padding(horizontal = 14.dp, vertical = if (compacto) 7.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) {

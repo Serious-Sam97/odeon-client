@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ObraDetalhada
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.duracaoCompacta
+import dev.odeon.android.ui.tamanhoCompacto
 import dev.odeon.android.ui.Serifada
 import kotlin.math.abs
 
@@ -136,7 +138,7 @@ fun Contracapa(
         /// pior que linha nenhuma.
         obra?.files?.firstOrNull()?.let { arquivo ->
             val ficha = listOfNotNull(
-                arquivo.duracaoEmSegundos?.takeIf { it > 0 }?.let { duracaoCompacta(it) },
+                arquivo.duracaoEmSegundos?.takeIf { it > 0 }?.let { duracaoCompacta(it).uppercase() },
                 arquivo.height?.let { "${it}p" },
                 arquivo.codecDeVideo?.uppercase(),
                 arquivo.codecDeAudio?.uppercase()?.let { codec ->
@@ -245,20 +247,12 @@ internal fun tipoEmPortugues(kind: String): String = when (kind) {
     else -> kind
 }
 
-/// `1H36` — a duração como o verso de uma caixa escreve.
-internal fun duracaoCompacta(segundos: Double): String {
-    val total = segundos.toLong()
-    val horas = total / 3600
-    val minutos = (total % 3600) / 60
-    return if (horas > 0) "${horas}H%02d".format(minutos) else "${minutos}MIN"
-}
-
-/// `1,9 GB`. Vírgula, porque o app inteiro escreve em português.
-internal fun tamanhoCompacto(bytes: Long): String {
-    val gb = bytes / 1_073_741_824.0
-    if (gb >= 1) return "%,.1f GB".format(gb).replace('.', ',')
-    return "${(bytes / 1_048_576.0).toInt()} MB"
-}
+/// ⚠️ A `duracaoCompacta` e a `tamanhoCompacto` **moravam aqui** e foram pra
+/// `ui/Medida.kt` em 05/08/2026, quando a tela de baixados passou a precisar das
+/// duas. O porquê da mudança de casa está lá.
+///
+/// O `1H36` em caixa alta continua sendo desta tela: o verso da caixa é encarte
+/// impresso, e o `.uppercase()` acontece na chamada. A função devolve `1h36`.
 
 /// `5.1` · `2.0` — os canais como um encarte escreve, e não «6 canais».
 internal fun canais(quantos: Int): String = when (quantos) {

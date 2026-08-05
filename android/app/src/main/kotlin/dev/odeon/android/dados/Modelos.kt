@@ -530,8 +530,50 @@ data class Devolvida(
     @SerialName("caixa_id") val caixaId: String,
     val titulo: String,
     @SerialName("quem_nome") val quemNome: String,
+    @SerialName("devolvido_em") val devolvidoEm: String? = null,
     @SerialName("devolvido_como") val devolvidoComo: String? = null,
+    /// `membro` — devolveu; `prazo` — **venceu e voltou sozinha**.
+    ///
+    /// A diferença muda a frase inteira: uma é ação («fulano devolveu»), a
+    /// outra é o relógio («venceu na mão de fulano»). Dizer «devolveu» sobre uma
+    /// fita que o prazo trouxe de volta seria dar crédito por algo que não
+    /// aconteceu.
+    @SerialName("devolvido_por") val devolvidoPor: String = "membro",
+    val atrasada: Boolean = false,
 )
+
+/// Alguém que frequenta a loja — o chip do balcão.
+///
+/// ## A fama sobrevive à devolução, e é o item inteiro
+///
+/// O comentário da web é a regra: «*as pessoas saberem quem devolveu zoado* não
+/// funciona se o número só existir enquanto a pessoa está com alguma coisa na
+/// mão — a fama tem que sobreviver à devolução, senão ninguém carrega nada».
+///
+/// Por isso o chip aparece pra quem tem fita **ou** pra quem tem fama, e some só
+/// quando as quatro contagens são zero.
+///
+/// ⚠️ **São as pessoas do servidor**, não de um grupo: com estoque único, quem
+/// te barra pode ser qualquer morador.
+@Serializable
+data class PessoaNaLoja(
+    val id: String = "",
+    @SerialName("display_name") val nome: String = "",
+    @SerialName("na_mao") val naMao: Int = 0,
+    /// Quantas fitas dela **alguém teve que rebobinar**. Cada unidade é uma vez
+    /// em que outra pessoa gastou os segundos por causa dela.
+    val zoadas: Int = 0,
+    /// E quantas ela rebobinou dos outros. ⚠️ **O outro lado precisa existir**:
+    /// um placar que só conta o defeito faz de todo mundo réu.
+    val rebobinou: Int = 0,
+    /// Fitas que ela deixou no meio **agora**. Estado, não histórico — some no
+    /// instante em que alguém rebobina, e é a única das três que dá pra
+    /// consertar sozinha.
+    @SerialName("no_meio") val noMeio: Int = 0,
+) {
+    /// Aparece no balcão? Quem não tem fita nem fama não é notícia (§24).
+    val temOQueDizer: Boolean get() = naMao > 0 || zoadas > 0 || rebobinou > 0 || noMeio > 0
+}
 
 /// `GET /api/locadora/prateleira` — o que está fora da estante.
 ///
@@ -540,6 +582,10 @@ data class Devolvida(
 @Serializable
 data class Prateleira(
     val opcoes: OpcoesDaLocadora = OpcoesDaLocadora(),
+    /// Quem frequenta a loja — os chips do balcão. Chegava na resposta desde
+    /// sempre e ninguém desenhava; era a quinta dívida do §8 do
+    /// `PARIDADE-ANDROID.md`.
+    val pessoas: List<PessoaNaLoja> = emptyList(),
     val emprestadas: List<Emprestada> = emptyList(),
     val devolvidas: List<Devolvida> = emptyList(),
     @SerialName("posso_pegar") val possoPegar: Int = 0,

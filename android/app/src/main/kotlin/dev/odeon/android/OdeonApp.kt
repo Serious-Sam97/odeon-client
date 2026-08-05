@@ -89,6 +89,10 @@ class OdeonApp : Application(), SingletonImageLoader.Factory {
                         arquivoId = arquivoId,
                         titulo = obra.title,
                         poster = obra.artwork["poster"],
+                        /// A arte deitada viaja junto dos bytes — a tela de
+                        /// baixados desenha sem rede, e o caminho tem que estar
+                        /// no disco antes de a rede sumir.
+                        backdrop = obra.artwork["backdrop"],
                         origem = origem.name,
                         venceEm = venceEm,
                         duracaoEmSegundos = obra.duracaoEmSegundos,

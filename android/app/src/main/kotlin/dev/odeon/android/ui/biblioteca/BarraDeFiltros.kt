@@ -56,6 +56,9 @@ fun BarraDeFiltros(
     aberto: Boolean,
     aoAlternarPainel: () -> Unit,
     aoMudar: (Filtros) -> Unit,
+    /// Quantos filmes estão no aparelho. **Zero esconde a pastilha** (§24).
+    quantosBaixados: Int = 0,
+    aoAbrirBaixados: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.padding(top = 8.dp),
@@ -93,6 +96,44 @@ fun BarraDeFiltros(
 
             if (filtros.algumLigado) {
                 Chip(rotulo = "limpar ✕", ligado = false, aoTocar = { aoMudar(filtros.limpo()) })
+            }
+
+            /// ## A pastilha dos baixados — **acesa**, e é decisão do dono
+            ///
+            /// Ela veio de uma linha própria no cabeçalho, onde era «no aparelho
+            /// ›» em texto dourado e passava despercebida. Aqui ela é o **único
+            /// elemento preenchido** da fileira, e provavelmente da tela toda
+            /// acima do herói.
+            ///
+            /// ⚠️ **Isso gasta a cor que o app reserva pro que está aceso** — o
+            /// facho, a aba selecionada, os números das placas. O que paga a
+            /// conta é o §24: ela **só existe quando há download**. Não é cromo
+            /// permanente; aparece porque há algo no aparelho e some quando não
+            /// há. Um dourado que aparece por um motivo não gasta a cor — gasta
+            /// quem fica aceso à toa.
+            ///
+            /// E some junto a porta pra uma sala vazia: sem download, não há o
+            /// que a tela de baixados mostre além de «nada baixado ainda».
+            /// ⚠️ **`↓` e não `⤓`**, e foi a foto que decidiu. O `⤓` (seta pra
+            /// barra) é o desenho certo pra «baixado», e **não existe na fonte
+            /// do aparelho**: o Android substituiu por uma seta comum sem avisar.
+            /// Um glifo que depende de substituição desenha coisa diferente em
+            /// cada aparelho — melhor escolher o que está garantido do que
+            /// torcer.
+            if (quantosBaixados > 0) {
+                Text(
+                    text = "↓ $quantosBaixados no aparelho",
+                    style = Tipo.pilula,
+                    /// Texto **escuro** sobre o dourado. `Cores.fundo` e não
+                    /// preto: o contraste é o da casa, e preto puro sobre âmbar
+                    /// vibra na borda.
+                    color = Cores.fundo,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(Cores.destaque)
+                        .clickable(onClick = aoAbrirBaixados)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
             }
         }
 

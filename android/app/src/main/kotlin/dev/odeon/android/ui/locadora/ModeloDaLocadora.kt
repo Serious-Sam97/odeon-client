@@ -72,6 +72,64 @@ data class EstadoDaLocadora(
 
     val minhas: List<Emprestada> get() = prateleira?.emprestadas.orEmpty().filter { it.meu }
     val dosOutros: List<Emprestada> get() = prateleira?.emprestadas.orEmpty().filterNot { it.meu }
+
+    /// **A vitrine menos o que está alugado** — e o vão que a caixa deixou fica
+    /// aberto.
+    ///
+    /// ## O buraco é a escassez sendo vista antes de ser lida
+    ///
+    /// Até aqui esta tela desenhava `loja.estantes` cru: a caixa que alguém
+    /// levou continuava de pé na prateleira, com a arte inteira, indistinguível
+    /// de uma que dá pra pegar. O comentário da web (`Locadora.tsx:302`) é o que
+    /// manda aqui, e ele explica o que se perde:
+    ///
+    /// > «se alguém aluga, a caixa some da prateleira e volta quando devolve» —
+    /// > e **o buraco não é preenchido**: «puxar uma caixa nova do acervo pra
+    /// > tapar o vão faria a loja ter 40 sempre, e aí levar uma fita não custaria
+    /// > nada a ninguém».
+    ///
+    /// Uma loja não deixa a caixa vazia exposta. A fileira fica mais curta, e é
+    /// a fileira mais curta que faz a escassez ser **vista** — a linha da porta
+    /// da loja só a nomeia depois.
+    ///
+    /// ## Some quando **tranca** ou quando é **sua**, e só nesses dois casos
+    ///
+    /// São os dois em que a caixa não está ao seu alcance. Com a escassez
+    /// desligada o empréstimo de outra pessoa **não** é exclusivo, e a caixa
+    /// continua exposta de propósito: sumir com ela seria encenar uma disputa
+    /// que a opção do servidor acabou de desligar.
+    ///
+    /// ⚠️ É o primeiro uso de `Emprestada.exclusivo` no app. O campo estava
+    /// modelado e nunca lido — o mesmo padrão do §8 do `PARIDADE-ANDROID.md`,
+    /// desta vez num campo que não desenhava nada e sim **escondia**.
+    ///
+    /// Estante que ficou sem nada não vira placa (§24) — a mesma regra que o
+    /// servidor já aplica ao sortear.
+    val expostas: List<dev.odeon.android.dados.EstanteExposta>
+        get() {
+            val estantes = loja?.estantes ?: return emptyList()
+            val fora = prateleira?.emprestadas.orEmpty().associateBy { it.caixaId }
+            return estantes
+                .map { estante ->
+                    estante.copy(
+                        caixas = estante.caixas.filterNot { caixa ->
+                            val emprestimo = fora[caixa.id]
+                            emprestimo != null && (emprestimo.exclusivo || emprestimo.meu)
+                        },
+                    )
+                }
+                .filter { it.caixas.isNotEmpty() }
+        }
+
+    /// Quantas caixas estão **à vista agora**, depois do buraco.
+    val naPrateleira: Int get() = expostas.sumOf { it.caixas.size }
+
+    /// Quantas a semana **sorteou**, antes de alguém levar alguma.
+    ///
+    /// A diferença pra [naPrateleira] é o buraco, e é ela que a porta da loja
+    /// conta. Sai das estantes cruas de propósito: se saísse das expostas, as
+    /// duas seriam sempre iguais e o `N fora` nunca nasceria.
+    val sorteadas: Int get() = loja?.estantes.orEmpty().sumOf { it.caixas.size }
 }
 
 /// A locadora.

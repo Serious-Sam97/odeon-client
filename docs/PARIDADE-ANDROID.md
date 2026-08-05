@@ -230,12 +230,12 @@ O que não existe:
 |---|---|
 | **rebobinar, e a tela da fita** | ❌ — e a §6 chama isso de «o atrito que é a ideia» |
 | **pedir de volta** | ❌ o `pedido_por_nome` é **lido e mostrado**, mas não há como pedir |
-| o balcão: chips de pessoa, fama `✕N` / `⟲N` | ❌ |
+| o balcão: chips de pessoa, fama `✕N` / `⟲N` | ✅ desde 05/08/2026 |
 | devoluções recentes (`fulano devolveu rebobinada`) | ❌ o campo chega e não é desenhado — ver §8 |
 | recado ao vivo (6s) | ❌ depende do barramento |
 | prazo na caixa (`3 dias`, `vence amanhã`, vermelho a 2) | ❌ o `vence_em` chega e não é desenhado |
 | corte VHS × DVD (`ultimo_ano_vhs`) | ❌ o campo chega e não é usado |
-| as três contagens da porta da loja | ◐ falta o `no_acervo` (`de 600 no acervo`) |
+| as três contagens da porta da loja | ✅ desde 05/08/2026 — e com o **buraco na estante**, que é o que as faz contar |
 | a caixa na mão: `voando → na-mao → abrindo → midia` | ❌ há o verso, não há o palco |
 | escassez barrando a abertura da caixa | ❌ |
 
@@ -401,7 +401,7 @@ As 25 capacidades do §16 da referência, com o estado medido hoje. A coluna
 | 9 | progresso e continuar | 3 | ✅ |
 | 10 | **barramento** | 3 | ✅ |
 | 11 | Cast | 4 | ✅ com o perfil do Chromecast na negociação (§4c) |
-| 12 | locadora completa | 5 | ◐ vitrine, empréstimos, pegar e devolver. **Sem rebobinar, sem a fita, sem pedir de volta, sem balcão** |
+| 12 | locadora completa | 5 | ✅ vitrine, palco, fita, rebobinar, pedir de volta, prazo, VHS×DVD, balcão e **a porta da loja** |
 | 13 | menu de DVD e capítulos | 5 | ◐ vinheta, climas, itens e capítulos ✅; **sem a trilha** (vetada na §3) e sem o filme rodando de fundo |
 | 14 | download offline | 6 | ✅ com o prazo viajando junto do arquivo |
 | 15 | para você | 7 | ◐ tempo e motivos. Sem humor, calibragem, ♥/✕ e perfil de gosto |
@@ -416,9 +416,12 @@ As 25 capacidades do §16 da referência, com o estado medido hoje. A coluna
 | 24 | bibliotecas e navegador de pastas | pós-v1 | ❌ |
 | 25 | admin | pós-v1 | ❌ |
 
-**Medido em 05/08/2026:** das 15 capacidades da v1, **10 estão inteiras** e **5
+**Medido em 05/08/2026:** das 15 capacidades da v1, **11 estão inteiras** e **4
 parciais**. **Nenhuma falta inteira** — que é o marco que este documento nasceu
 pra medir: de manhã eram quatro sem nada.
+
+A décima primeira é a **locadora**, fechada na décima rodada — e ela era a maior
+das quinze.
 Das 10 pós-v1, **3 foram começadas** e 7 não.
 
 Na primeira redação deste documento, algumas horas antes, eram 6 · 5 · 4 e 2 · 8.
@@ -484,18 +487,28 @@ uma tela de fase 1 pra que metade dos seus toques exista.
 ## 8. Campos que chegam e ninguém desenha
 
 O padrão que já apareceu cinco vezes nesta história — «o servidor já dava e o
-cliente não pegava» — tem hoje mais quatro casos, **todos já mapeados no
-`Modelos.kt`**, o que os torna baratos:
+cliente não pegava». Todos eram da locadora, e **quatro dos seis foram pagos em
+05/08/2026**:
 
-| campo | rota | o que ele desenharia |
+| campo | rota | estado |
 |---|---|---|
-| `Prateleira.devolvidas` | `locadora/prateleira` | as devoluções do balcão (`fulano devolveu rebobinada`) |
-| `Prateleira.ultimo_ano_vhs` | `locadora/prateleira` | o corte VHS × DVD, que decide se a caixa rebobina |
-| `Emprestada.vence_em` | `locadora/prateleira` | o prazo na caixa (`3 dias`, `vence amanhã`) |
-| `Loja.no_acervo` | `locadora/estantes` | o `de 600 no acervo` da porta da loja |
-| `CaixaExposta.temporadas` | `locadora/estantes` | o `N temporadas` na caixa de coleção |
+| `Prateleira.devolvidas` | `locadora/prateleira` | ✅ as devoluções, dentro do balcão |
+| `Prateleira.pessoas` | `locadora/prateleira` | ✅ **os chips de pessoa**, com a fama |
+| `Prateleira.ultimo_ano_vhs` | `locadora/prateleira` | ✅ o selo `VHS`/`DVD` e o corte que decide se a caixa rebobina |
+| `Emprestada.vence_em` | `locadora/prateleira` | ✅ o prazo na caixa |
+| `Loja.no_acervo` | `locadora/estantes` | ✅ o `de 850 no acervo` da porta da loja |
+| `CaixaExposta.temporadas` | `locadora/estantes` | ✅ a faixa `3 TEMPORADAS` no pé da capa |
+| `Emprestada.exclusivo` | `locadora/prateleira` | ✅ **o buraco na estante** — e este não desenhava, escondia |
 
-Os cinco são da locadora, e os cinco somados são boa parte do §6 que falta.
+**A lista fechou em 05/08/2026.** Os seis campos que chegavam e ninguém desenhava
+foram pagos no mesmo dia, e o sexto — o `exclusivo` — só apareceu porque a porta
+da loja precisou dele: as três contagens não fecham sem a caixa alugada sair da
+fileira.
+
+⚠️ **E ele é de um tipo diferente dos outros cinco.** Os cinco primeiros eram
+campos que **não desenhavam**; este era um campo que não **escondia**. O padrão
+do §8 tem, portanto, uma segunda forma, e ela é mais difícil de achar: a tela não
+fica com um vão, fica com uma caixa a mais — e uma caixa a mais parece certo.
 
 ---
 
@@ -703,6 +716,493 @@ por engano.
 frente». Ele varre 73 × 7 poses e é o que garante que a caixa é um sólido
 fechado — se alguém tirar um lado, ele cai antes de a foto denunciar.
 
+### A nona rodada: o balcão
+
+A última peça grande da locadora, e a que faz as outras pessoas da casa
+aparecerem por nome.
+
+| | |
+|---|---|
+| **os chips** | quem tem fita na mão **ou** quem tem fama, com o rosto por hash — o mesmo da insígnia e do perfil |
+| **as três contagens** | `N` na mão · `✕N` fitas dela que alguém rebobinou · `⟲N` fitas dos outros que ela rebobinou. **Zero some** |
+| **o seu limite** | «você pode pegar mais 3», ou o caminho de saída quando não dá |
+| **o recado ao vivo** | já existia solto; agora mora no balcão |
+| **as devoluções** | com o selo `atrasada` e a distinção que faltava (ver abaixo) |
+
+**A regra que faz a reputação existir**, e ela é da web: o chip aparece pra quem
+tem fita **ou** pra quem tem fama. Se o número sumisse junto com a fita, devolver
+zoado seria de graça.
+
+**E o `⟲` não é simetria decorativa**: «um placar que só conta o defeito faz de
+todo mundo réu».
+
+⚠️ **Uma frase que estava errada e ninguém veria:** `devolvido_por = prazo` é a
+fita que voltou **sozinha** quando o prazo estourou. A versão anterior escrevia
+«fulano devolveu» nos dois casos — dando crédito por uma coisa que o relógio fez,
+sobre uma pessoa real, sem nada na tela que denunciasse. Tem teste agora.
+
+E o «você ainda pode pegar N» saiu da linha de regras: as regras são o contrato
+da loja, o limite é seu. Nos dois lugares, um dos números ficaria velho primeiro.
+
+### A décima rodada: a porta da loja, e o buraco que ela contava
+
+A última peça da locadora. O pedido foi «a porta da loja» — o `no_acervo` e o
+`temporadas`, os dois últimos campos do §8 — e a leitura da régua achou uma
+terceira coisa **dentro** dela.
+
+**A frase pedida não fechava sozinha:**
+
+```
+37 caixas na prateleira, 3 fora · 40 nesta semana, de 600 no acervo
+```
+
+O `, 3 fora` é a diferença entre o que a semana sorteou e o que está à vista — e
+o app tinha as duas iguais, sempre, porque desenhava `loja.estantes` cru: a caixa
+que alguém levou continuava de pé na prateleira, com a arte inteira,
+indistinguível de uma que dá pra pegar. A conta daria `0 fora` pra sempre, e no
+dia em que alguém pegasse uma fita a linha diria «40 na prateleira» com 39 caixas
+na tela.
+
+**Decidido pelo dono, perguntado antes de escrever:** a caixa alugada some da
+estante, e as duas coisas entram juntas.
+
+| | |
+|---|---|
+| **o buraco** | a caixa que **tranca** (`exclusivo`) ou que é **sua** sai da fileira, e o vão fica aberto |
+| **as três contagens** | `N na prateleira[, M fora] · S nesta semana, de A no acervo` |
+| **os dois vazios** | `a prateleira está vazia — está tudo emprestado` × `nada com capa por aqui` |
+| **a faixa de temporadas** | `3 TEMPORADAS` no pé da capa, na tinta da própria obra |
+| 12 testes novos | `PortaDaLojaTest` |
+
+**Por que o buraco não é preenchido**, e é a frase da web que decide: «puxar uma
+caixa nova do acervo pra tapar o vão faria a loja ter 40 sempre, e aí levar uma
+fita não custaria nada a ninguém». A escassez tem que ser **vista** na fileira; a
+porta da loja só a nomeia depois.
+
+⚠️ **`no_acervo` vem do servidor, e somar as placas dá outro número.** Medido nas
+dez estantes desta semana: os totais somam **813**, e o servidor manda **850**.
+Faltam as estantes que a semana não sorteou — o acervo delas some junto com a
+placa. A web já tinha o recado escrito, e o app agora tem o número.
+
+**Uma divergência de tamanho, assumida:** a faixa de temporadas é 7px numa caixa
+de 130px na web (5,4%). Os mesmos 5,4% nos 96dp desta caixa dariam **5,2sp**, que
+não é texto, é textura. Ficou 8sp. É o mesmo erro que o selo do nível cobrou na
+oitava rodada — mesma proporção, caixas diferentes.
+
+**E a concordância é nossa:** a web escreve `${total} caixas na prateleira`, e com
+uma caixa sai «1 caixas». Aqui sai «1 caixa».
+
+**Medido no aparelho:** a porta abriu em `40 caixas na prateleira · 40 nesta
+semana, de 850 no acervo`, sem o `, N fora` porque não há nenhuma fita fora hoje
+(§24) — e o `3 TEMPORADAS` apareceu na capa de *Digimon*, na estante «Animação».
+
+### O buraco foi visto — e custou um empréstimo de verdade
+
+**Autorizado pelo dono**, e é a única escrita desta rodada. A caixa escolhida foi
+*Sid & Nancy - O Amor Mata*, de propósito: ela era a **única** caixa da estante
+`Romance`, então uma fita só provava as duas regras ao mesmo tempo.
+
+| | antes | com a fita na mão |
+|---|---|---|
+| a porta | `40 caixas na prateleira · 40 nesta semana, de 850 no acervo` | `39 caixas na prateleira, **1 fora** · 40 nesta semana, de 850 no acervo` |
+| a estante `Romance` | `1 de 10`, com a caixa | **sumiu inteira** — §24 |
+| o chip do `sam` | `✕1 ⟲1` | `**1** ✕1 ⟲1`, com a pastilha cheia |
+| o limite | «você pode pegar mais 3» | «você pode pegar mais 2» |
+| a seção `comigo` | não existia | `COMIGO 1`, com a caixa |
+
+Devolvida em seguida pelo arrasto de 96dp, e **tudo voltou ao lugar**: a porta a
+`40 caixas na prateleira` sem o `, N fora`, a estante `Romance` de volta com a
+caixa dentro, o limite em 3.
+
+⚠️ **O que ficou no acervo, e precisa estar dito** (§11 do
+`CONTINUAR-ANDROID.md`): um empréstimo e uma devolução na conta do `sam`, e a
+linha `sam devolveu Sid & Nancy - O Amor Mata — rebobinada` no balcão. Nada mais.
+
+⚠️ **E um achado de brinde, que é anterior a esta rodada:** pegar a fita **pela
+ficha** não atualiza a locadora que já estava aberta. A tela continuou dizendo
+`40 · você pode pegar mais 3` até o app ser reaberto. Não é o barramento
+falhando — é ele funcionando: o eco do próprio aparelho é descartado pelo
+`device_id` (§1.3), e foi o próprio aparelho que pegou a fita. O recado existe pra
+contar o que **os outros** fizeram. Fica anotado, não consertado.
+
+### A décima primeira rodada: o topo da locadora, que o dono achou feio
+
+> «essa parte de cima da locadora tá bem feia, melhore» — e depois, cortando o
+> escopo: «não toque nas prateleiras, eu tô falando da parte de cima somente».
+
+**O diagnóstico, medido:** o topo comia **1.189px dos 2.256** utilizáveis. A loja
+começava depois da metade da tela, numa tela cujo assunto são as caixas.
+
+E a dissonância visual tinha nome: `comigo`, `na mão de alguém` e todas as
+estantes são **fileiras horizontais de objetos**. O balcão era a única coisa
+vertical da tela, e a única feita de frases.
+
+| | o que mudou |
+|---|---|
+| **a data** | `HOJE` mostra o que voltou hoje; o resto vira `mais N antes ›`, que **abre** |
+| **a placa** | os dois números em serifa dourada — a tinta das placas de estante, que faltava na porta |
+| **o limite** | subiu pra linha dos chips: as duas coisas são o mesmo assunto |
+| **a frase** | o filme na frente, quem e como atrás e apagados |
+| **o eco** | «nenhuma caixa fora da estante» morreu quando há vitrine |
+| 8 testes novos | `EhDeHojeTest` |
+
+⚠️ **`devolvido_em` era o sétimo campo do §8, e o mais escondido de todos.** Ele
+chega em toda devolução e não era lido por ninguém — nem aqui, nem na web, onde
+serve só de chave de lista. Os outros seis não desenhavam ou escondiam; este
+**datava**, e sem ele a lista não tinha como encolher por verdade.
+
+**Por que não cortar em «as três últimas»:** o corte por contagem mente nos dois
+sentidos. Num dia em que voltaram cinco fitas, esconde notícia; num dia parado,
+promove a notícia o que aconteceu na semana passada. O corte por dia não mente em
+nenhum — e num dia sem devolução a seção simplesmente não nasce (§24).
+
+**O «hoje» é o dia do calendário, e não «faz menos de 24h».** Uma fita devolvida
+às 23h de ontem tem nove horas às 8h da manhã e **não** é notícia de hoje; uma
+devolvida às 00h10 é, com dez minutos. Tem teste pros dois, e pra virada do ano.
+
+**Medido no aparelho:** a primeira estante saiu de **1.189px** pra **977px** na
+primeira leva, e pra **706px** depois do segundo corte — **41% a menos**. Antes
+não aparecia uma caixa sequer na primeira tela; agora cabem **três estantes**
+inteiras, com as caixas.
+
+⚠️ **A primeira estimativa estava otimista, e vale registrar por quê.** A proposta
+falava em ~470px e a primeira leva deu 977. Faltou contar duas coisas na conta de
+guardanapo: a placa cresceu de uma linha pra duas — é o preço do destaque — e
+**cada seção paga 42dp de respiro**, o `spacedBy(16.dp)` da coluna multiplicado
+por mais seções do que antes. Foi medindo o entregue que os 271px restantes
+apareceram.
+
+### O segundo corte: as regras da casa saíram da tela
+
+**Decidido pelo dono**, depois de ver o número. Duas coisas foram embora:
+
+| | |
+|---|---|
+| o rótulo `HOJE` | ~80px de régua dourada pra encabeçar, em dia normal, **uma linha** |
+| as regras da casa | duas linhas de 84px imediatamente antes da primeira estante |
+
+**O rótulo não deixou buraco porque o `mais N antes ›` faz o trabalho dele.** A
+palavra «antes» só significa alguma coisa se o que está acima for depois — a
+lista se datou sozinha, com o link que já existia. E onde não há histórico o link
+some, e aí não há dois grupos pra confundir: há um.
+
+**As regras foram o corte com mais consequência**, e cada informação delas
+continua dita em outro lugar — *menos uma*:
+
+| | onde ficou |
+|---|---|
+| o limite | na linha dos chips — «pegar mais 3», e é o número que muda |
+| o prazo | na cinta de cada caixa — «5 dias», «vence amanhã» |
+| a escassez | **no buraco da fileira**, que passou a existir nesta mesma rodada |
+| `escassez desligada` | **em lugar nenhum** — perda aceita |
+
+A terceira linha é o que autorizou a remoção, e ela só ficou verdadeira hoje:
+enquanto a caixa alugada continuava de pé na prateleira, «escassez ligada» era a
+única pista de que uma cópia por caixa era regra. Com a fileira encurtando na
+frente de quem olha e a porta contando quantas faltam, a regra virou **coisa
+vista** — e uma frase que repete o que se vê é legenda de tela.
+
+A quarta é perda de verdade e está escrita como tal: loja sem escassez não tem
+buraco nenhum pra notar a ausência. O argumento pra aceitar é que «ninguém te
+barra» não muda nada no que você pode fazer.
+
+⚠️ **A `regras()` foi apagada, não comentada.** Código morto guardado «por via das
+dúvidas» é a próxima pessoa lendo duas versões da mesma regra sem saber qual vale.
+Ficou só uma nota no lugar, apontando pra onde o porquê está escrito.
+
+### O terceiro corte: a barra de baixo, e o que a queixa realmente era
+
+> «o lower menu está com uma black bar muito grande, talvez diminuir um pouco?»
+
+**Medido:** a barra ocupava **72dp de fileira mais ~25dp do inset do gesto = 97dp**,
+contra os 80 que o Material reserva pra barra inteira, insets incluídos. Mas a
+altura era metade do problema.
+
+⚠️ **A outra metade não era altura, era o fundo parando cedo.** O
+`windowInsetsPadding` era aplicado **por fora** da barra, no `AppOdeon`: a barra
+inteira subia, e entre ela e a borda do aparelho ficava o fundo da tela — preto
+chapado, sem o degradê e sem o cone. Uma tarja de 25dp separando a barra acesa da
+beirada, e é ela que a foto do dono mostrava.
+
+| | |
+|---|---|
+| o inset foi **pra dentro** da barra | o degradê e o cone descem até a borda; só a fileira recua |
+| a fileira encolheu, **duas vezes** | 72 → 64 → **54dp**: `6 + 22 + 3 + ~17 + 5` |
+| `ALTURA_DA_LUZ` encolheu junto | 118 → 105 → **89dp**, porque ela é **derivada**: raio `54 × 2,6 = 140`, e `140 − 54 = 86` mais a mesma folga de 3dp de antes |
+| o ícone | 24 → **22dp** — 24 era o padrão do `Icon`, não escolha desta barra |
+
+| | fileira | com o inset |
+|---|---|---|
+| antes | 72dp | 97dp |
+| primeiro corte | 64dp | 89dp |
+| **agora** | **54dp** | **79dp** |
+
+**A terceira linha é a que teria quebrado calada.** `ALTURA_DA_LUZ` não é gosto: é
+o espaço que o cone precisa pra fechar dentro da caixa em vez de ser cortado. Um
+encolhimento da fileira sem ela traria de volta a aresta reta no topo do facho —
+o defeito que uma rodada anterior já tinha consertado uma vez.
+
+**79dp é o piso desta forma.** Abaixo disso o rótulo teria de sair, e aí a barra
+deixa de dizer o que cada aba é — outra conversa, não um ajuste de número.
+
+⚠️ **E aqui eu errei uma vez, e a foto corrigiu.** A primeira versão prendeu o
+`Canvas` da luz à altura da luz mais a fileira, com o argumento de que «a lente
+nasce na aresta da fileira, não na do aparelho». A foto mostrou o cone terminando
+numa **linha horizontal visível** na base da fileira, com o inset preto embaixo —
+a mesma tarja, 25dp mais curta.
+
+O argumento certo já estava escrito no próprio arquivo desde que a barra nasceu:
+«a lente fica **abaixo** da borda: a luz entra na barra vinda de fora dela, que é
+o que uma janela de projeção faz». Com o `Canvas` cobrindo a caixa inteira, a
+lente cai na borda do aparelho e o cone preenche o inset. Não sobra aresta.
+
+⚠️ **O `screencap` preto voltou, e o conserto de antes não bastou.** Desta vez o
+`force-stop` + relançar deu quadro preto na primeira tentativa e quadro real na
+segunda, 3s depois. O que funciona é **tentar de novo até o PNG passar de ~100 KB**
+— quadro vazio dá ~20 KB, quadro real passa de 1 MB, e a diferença de tamanho é o
+teste mais barato que existe pra saber se a foto presta.
+
+### O quarto corte: a gaveta do «eu», e a segunda peça pintada por outra pessoa
+
+> «esse menu que aparece está feio demais, redesenhe»
+
+**O diagnóstico é o mesmo que tirou a `NavigationBar` deste app.** Nada do que
+estava feio era escolha desta tela: o `DropdownMenuItem` do Material impõe **48dp
+de altura mínima** mais 12dp de respiro vertical próprio, e o `DropdownMenu` vem
+sem borda. Dois itens viravam ~120dp de caixa escura pra 24dp de texto, boiando
+sobre um fundo igualmente escuro.
+
+| | o que entrou |
+|---|---|
+| **o cabeçalho** | nome, nível e a fatia — a gaveta passa a dizer **de quem** ela é |
+| **a moldura tinge** | a borda sai da cor que a pessoa escolheu (§10), com o dourado da casa como piso |
+| **as linhas** | 38dp, contra 48+12 |
+| **o `›`** | só no `perfil`, porque só ele leva a algum lugar |
+
+**O cabeçalho não repete o rosto**, e é decisão: a insígnia de 48dp está desenhada
+logo acima, ainda na tela, e o painel abre colado nela. O que a insígnia **não**
+consegue dizer é o nome — na web ele fica escrito ao lado dela na barra de cima, e
+aqui não há barra. A fatia do nível é o mesmo número do anel, na forma que um anel
+de 48dp não dá: dá pra ver se falta pouco ou se falta tudo.
+
+⚠️ **E um defeito que só a foto pegou, de novo.** A primeira versão escrevia
+«nível 2 · 6 de 80». Ao lado de «nível 2», um `6 de 80` sem substantivo se lê como
+se fosse sobre o nível — número sem o nome da coisa que ele conta é o §18 na forma
+mais barata de cometer. Ficou «6 de 80 conquistas», e cabe na largura.
+
+### O quinto corte: os baixados, e a tela onde não dava pra assistir
+
+> «bora fazer o redesign dessa tela, me surpreenda […] e adicione o menu inferior»
+
+**O defeito maior não era aparência.** `TelaDosBaixados(modelo)` não recebia
+callback nenhum: a única ação de um filme de 2 GB baixado pra ver sem rede era
+**apagá-lo**. Quem quisesse assistir tinha de voltar à biblioteca e procurar a
+obra.
+
+E cinco coisas chegavam no modelo sem virar tela: `poster`, `bytes`,
+`duracaoEmSegundos`, `origem` e a arte deitada, que nem existia na ficha.
+
+| | o que entrou |
+|---|---|
+| **assistir** | o cartão inteiro toca, e há um `▸ assistir` na linha de ação |
+| **a arte** | `backdrop` novo na `FichaDoDownload`, gravado junto dos bytes; o pôster é a reserva |
+| **o cabeçalho** | `5 filmes · 9,6 GB no aparelho`, na serifa dourada das placas |
+| **o prazo** | selo sobre a arte, e só em quem veio da locadora |
+| **apagar** | pede o segundo toque, como o devolver da locadora |
+| **o menu inferior** | e ele acende `biblioteca` — ver abaixo |
+| 5 testes novos | `MedidaTest` |
+
+**A conta que decidiu o cartão:** área útil de ~810dp (914 menos status, barra e
+inset). Título 40 + cabeçalho 40 deixam ~730, e **cinco cartões cabem sem rolar**
+com a faixa da arte em 100dp. Cinco é o número que importa — quem baixa filme tem
+meia dúzia, não duzentos.
+
+**O menu inferior forçou uma decisão.** `baixados` não é uma das cinco abas, e o
+`BarraDoFacho` acende a selecionada — sem nenhuma, ele cairia na primeira por
+`coerceAtLeast(0)` e a barra diria «biblioteca» por acidente de implementação.
+Agora diz por decisão: baixados é sub-tela da biblioteca — chega-se pelo `no
+aparelho ›` do cabeçalho dela e o voltar leva pra lá. O facho fica na **seção**.
+
+⚠️ **E duas funções mudaram de casa.** `duracaoCompacta` e `tamanhoCompacto`
+moravam na `Contracapa` da locadora, que foi quem primeiro precisou escrever
+«1H36» e «1,9 GB». Com a segunda leitora, foram pra `ui/Medida.kt` — e a caixa
+alta ficou com o chamador, que é a mesma decisão que o `Tipo.rotulo` já tinha
+tomado. O verso da caixa é encarte impresso e grita `1H36`; o cartão é texto de
+tela e diz `1h36`.
+
+#### ⚠️ Um defeito que eu escrevi e peguei antes da foto — e ele apagava dado real
+
+A primeira versão do «assistir» passava `ondeParou = 0.0`, com o argumento de que
+a posição mora no servidor e esta tela existe pra quando não há servidor.
+
+**O que ele não considerou é que o player escreve.** O heartbeat manda a posição
+pra `POST /api/works/{obra}/progress` a cada poucos segundos — abrir no zero um
+filme visto pela metade e deixar rodar dez segundos grava zero, e o «faltam
+141min» de uma pessoa real vira «faltam 2h22». Perda silenciosa, sem nada na tela
+que denunciasse.
+
+A correção não custa o offline: com rede, pergunta e abre onde parou; **sem rede a
+chamada falha e cai em zero — que é o certo nesse caso**, porque sem rede o
+heartbeat também não sobe e não há posição pra apagar. O erro só existia no
+cruzamento «tem rede, mas a tela decidiu ignorá-la».
+
+#### E um que só a foto pegou: a tarja branca no alto da arte
+
+O cartaz de *007: A Serviço Secreto* tem uma faixa branca no topo, e ela batia
+direto na borda de cima do cartão — uma linha branca de ponta a ponta, que lia
+como defeito de recorte. O véu só existia embaixo, pra dar chão ao título.
+
+É a **terceira vez** que este projeto tropeça no mesmo lugar: cromo claro
+encostando em borda já custou o fundo do menu de disco e o cromo do player em
+paisagem. A arte do acervo tem 8.316 origens e nenhuma garantia de margem — o véu
+agora escurece as duas pontas, 0,22 em cima, e ele dá chão ao selo do prazo, que
+mora nesse canto.
+
+⚠️ **O `backdrop` não foi visto em foto**: o único download do aparelho foi
+gravado antes do campo existir, e caiu na reserva do pôster — que é exatamente o
+caminho que o comentário previu. Ver o `backdrop` de verdade pede um download
+novo, e não foi feito porque baixar um filme inteiro pra conferir enquadramento é
+caro na rede de casa.
+
+### O sexto corte: o topo da biblioteca, e a porta que ninguém via
+
+**Medido:** **535px de cromo** antes do primeiro cartaz, em cinco linhas — e
+**123px eram um vão vazio** entre o atalho dos baixados e a fileira de filtros.
+
+| | o que mudou |
+|---|---|
+| **título e contagem** | dividem a linha, e `60 de 8.316` ganhou a serifa dourada das placas — mais o **ponto de milhar**, que faltava |
+| **a busca** | fica inteira, por escolha do dono |
+| **o atalho** | virou **pastilha acesa** na fileira dos filtros: `↓ 1 no aparelho` |
+| **condensar ao rolar** | uma barra fina com **a busca**, `filtros` e `↓ N` — e paga a dívida do §1.1 |
+
+**535px → ~245px.**
+
+⚠️ **O atalho dos baixados era o defeito de produto**, e a queixa foi exata: «tão
+simples e escondido que ninguém vai ver». Ele é a **única porta** pra tela de
+baixados — a mesma que a rodada anterior redesenhou — e era um `TextButton` com
+«no aparelho ›» numa linha só dele.
+
+O que lhe faltava é o que todo o resto do app tem: **um número**. «no aparelho ›»
+é uma palavra; «↓ 1 no aparelho» é um lugar com coisa dentro.
+
+**E ele foi pra fileira dos filtros por argumento, não por espaço:** «me mostre o
+que está aqui» é o mesmo gesto que `filtros ▾` — estreitar 8.316 entradas. Ele
+estava fora da fileira onde mora o seu próprio tipo de ação. O comentário que
+morava no lugar dele já previa isto («o próximo passo óbvio é ele virar filtro»);
+falta a outra metade — ele ainda abre tela em vez de filtrar a grade.
+
+**A pastilha gasta o dourado cheio**, que o app reserva pro que está aceso. O que
+paga a conta é o §24: ela **só existe quando há download**. Um dourado que aparece
+por um motivo não gasta a cor — gasta quem fica aceso à toa.
+
+#### Três defeitos, e dois só a foto pegou
+
+1. ⚠️ **A insígnia do canto cobria a pastilha.** A `GavetaDoEu` é desenhada por
+   cima de toda tela, e a barra condensada não reservou o lugar dela: o `↓ 1`
+   sumia atrás do rosto. É **a pendência que este documento já tinha anotado** por
+   outro sintoma — «a insígnia rouba o toque nos 48dp do canto» —, agora cobrando
+   pelo desenho. A barra recua 68dp à direita (48 da insígnia + 12 do respiro
+   dela + 8 de folga).
+2. **O `⤓` não existe na fonte do aparelho.** O glifo certo pra «baixado» é a seta
+   pra barra, e o Android substituiu por uma seta comum sem avisar. Um glifo que
+   depende de substituição desenha coisa diferente em cada aparelho — ficou `↓`,
+   que está garantido.
+3. **Um swipe virou toque** durante a verificação e abriu a ficha do *Juno* em vez
+   de rolar. Não é defeito do app; fica anotado porque custou uma rodada de foto:
+   `input swipe` no emulador precisa de curso longo (1800→700) e **500ms**, senão
+   é lido como tap.
+
+### O sétimo corte: a aba que muda de nome, e o clique que não fazia nada
+
+> «ao entrar em baixados não tem como voltar à biblioteca» — e, junto: «deixe o
+> menu inferior mudar de biblioteca para baixados, e quando eu voltar a mesma
+> coisa»
+
+⚠️ **O defeito estava previsto no meu próprio comentário, e eu o deixei passar.**
+Quando baixados passou a acender `biblioteca` na barra, escrevi ali: «tocar em
+biblioteca com o facho já aceso não faz nada — sair de baixados é o voltar, como
+sempre foi». Isso é o §8b escrito com outras palavras: **a única saída visível da
+tela não respondia ao toque**. O guarda era `if (aba != atual)`.
+
+O pedido do dono resolve os dois de uma vez:
+
+| | |
+|---|---|
+| **o rótulo muda** | em baixados a primeira aba diz `baixados`, com o `ic_aba_baixados` que já existia desde quando ele foi aba de verdade |
+| **o toque volta** | tocar na aba acesa leva à **raiz da seção** — o padrão de sempre, no Android e no iOS |
+
+A barra deixa de dizer em que *seção* você está e passa a dizer **onde** você
+está. E o caminho de volta fica óbvio sem instrução nenhuma: o nome que ela mostra
+é o do lugar que você quer deixar.
+
+**A peça que fez caber:** as abas ganharam uma `FaceDaAba` — rótulo, ícone,
+seleção e o que o toque faz, resolvidos antes de desenhar. Sem ela, a barra do
+facho e o trilho de paisagem teriam **cada um a sua cópia** do «se estiver em
+baixados, escreva outra coisa» — duas cópias que divergem no dia em que a segunda
+sub-tela aparecer. Agora o esqueleto desenha e não decide.
+
+**Verificado no aparelho:** a pastilha abre baixados e a barra passa a `baixados`;
+tocar nela devolve a grade com `60 de 8.316` e a barra volta a `biblioteca`.
+
+### ⚠️ O `screencap` preto tem conserto, e não era a tela
+
+O `PARIDADE` dizia que o `screencap` devolve quadro preto «no palco e no menu de
+disco», e por isso o palco nunca foi fotografado. **Não é da tela** — nesta
+rodada ele veio preto na loja inteira, e depois na biblioteca também (21 KB, o
+tamanho de um quadro vazio), com o system UI aparecendo por cima.
+
+O que destrava é **`force-stop` e relançar o app** antes de capturar:
+
+```bash
+adb shell am force-stop dev.odeon.android.debug
+adb shell monkey -p dev.odeon.android.debug -c android.intent.category.LAUNCHER 1
+```
+
+Depois disso a mesma tela deu 1,0 MB de PNG legível. A superfície do app entra
+num estado que a captura não lê — provavelmente depois de o app ficar horas em
+segundo plano — e reiniciar o processo a recria.
+
+**Isso desbloqueia a pendência do palco**, que estava anotada como «nunca visto em
+foto». Não foi feita aqui porque não era o pedido.
+
+#### ⚠️ E este diagnóstico estava errado. A causa é o **emulador**, não o app
+
+Ao fim de 05/08/2026 o quadro preto deixou de ser intermitente e virou permanente
+— **o dono viu a tela do aparelho preta**, não só a captura. A prova de que não
+era o app:
+
+| | |
+|---|---|
+| `dumpsys window` | `mCurrentFocus` na `AtividadePrincipal`, `screenState=SCREEN_STATE_ON` |
+| `logcat` | nenhuma exceção, nenhum `FATAL` |
+| `uiautomator dump` | **a árvore inteira**, com a grade composta: Juno, os 007, tudo |
+| `screencap` | 21 KB — preto uniforme |
+
+Ou seja: o Compose compunha, o app respondia, e **só o renderizador do emulador
+estava morto**. O `force-stop` funcionava porque recriava a superfície; quando o
+renderizador degrada de vez, ele para de bastar.
+
+**O conserto é reiniciar o emulador**, e vale trocar o modo de GPU na volta:
+
+```bash
+adb emu kill
+sleep 10
+"$HOME/Library/Android/sdk/emulator/emulator" -avd Medium_Phone -no-boot-anim -gpu host &
+```
+
+⚠️ **Espere o processo antigo morrer.** Subir o novo antes derruba com «Running
+multiple emulators with the same AVD» — o `sleep` não é enfeite.
+
+⚠️ **Trocar `-gpu` faz o emulador ignorar o snapshot** («starting from scratch:
+different renderer configured»). O `userdata` **sobrevive**: o app continuou
+instalado e a sessão do `sam` continuou aberta, verificado depois do reboot. O que
+se perde é o boot rápido.
+
+**Como saber qual dos dois é** antes de reiniciar à toa: se o `uiautomator dump`
+traz texto e o `screencap` dá ~20 KB, é o renderizador. Se a árvore vier vazia, aí
+sim é o app.
+
 ### Os três defeitos que só o screenshot achou
 
 É a lição mais cara do projeto, cobrada de novo (§1 do `CONTINUAR-ANDROID.md`).
@@ -722,7 +1222,7 @@ arquivos novos nas três vezes.
 ### Como foi verificado
 
 Compilado e instalado num emulador na própria máquina, com sessão real contra o
-servidor de casa — `assembleDebug` ✅, **79 testes** ✅, `lintDebug` sem nenhum
+servidor de casa — `assembleDebug` ✅, **109 testes** ✅, `lintDebug` sem nenhum
 achado nos arquivos destas rodadas. A insígnia, a gaveta, o perfil e a busca foram
 **vistos funcionando**, e é de fotos deles que saíram os três defeitos acima.
 

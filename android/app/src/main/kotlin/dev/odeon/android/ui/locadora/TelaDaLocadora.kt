@@ -49,6 +49,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -149,31 +151,61 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
     ) {
         Text("locadora", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
 
+        /// **A porta da loja** — as três contagens, e as três são coisas
+        /// diferentes.
+        ///
+        /// Só nasce com a vitrine na mão: sem ela, «nada com capa por aqui»
+        /// seria o app afirmando sobre um acervo que ele não conseguiu ler. Erro
+        /// de rede não é resposta vazia (§18).
+        estado.loja?.let { loja ->
+            PortaDaLoja(
+                naPrateleira = estado.naPrateleira,
+                sorteadas = estado.sorteadas,
+                noAcervo = loja.noAcervo,
+            )
+        }
+
         estado.erro?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = Cores.perigo)
         }
 
-        /// O recado ao vivo — o barramento chegando na tela.
+        /// **O balcão** — quem está na loja, o seu limite, o recado ao vivo e o
+        /// que acabou de voltar.
         ///
-        /// Ele fica **acima** das regras da casa, que é onde o olho já está ao
-        /// abrir a loja, e some sozinho em 6s. §24 na volta: sem recado, nada
-        /// ocupa a linha.
-        estado.recado?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Cores.destaque,
-            )
+        /// Ele fica **acima** das regras da casa, e é de propósito: as regras são
+        /// o contrato da loja, que muda quase nunca; o balcão é o que aconteceu
+        /// nela, que muda a toda hora. O olho de quem abre a locadora procura a
+        /// segunda coisa.
+        estado.prateleira?.let { prateleira ->
+            Balcao(prateleira = prateleira, recado = estado.recado)
         }
 
-        /// As regras da casa, ditas pelo servidor e não por constante daqui.
-        estado.prateleira?.opcoes?.let { opcoes ->
-            Text(
-                text = regras(opcoes.escassez, opcoes.limitePorPessoa, opcoes.prazoEmDias, estado.prateleira!!.possoPegar),
-                style = MaterialTheme.typography.bodySmall,
-                color = Cores.textoApagado,
-            )
-        }
+        /// ## ⚠️ As regras da casa saíram da tela — 05/08/2026
+        ///
+        /// Elas eram duas linhas de 84px imediatamente antes da primeira estante,
+        /// e diziam «escassez ligada: uma cópia por caixa · limite de 3 por
+        /// pessoa · prazo de 7 dias». O contrato da loja no lugar mais caro da
+        /// tela, mudando quase nunca.
+        ///
+        /// **O que sai com elas, e onde cada coisa continua dita:**
+        ///
+        /// | | |
+        /// |---|---|
+        /// | o limite | na linha dos chips — «pegar mais 3», e ele é o número que muda |
+        /// | o prazo | na cinta de cada caixa — «5 dias», «vence amanhã» |
+        /// | a escassez | **no buraco da fileira**, que passou a existir hoje |
+        ///
+        /// A terceira linha é a que autoriza esta remoção. Enquanto a caixa
+        /// alugada continuava de pé na prateleira, «escassez ligada» era a única
+        /// pista de que uma cópia por caixa era regra; agora a fileira encurta na
+        /// frente de quem olha, e a porta da loja conta quantas — a regra virou
+        /// coisa vista, e uma frase que repete o que se vê é legenda de tela.
+        ///
+        /// **O que se perde de verdade:** o estado `escassez desligada`, que não
+        /// tem desenho — quando ninguém barra ninguém, não há buraco nenhum pra
+        /// notar a ausência. É perda aceita, não esquecida: numa loja sem
+        /// escassez, a informação «ninguém te barra» é justamente a que não muda
+        /// nada no que você pode fazer.
 
         if (estado.minhas.isNotEmpty()) {
             Secao("comigo", quantos = estado.minhas.size) {
@@ -189,28 +221,6 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
                             aoDevolver = { modelo.devolver(fita.id) },
                             devolvendo = estado.devolvendo == fita.id,
                             ehVhs = estado.ehVhs(fita.ano),
-                        )
-                    }
-                }
-            }
-        }
-
-        /// **As devoluções** — a terceira dívida do §8 paga.
-        ///
-        /// `devolvidas` chega em toda resposta da prateleira e nunca foi
-        /// desenhada. É o balcão da web (§6): o que acabou de voltar, e **como**
-        /// voltou — rebobinada ou não. A distinção não é decorativa: é ela que
-        /// dá sentido à reputação de quem devolve fita sem rebobinar.
-        ///
-        /// Some inteira quando não houve devolução nenhuma (§24).
-        estado.prateleira?.devolvidas?.takeIf { it.isNotEmpty() }?.let { devolvidas ->
-            Secao("acabou de voltar", quantos = devolvidas.size) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    devolvidas.forEach { devolvida ->
-                        Text(
-                            text = frasedaDevolucao(devolvida),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Cores.textoApagado,
                         )
                     }
                 }
@@ -241,7 +251,18 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
         /// Aqui o §24 **não** vale: uma locadora sem nenhuma caixa fora é um
         /// estado normal e informativo — "está tudo na estante" é notícia. Uma
         /// tela em branco, não.
-        if (estado.minhas.isEmpty() && estado.dosOutros.isEmpty() && estado.erro == null) {
+        ///
+        /// ⚠️ **Mas só quando não há vitrine.** Com a porta da loja desenhada, a
+        /// frase virou eco: `40 caixas na prateleira` **sem** o `, N fora` já diz
+        /// que não há nenhuma fora, e diz melhor, porque diz com número. Eram
+        /// duas linhas a 950px de distância afirmando o mesmo fato — e a de baixo
+        /// era a que custava um respiro de 42dp logo antes da primeira estante.
+        ///
+        /// Sem vitrine a frase continua sendo necessária: aí a porta diz «nada com
+        /// capa por aqui», que é sobre a loja, e esta é sobre os empréstimos.
+        if (estado.minhas.isEmpty() && estado.dosOutros.isEmpty() && estado.erro == null &&
+            estado.expostas.isEmpty()
+        ) {
             /// ⚠️ As tábuas vazias só entram quando **não há vitrine**.
             ///
             /// Elas nasceram pra consertar um vazio: a tela sem empréstimo era
@@ -251,7 +272,7 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
             ///
             /// É a mesma decisão que o próprio conserto tomou, invertida: o que
             /// muda é o que está em volta.
-            EstanteVazia(comTabuas = estado.loja?.estantes.isNullOrEmpty())
+            EstanteVazia(comTabuas = estado.expostas.isEmpty())
         }
 
         /// ## A vitrine — e ela é a locadora
@@ -263,7 +284,10 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
         /// É o mesmo padrão de `height`, `size_bytes` e `tags`: o servidor já
         /// dava e o cliente não pegava. A diferença é o tamanho — não era um
         /// campo, era metade de uma tela.
-        estado.loja?.estantes?.forEach { estante ->
+        ///
+        /// ⚠️ **São as `expostas`, e não `loja.estantes`.** A caixa que alguém
+        /// levou sai da fileira e o vão fica aberto — ver `EstadoDaLocadora`.
+        estado.expostas.forEach { estante ->
             /// ⚠️ Tocar numa caixa **não abre mais a ficha**: põe a caixa na
             /// mão. É a locadora da web (§6) — a ficha é o caminho da
             /// biblioteca, e aqui o caminho é o objeto. Quem quiser a ficha
@@ -502,6 +526,11 @@ private fun CaixaNaEstante(
                 titulo = caixa.titulo,
                 arte = arte,
                 cor = corDeHex(caixa.corDominante),
+                /// ⚠️ **`serie` e `temporadas` têm que valer os dois**, e é a
+                /// web que corta assim. Uma obra solta pode vir com
+                /// `temporadas` preenchido por engano do lado de lá, e «1
+                /// TEMPORADA» estampado num filme é o §18 impresso na capa.
+                temporadas = if (caixa.serie) caixa.temporadas else 0,
             )
         }
     }
@@ -519,6 +548,9 @@ internal fun FaceDaCaixa(
     titulo: String,
     arte: String?,
     cor: Color?,
+    /// Quantas temporadas, quando a caixa é de **coleção**. Zero em tudo o mais,
+    /// e aí a faixa não nasce — ver a `Lado.Capa`.
+    temporadas: Int = 0,
     verso: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     when (lado) {
@@ -557,6 +589,52 @@ internal fun FaceDaCaixa(
                     ),
                 ),
             )
+
+            /// **A faixa de temporadas** — a última dívida do §8 do
+            /// `PARIDADE-ANDROID.md`.
+            ///
+            /// ## Ela existe porque uma série é **uma** caixa
+            ///
+            /// A locadora não expõe 21 fitas de Breaking Bad: expõe uma caixa de
+            /// coleção. Sem a faixa, ela é indistinguível de um filme — e o que
+            /// a pessoa pega na mão tem vinte horas dentro, não duas.
+            ///
+            /// ## A tinta é a da própria obra, escurecida
+            ///
+            /// `color-mix(in oklab, var(--cor) 68%, #000)` na folha (`:4499`).
+            /// A faixa é a **cinta impressa na capa**, então ela tem que ser da
+            /// caixa — e escurecida porque branco sobre a cor pura da arte não
+            /// se lê em metade do acervo. Sem `dominant_color`, a linha da casa:
+            /// nunca uma cor sorteada (§18).
+            ///
+            /// ⚠️ **7px na web, 8sp aqui, e a proporção foi quebrada de
+            /// propósito.** Lá a caixa tem 130px de largura e a letra 7px — 5,4%.
+            /// Os mesmos 5,4% nos 96dp desta caixa dariam **5,2sp**, que não é
+            /// tamanho de texto, é textura. É o mesmo erro que o selo do nível
+            /// cobrou na oitava rodada: mesma proporção, caixas diferentes,
+            /// resultados diferentes na tela.
+            if (temporadas > 0) {
+                Text(
+                    text = "$temporadas ${if (temporadas == 1) "TEMPORADA" else "TEMPORADAS"}",
+                    style = Tipo.rotulo.copy(fontSize = 8.sp, letterSpacing = 0.14.em),
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(
+                            androidx.compose.ui.graphics.lerp(
+                                Color.Black,
+                                cor ?: Cores.destaque,
+                                0.68f,
+                            ),
+                        )
+                        .padding(vertical = 3.dp),
+                )
+            }
+
             VeuDeLuz(luz)
         }
 
@@ -633,22 +711,6 @@ internal fun FaceDaCaixa(
             VeuDeLuz(luz)
         }
     }
-}
-
-/// «fulano devolveu Tetris — rebobinada».
-///
-/// O `devolvido_como` vem do servidor em código, e a frase em português é do
-/// cliente — a mesma divisão do `Acontecimento.frase` do mural. Um código que o
-/// app não conhece **não vira texto**: a frase acaba no título, em vez de
-/// escrever «devolveu — unknown» (§18).
-internal fun frasedaDevolucao(devolvida: dev.odeon.android.dados.Devolvida): String {
-    val como = when (devolvida.devolvidoComo) {
-        "rebobinada" -> " — rebobinada"
-        "sem_rebobinar" -> " — sem rebobinar"
-        "ate_o_fim" -> " — até o fim"
-        else -> ""
-    }
-    return "${devolvida.quemNome} devolveu ${devolvida.titulo}$como"
 }
 
 @Composable
@@ -1182,15 +1244,174 @@ private fun Caixa(
     }
 }
 
-/// A frase das regras, montada com o que o servidor mandou.
+/// A placa da porta — **a loja tinha letreiro em toda estante e nenhum na
+/// própria porta**.
 ///
-/// Ela existe porque a escassez muda o significado da tela inteira: ligada, uma
-/// caixa na mão de alguém é uma caixa que **você não pode pegar**; desligada, é
-/// só informação. Dizer qual dos dois está valendo evita a tela mentir por
-/// omissão.
-private fun regras(escassez: Boolean, limite: Int, prazoDias: Int, possoPegar: Int): String = buildString {
-    append(if (escassez) "escassez ligada: uma cópia por caixa" else "escassez desligada: ninguém barra ninguém")
-    if (limite > 0) append(" · limite de $limite por pessoa")
-    if (prazoDias > 0) append(" · prazo de $prazoDias dias")
-    if (escassez) append(" · você ainda pode pegar $possoPegar")
+/// ## Por que os números mudam de tipo, e não só de cor
+///
+/// Antes as três contagens eram uma frase só, em cinza de 12sp, com exatamente o
+/// mesmo peso das regras da casa e do limite. Três números que dizem coisas
+/// diferentes, e nenhum era o principal — o olho não tinha onde pousar.
+///
+/// Agora os dois que importam saem na **serifa dourada das placas de estante**
+/// (`Terror 8 de 145`), que é a tinta que esta tela já usa pra dizer «isto é
+/// letreiro de loja». Não é uma cor nova nem uma fonte nova: é a que estava
+/// pendurada em cada prateleira e faltava na entrada.
+///
+/// ## O acervo desce, e sussurra
+///
+/// `de 850 no acervo` é contexto — a vitrine é uma amostra dele. Na mesma linha
+/// e no mesmo peso, ele disputava com os dois números que são de hoje. Numa
+/// segunda linha, apagado, ele responde a pergunta sem fazê-la.
+///
+/// ## ⚠️ A frase inteira continua existindo, e vai na semântica
+///
+/// O desenho quebrou a frase em pedaços com pesos diferentes; quem lê por leitor
+/// de tela receberia os pedaços soltos. O `clearAndSetSemantics` põe de volta a
+/// frase que a [portaDaLoja] monta — a mesma que os testes guardam. A tipografia
+/// é da tela; a gramática continua sendo de uma função só.
+@Composable
+private fun PortaDaLoja(naPrateleira: Int, sorteadas: Int, noAcervo: Int) {
+    val frase = portaDaLoja(naPrateleira, sorteadas, noAcervo)
+
+    /// Sem caixa à vista não há placa: os dois vazios são frase, não número.
+    if (naPrateleira == 0) {
+        Text(text = frase, style = MaterialTheme.typography.bodySmall, color = Cores.textoApagado)
+        return
+    }
+
+    val numero = MaterialTheme.typography.headlineSmall.copy(
+        fontSize = 22.sp,
+        /// O mesmo halo das placas, **na metade** (0,42 → 0,22). Lá ele pende
+        /// sobre madeira escura e precisa acender; aqui ele encosta em texto
+        /// corrido, e o mesmo brilho borraria a linha de baixo.
+        shadow = Shadow(color = Cores.destaque.copy(alpha = 0.22f), blurRadius = 18f),
+    )
+    val palavra = MaterialTheme.typography.bodySmall
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.clearAndSetSemantics { contentDescription = frase },
+    ) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("$naPrateleira", style = numero, color = Cores.destaque)
+            Text(
+                /// O buraco anda junto do número de que ele é buraco, e fica
+                /// **apagado**: ele qualifica a prateleira, não é uma terceira
+                /// contagem de mesmo posto.
+                text = buildString {
+                    append("na prateleira")
+                    val fora = sorteadas - naPrateleira
+                    if (fora > 0) append(", $fora fora")
+                },
+                style = palavra,
+                color = Cores.textoApagado,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+            /// O separador é mais apagado que as palavras que ele separa — ele é
+            /// pontuação, e pontuação que se lê tanto quanto o texto vira ruído.
+            /// Derivado do cinza da casa, e não uma cor nova: `Cores.linha` é
+            /// tinta de borda e sumiria de vez sobre o fundo.
+            Text(
+                "·",
+                style = palavra,
+                color = Cores.textoApagado.copy(alpha = 0.45f),
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+            Text("$sorteadas", style = numero, color = Cores.destaque)
+            Text(
+                text = "nesta semana",
+                style = palavra,
+                color = Cores.textoApagado,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+        }
+
+        /// §24: servidor que não mandou `no_acervo` não ganha uma linha dizendo
+        /// «de 0 no acervo».
+        if (noAcervo > 0) {
+            Text(
+                text = "de $noAcervo no acervo",
+                style = palavra,
+                /// Um degrau abaixo do cinza da casa. Não é token novo — é o
+                /// mesmo cinza rebaixado, como o app já faz com o vermelho do
+                /// selo de atrasada.
+                color = Cores.textoApagado.copy(alpha = 0.7f),
+            )
+        }
+    }
 }
+
+/// «37 caixas na prateleira, 3 fora · 40 nesta semana, de 600 no acervo».
+///
+/// ## As três contagens são coisas diferentes, e é por isso que são três
+///
+/// | | |
+/// |---|---|
+/// | **na prateleira** | o que dá pra pegar **agora** |
+/// | **nesta semana** | o que a vitrine sorteou, antes de alguém levar |
+/// | **no acervo** | o que a loja tem, e a vitrine é uma amostra dele |
+///
+/// Só a primeira faria a pessoa concluir que a locadora tem 37 filmes. Só a
+/// última esconderia a loja de hoje atrás do estoque inteiro. É o mesmo §14 do
+/// «Biblioteca 300» — número sem denominador vira afirmação errada.
+///
+/// ## O buraco é **dito**, e não deduzido
+///
+/// O `, 3 fora` existe porque a caixa alugada sumiu da fileira (ver
+/// `EstadoDaLocadora.expostas`). Sem esta frase, quem viu 40 ontem e vê 37 hoje
+/// conclui que a loja quebrou — o vão precisa de nome, senão lê como defeito em
+/// vez de escassez.
+///
+/// E ele só aparece quando existe: `, 0 fora` é ruído, e §24.
+///
+/// ## ⚠️ `no_acervo` vem do servidor, e **não é a soma das estantes**
+///
+/// A tentação é somar os `total` das placas, e dá outro número: uma estante que
+/// não recebeu caixa no sorteio **não vem na resposta**, e o acervo dela some
+/// junto.
+///
+/// **Medido no servidor de casa em 05/08/2026**, nas dez estantes desta semana
+/// (145 + 16 + 26 + 125 + 49 + 179 + 112 + 62 + 89 + 10): a soma dá **813**, e o
+/// `no_acervo` que o servidor manda é **850**. Somar as placas perderia 37
+/// caixas — as das estantes que a semana não sorteou. A web aprendeu o mesmo por
+/// foto, quando a porta disse «597 no acervo» de 600 na semana em que o faroeste
+/// ficou de fora.
+///
+/// Quando o servidor não manda o número, a oração inteira some (§24) — «de 0 no
+/// acervo» seria uma loja vazia com quarenta caixas na tela.
+///
+/// ## A concordância é nossa, e a web não tem
+///
+/// Lá está escrito `${total} caixas na prateleira`, e com uma caixa sai «1
+/// caixas». Em português isso é erro de leitura, não economia de código — a
+/// mesma razão que fez o `N temporada/temporadas` existir três linhas adiante.
+internal fun portaDaLoja(naPrateleira: Int, sorteadas: Int, noAcervo: Int): String {
+    /// Os dois vazios dizem coisas **opostas**, e trocá-los é mentir.
+    ///
+    /// Prateleira vazia com sorteio cheio é uma loja funcionando cujo estoque
+    /// saiu inteiro — notícia boa, quase. Sorteio vazio é a vitrine não ter
+    /// nascido: nenhuma obra com capa entrou nela.
+    if (naPrateleira == 0) {
+        return if (sorteadas > 0) "a prateleira está vazia — está tudo emprestado" else "nada com capa por aqui"
+    }
+    return buildString {
+        append("$naPrateleira ${if (naPrateleira == 1) "caixa" else "caixas"} na prateleira")
+        val fora = sorteadas - naPrateleira
+        if (fora > 0) append(", $fora fora")
+        append(" · $sorteadas nesta semana")
+        if (noAcervo > 0) append(", de $noAcervo no acervo")
+    }
+}
+
+/// ⚠️ A `regras()` morava aqui e **foi apagada em 05/08/2026**, com a linha que
+/// ela montava. O porquê está escrito no lugar onde a linha era desenhada, na
+/// `Loja` — junto do mapa de onde cada uma das três informações continua sendo
+/// dita.
+///
+/// Fica o registro de que ela existiu, e não um corpo comentado: código morto
+/// guardado «por via das dúvidas» é a próxima pessoa lendo duas versões da mesma
+/// regra e não sabendo qual vale. O git guarda melhor.

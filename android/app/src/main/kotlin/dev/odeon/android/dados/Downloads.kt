@@ -25,6 +25,23 @@ data class FichaDoDownload(
     val arquivoId: String,
     val titulo: String,
     val poster: String? = null,
+    /// A arte deitada, pra faixa do cartão na tela de baixados.
+    ///
+    /// ## Por que o `backdrop` e não o pôster esticado
+    ///
+    /// O cartão da tela é uma faixa de ~340 × 100dp — proporção de backdrop.
+    /// Um pôster é 2:3, e enfiá-lo ali corta cabeça ou pé de quem está na arte.
+    /// O servidor já serve as duas em `artwork`, e é gravado aqui **junto com os
+    /// bytes**: o arquivo tem que se desenhar sem rede, e um caminho de arte que
+    /// só existisse no catálogo faria a tela offline mostrar retângulo cinza —
+    /// que é o contrário do que ela existe pra fazer.
+    ///
+    /// ⚠️ **Nulo nos downloads que já estão no disco**, e é de propósito. A ficha
+    /// mora dentro do `data` do Media3 (ver abaixo), e o que foi gravado antes
+    /// deste campo continua como está. O cartão cai no [poster] e, sem ele, na
+    /// cor da casa — nunca num vão. Migrar downloads existentes pediria rede pra
+    /// consertar aparência, que é o oposto do ponto.
+    val backdrop: String? = null,
     /// De onde veio, e é isto que decide se expira. Ver `OrigemDoDownload`.
     val origem: String = OrigemDoDownload.BIBLIOTECA.name,
     /// Epoch em ms. `null` quando não expira — todo download de biblioteca.

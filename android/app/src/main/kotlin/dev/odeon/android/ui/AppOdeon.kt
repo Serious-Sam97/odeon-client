@@ -336,7 +336,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     val modelo: ModeloDaLocadora = viewModel(factory = fabricaDaLocadora(app.odeon))
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        TelaDaLocadora(modelo = modelo)
+                        TelaDaLocadora(modelo = modelo, aoAbrirObra = { onde = Onde.Ficha(it) })
                     }
                 }
 

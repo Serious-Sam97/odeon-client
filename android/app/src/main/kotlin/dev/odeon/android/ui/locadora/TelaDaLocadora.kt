@@ -54,6 +54,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.Emprestada
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import dev.odeon.android.dados.CaixaExposta
+import dev.odeon.android.dados.EstanteExposta
+import dev.odeon.android.ui.Tipo
+import dev.odeon.android.ui.corDeHex
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.RotuloDeSecao
 import dev.odeon.android.ui.chega
@@ -80,7 +87,7 @@ import dev.odeon.android.ui.chega
 /// O botão físico de voltar continua levando à biblioteca — quem trata disso é o
 /// `BackHandler` no `AppOdeon`, que é onde a navegação mora.
 @Composable
-fun TelaDaLocadora(modelo: ModeloDaLocadora) {
+fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {}) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
     if (estado.carregando && estado.prateleira == null) {
@@ -150,7 +157,45 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora) {
         /// estado normal e informativo — "está tudo na estante" é notícia. Uma
         /// tela em branco, não.
         if (estado.minhas.isEmpty() && estado.dosOutros.isEmpty() && estado.erro == null) {
-            EstanteVazia()
+            /// ⚠️ As tábuas vazias só entram quando **não há vitrine**.
+            ///
+            /// Elas nasceram pra consertar um vazio: a tela sem empréstimo era
+            /// 1.400 pixels de preto com uma frase. Com a vitrine desenhada
+            /// abaixo, esse vazio não existe mais — e duas prateleiras vazias
+            /// empurrando a loja pra baixo passam de conserto a estorvo.
+            ///
+            /// É a mesma decisão que o próprio conserto tomou, invertida: o que
+            /// muda é o que está em volta.
+            EstanteVazia(comTabuas = estado.loja?.estantes.isNullOrEmpty())
+        }
+
+        /// ## A vitrine — e ela é a locadora
+        ///
+        /// Até aqui esta tela mostrava só o que **saiu** da estante: os seus
+        /// empréstimos e os dos outros. O acervo exposto — a loja em si — nunca
+        /// foi pedido, e `/api/locadora/estantes` existe desde antes deste app.
+        ///
+        /// É o mesmo padrão de `height`, `size_bytes` e `tags`: o servidor já
+        /// dava e o cliente não pegava. A diferença é o tamanho — não era um
+        /// campo, era metade de uma tela.
+        estado.loja?.estantes?.forEach { estante ->
+            Estante(estante = estante, arte = modelo::arte, aoAbrir = aoAbrirObra)
+        }
+
+        /// Quando a vitrine vira.
+        ///
+        /// O comentário da web diz o que este campo carrega: «é o que torna a
+        /// rotação **promessa, não sorteio**». Uma seleção que muda sem data
+        /// anunciada é aleatoriedade; com data, é programação — e é a diferença
+        /// entre um acervo embaralhado e uma locadora que troca a vitrine na
+        /// segunda.
+        estado.loja?.viraEm?.let { quando ->
+            Text(
+                text = "a vitrine vira em $quando",
+                style = MaterialTheme.typography.labelSmall,
+                color = Cores.textoApagado,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
@@ -178,6 +223,172 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora) {
 /// Um dourado difuso subindo da tábua, a 55% e desfocado. Sem ele a madeira é
 /// uma tarja marrom; com ele, ela é uma superfície **iluminada** — e é o mesmo
 /// argumento do arquivo `Luz.kt`, aplicado a um lugar em vez de a um objeto.
+/// Uma estante da vitrine: placa, caixas e tábua.
+///
+/// ## A placa é serifada e **acesa**, e isso é da folha
+///
+/// `.placa span` (`styles.css:4105`): 24px em `--font-display`, `--accent`, com
+/// `text-shadow: 0 0 24px` a 42%. Ou seja — o nome da estante não é um rótulo,
+/// é um **letreiro aceso** pendurado sobre a prateleira. É o dourado como luz na
+/// forma mais literal que a web tem.
+///
+/// Compose não tem `text-shadow` colorido difuso como o CSS, então o halo vem
+/// pelo `shadow` do `TextStyle`: mesma ideia, e o borrão de 24px vira `blurRadius`.
+///
+/// ## «16 de 113» é a promessa da vitrine
+///
+/// `total` é quantas caixas a estante tem **no acervo**, não quantas estão à
+/// vista. O comentário da web insiste nisso, e é o que impede a placa de mentir:
+/// a vitrine é uma amostra que gira, não o estoque.
+@Composable
+private fun Estante(
+    estante: EstanteExposta,
+    arte: (String?) -> String?,
+    aoAbrir: (String) -> Unit,
+) {
+    if (estante.caixas.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = estante.nome,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    letterSpacing = 0.05.em,
+                    shadow = Shadow(
+                        color = Cores.destaque.copy(alpha = 0.42f),
+                        blurRadius = 24f,
+                    ),
+                ),
+                color = Cores.destaque,
+            )
+            Text(
+                text = "${estante.caixas.size} de ${estante.total}",
+                style = Tipo.rotulo.copy(letterSpacing = 0.14.em),
+                color = Cores.destaqueApagado,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+        }
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            itemsIndexed(estante.caixas, key = { _, c -> c.id }) { i, caixa ->
+                CaixaNaEstante(
+                    caixa = caixa,
+                    arte = arte(caixa.poster),
+                    indice = i,
+                    aoAbrir = { aoAbrir(caixa.id) },
+                )
+            }
+        }
+
+        Tabua()
+    }
+}
+
+/// Uma caixa **na** estante — de pé, na mesma pose das que saíram.
+///
+/// Ela não vira: o verso de uma caixa emprestada tem quem levou e o prazo, e uma
+/// que está na estante não tem nada disso pra mostrar. Tocar abre a ficha, que é
+/// onde se pega a fita.
+@Composable
+private fun CaixaNaEstante(
+    caixa: CaixaExposta,
+    arte: String?,
+    indice: Int,
+    aoAbrir: () -> Unit,
+) {
+    val espessura = 26.dp
+    Column(
+        modifier = Modifier
+            .chega(indice)
+            .width(96.dp + espessura)
+            .clickable(onClick = aoAbrir),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(96.dp + espessura)
+                .aspectRatio((96f + 26f) / 144f),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(espessura)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        rotationY = 68f
+                        transformOrigin = TransformOrigin(1f, 0.5f)
+                        cameraDistance = 12f * density
+                    }
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Cores.fundoAfundado, Cores.fundoElevado, Cores.fundoAfundado),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = caixa.titulo,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Cores.textoApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.requiredWidth(130.dp).graphicsLayer { rotationZ = 90f },
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(96.dp)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        rotationY = -22f
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                        cameraDistance = 12f * density
+                    }
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(corDeHex(caixa.corDominante) ?: Cores.fundoElevado),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (arte != null) {
+                    AsyncImage(
+                        model = arte,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        text = caixa.titulo,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Cores.texto,
+                        textAlign = TextAlign.Center,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(6.dp),
+                    )
+                }
+                /// O verniz, o mesmo das caixas emprestadas.
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.linearGradient(
+                            0.00f to Color.White.copy(alpha = 0.24f),
+                            0.14f to Color.White.copy(alpha = 0.05f),
+                            0.32f to Color.Transparent,
+                            0.74f to Color.Transparent,
+                            1.00f to Color.White.copy(alpha = 0.10f),
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -205,7 +416,16 @@ private fun Secao(titulo: String, quantos: Int? = null, conteudo: @Composable ()
 /// na estante. Esta tela só conhece o que **saiu** dela; o acervo inteiro é da
 /// biblioteca. Desenhar caixas aqui seria afirmar um estoque que ninguém contou.
 @Composable
-private fun EstanteVazia() {
+private fun EstanteVazia(comTabuas: Boolean) {
+    if (!comTabuas) {
+        Text(
+            text = "nenhuma caixa fora da estante",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Cores.textoApagado,
+        )
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

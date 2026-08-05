@@ -3,8 +3,10 @@ package dev.odeon.android.ui.locadora
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.odeon.android.dados.Emprestada
+import dev.odeon.android.dados.Loja
 import dev.odeon.android.dados.Prateleira
 import dev.odeon.android.dados.RepositorioOdeon
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +16,12 @@ import kotlinx.coroutines.launch
 data class EstadoDaLocadora(
     val carregando: Boolean = true,
     val prateleira: Prateleira? = null,
+    /// A vitrine — as estantes com as caixas expostas.
+    ///
+    /// Separada da `prateleira` porque são **duas rotas e duas coisas**: a
+    /// prateleira é o que saiu da estante, a loja é o que está nela. Uma pode
+    /// falhar sem a outra: ver `RepositorioOdeon.estantes`.
+    val loja: Loja? = null,
     val erro: String? = null,
     /// O empréstimo que está sendo devolvido agora, pra o botão não aceitar
     /// dois toques. Devolver duas vezes é mexer no acervo de alguém duas vezes.
@@ -55,8 +63,17 @@ class ModeloDaLocadora(private val odeon: RepositorioOdeon) : ViewModel() {
         viewModelScope.launch {
             _estado.update { it.copy(carregando = true, erro = null) }
             try {
-                val prateleira = odeon.prateleira()
-                _estado.update { it.copy(carregando = false, prateleira = prateleira) }
+                /// As duas em paralelo: elas não dependem uma da outra, e em
+                /// série a tela esperaria a soma das duas viagens pela tailnet.
+                val prateleira = async { odeon.prateleira() }
+                val loja = async { odeon.estantes() }
+                _estado.update {
+                    it.copy(
+                        carregando = false,
+                        prateleira = prateleira.await(),
+                        loja = loja.await(),
+                    )
+                }
             } catch (e: Exception) {
                 _estado.update {
                     it.copy(carregando = false, erro = e.message ?: "não deu pra abrir a locadora")

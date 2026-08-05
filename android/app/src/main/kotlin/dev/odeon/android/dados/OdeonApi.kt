@@ -98,6 +98,11 @@ interface OdeonApi {
     // ----------------------------------------------------------------- fase 5
 
     /// O que está fora da estante. **Só lê.**
+    /// A loja: as estantes com as caixas expostas. Ver `Loja` — é a rota que
+    /// faz a locadora ser uma loja e não uma lista de empréstimos.
+    @GET("api/locadora/estantes")
+    suspend fun estantes(): Loja
+
     @GET("api/locadora/prateleira")
     suspend fun prateleira(): Prateleira
 

@@ -42,6 +42,35 @@ A proposta foi desenhada e aprovada antes de qualquer linha. Três levas:
 | **2 — a chegada** ✅ | herói na biblioteca (a tela mais visitada era a mais plana), a **tábua** sob as caixas da locadora, e a `dominant_color` tingindo a chegada |
 | **3 — o ritual** ✅ | `ui/Chegada.kt` — as caixas caem na prateleira, escalonadas — e **apagar a luz**: tocar em assistir escurece a sala antes de trocar de tela |
 
+### E a locadora virou **loja**
+
+Sobrou preto na locadora depois da leva 2, e a pergunta era como preencher. A
+resposta não era desenho: era uma rota.
+
+**`/api/locadora/estantes` existe desde antes deste app e nenhuma linha dele a
+chamava.** Ela devolve `Loja { estantes[], no_acervo, semana_de, vira_em }` — a
+vitrine inteira, em estantes com nome. O que a tela mostrava era só o que
+**saiu** da estante: os seus empréstimos e os dos outros.
+
+É o mesmo padrão de `height`, `size_bytes` e `tags` — o servidor já dava, o
+cliente não pegava. A diferença é o tamanho: não era um campo, era metade de uma
+tela.
+
+Agora ela desenha as estantes com a placa da web (`.placa span`: serifada de
+24px em `--accent` **com halo de 24px a 42%** — o dourado como luz na forma mais
+literal que a folha tem), as caixas na mesma pose de três quartos das
+emprestadas, e a tábua por baixo. A placa diz «Terror · 8 de 145», e o segundo
+número é do **acervo**, não da vitrine: é o que impede a placa de mentir sobre
+uma seleção que gira.
+
+O `vira_em` entrou junto, e o comentário da web explica por quê: «é o que torna
+a rotação **promessa, não sorteio**».
+
+⚠️ E isso tornou obsoleto o conserto anterior: as duas tábuas vazias do estado
+sem empréstimo existiam pra preencher um vazio que deixou de existir. Elas agora
+só aparecem quando **não há vitrine** — o que muda não é a regra, é o que está
+em volta.
+
 ### Três coisas que o screenshot achou
 
 **A locadora vazia contradizia a própria frase.** Ela diz «nenhuma caixa fora da

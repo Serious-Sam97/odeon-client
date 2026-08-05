@@ -181,6 +181,16 @@ class RepositorioOdeon(private val cofre: Cofre) {
         exigirApi().prateleira()
     }
 
+    /// A loja: as estantes com as caixas expostas.
+    ///
+    /// Falha devolve loja **vazia** em vez de estourar. A locadora tem duas
+    /// fontes — os empréstimos e a vitrine — e uma tela que morre inteira porque
+    /// a segunda não respondeu perderia a primeira junto. A vitrine some, os
+    /// empréstimos ficam.
+    suspend fun estantes(): Loja = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().estantes() }.getOrDefault(Loja())
+    }
+
     /// Pegar a fita. **Escreve em produção** — ver `OdeonApi.alugar`.
     suspend fun alugar(obraId: String): RespostaDoAluguel = withContext(Dispatchers.IO) {
         exigirApi().alugar(AlvoDaCaixa(obraId))

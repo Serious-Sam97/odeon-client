@@ -233,6 +233,64 @@ data class Etiqueta(
     val source: String? = null,
 )
 
+/// Uma caixa **exposta na vitrine** — `CaixaExposta` na web.
+///
+/// Diferente da [Emprestada]: aquela é uma fita que saiu da estante; esta é uma
+/// que está **nela**, à mostra, esperando ser pega.
+@Serializable
+data class CaixaExposta(
+    val id: String,
+    val serie: Boolean = false,
+    val titulo: String,
+    val ano: Int? = null,
+    val poster: String? = null,
+    @SerialName("dominant_color") val corDominante: String? = null,
+    val temporadas: Int = 0,
+    @SerialName("media_file_id") val arquivoId: String? = null,
+    @SerialName("position_seconds") val ondeParou: Double? = null,
+    val estante: Int = 0,
+    val total: Int = 0,
+)
+
+/// Uma estante, com nome e placa.
+@Serializable
+data class EstanteExposta(
+    val nome: String,
+    /// ⚠️ Quantas caixas esta estante tem **no acervo**, e não quantas estão à
+    /// vista. É o que faz a placa dizer "16 de 113" em vez de "16" — e o
+    /// comentário da web insiste nisso porque a diferença é a promessa: a
+    /// vitrine é uma amostra, não o estoque.
+    val total: Int = 0,
+    val caixas: List<CaixaExposta> = emptyList(),
+)
+
+/// `GET /api/locadora/estantes` — a **loja**, e ela é uma vitrine que gira.
+///
+/// ## O app não pedia esta rota, e ela é a locadora inteira
+///
+/// Até aqui a tela da locadora mostrava só o que **saiu** da estante — os seus
+/// empréstimos e os dos outros. O acervo exposto, que é a loja em si, nunca foi
+/// pedido: `/api/locadora/estantes` existe no `web/src/api.ts:1783` e nenhuma
+/// linha deste app a chamava.
+///
+/// É o mesmo padrão de `height`, `size_bytes` e `tags`: o servidor já dava, e o
+/// cliente não pegava. A diferença é o tamanho — aqui não era um campo, era uma
+/// tela.
+///
+/// ## `vira_em` é o que torna a vitrine promessa
+///
+/// O comentário da web é a explicação: «quando a vitrine vira. É o que torna a
+/// rotação **promessa, não sorteio**». Uma seleção que muda sem data anunciada é
+/// aleatoriedade; com data, é programação — e é a diferença entre um acervo
+/// embaralhado e uma locadora que troca a vitrine na segunda.
+@Serializable
+data class Loja(
+    val estantes: List<EstanteExposta> = emptyList(),
+    @SerialName("no_acervo") val noAcervo: Int = 0,
+    @SerialName("semana_de") val semanaDe: String? = null,
+    @SerialName("vira_em") val viraEm: String? = null,
+)
+
 /// `GET /api/locadora/liberadas` — o §66 em duas linhas.
 ///
 /// ⚠️ `exige = false` vem com `works` **vazia**, e isso não quer dizer "nada

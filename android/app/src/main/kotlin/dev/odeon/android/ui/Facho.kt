@@ -73,9 +73,27 @@ data class DestinoDoFacho(
 /// aleatórios — é a curva de uma lâmpada de arco: apaga quase tudo, dá um pico
 /// **acima** do normal, cai, e assenta.
 ///
-/// ⚠️ Ela é **curta de propósito** (300ms). Piscada longa em barra de navegação
-/// deixa de ser cinema e vira defeito de renderização — a pessoa acha que a tela
-/// travou.
+/// ## ⚠️ Ela é longa, e eu tinha argumentado o contrário
+///
+/// A primeira versão durava **300ms**, e o comentário aqui dizia: «piscada longa
+/// em barra de navegação deixa de ser cinema e vira defeito de renderização — a
+/// pessoa acha que a tela travou». O dono pediu bem mais lenta, e olhando de
+/// novo o receio estava exagerado.
+///
+/// O motivo é que **nada da interface apaga**: a piscada multiplica só a luz —
+/// o cone, a poeira e a lente. O ícone e o rótulo do destino escolhido ficam em
+/// `destaqueQuente` o tempo todo, e o conteúdo da tela troca na hora. O que
+/// demora é a lâmpada firmando, não o app respondendo.
+///
+/// Se durasse o mesmo tempo **e** apagasse o rótulo, aí o receio valeria.
+///
+/// ## A curva de uma lenta não é a de uma curta esticada
+///
+/// Esticar os seis quadros-chave de 300ms para 1200ms daria um pulso lento e
+/// regular — que lê como respiração, não como acendimento. Lâmpada de arco
+/// **oscila**, e a oscilação **decai**: cada repique chega mais perto de 1 que o
+/// anterior, até assentar. São nove quadros abaixo, com a amplitude caindo de
+/// 0,35 para 0,03.
 ///
 /// E ela some sozinha pra quem desligou animação: `Animatable` e
 /// `animateFloatAsState` leem o `MotionDurationScale`, que no Android vem do
@@ -104,16 +122,25 @@ fun BarraDoFacho(
         brilho.animateTo(
             targetValue = 1f,
             animationSpec = keyframes {
-                durationMillis = 300
-                /// A lâmpada de arco: quase apagada, pico **acima** do normal,
-                /// queda, e assenta. O pico em 1.28 é o que faz o olho ler
-                /// "acendeu" em vez de "apareceu".
-                0.12f at 0
-                1.28f at 60
-                0.34f at 115
-                1.12f at 175
-                0.76f at 225
-                1f at 300
+                durationMillis = 1200
+                /// A lâmpada firmando o arco. Cada linha é um repique, e a
+                /// distância até 1 cai a cada um: 0,92 · 0,35 · 0,78 · 0,15 ·
+                /// 0,60 · 0,08 · 0,32 · 0,03. É o decaimento que faz o olho ler
+                /// "acendendo" em vez de "piscando".
+                ///
+                /// O primeiro pico passa de 1 de propósito — é o estouro do
+                /// arco, e é ele que faz parecer que a luz **nasceu** em vez de
+                /// aparecer.
+                0.08f at 0
+                1.35f at 90
+                0.22f at 200
+                1.15f at 320
+                0.40f at 450
+                1.08f at 600
+                0.68f at 780
+                1.03f at 950
+                0.90f at 1080
+                1f at 1200
             },
         )
     }

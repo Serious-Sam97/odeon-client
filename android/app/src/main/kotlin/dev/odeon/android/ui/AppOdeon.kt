@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.NavigationRail
@@ -837,8 +839,22 @@ private fun EsqueletoComAbas(
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) { corpoComGaveta() }
+    /// ## A barra **flutua** sobre o conteúdo, e é o que a luz pediu
+    ///
+    /// Ela era o segundo filho de uma `Column`: empurrava o conteúdo pra cima e
+    /// acabava numa aresta reta. Agora ela é uma camada por cima, e o conteúdo
+    /// recua só a altura da **fileira** — a faixa de luz acima dela passa
+    /// livremente sobre os cartazes, que foi o que o dono aprovou ao ver a
+    /// proposta: «pode subir por cima dos cartazes».
+    ///
+    /// ⚠️ O recuo é `ALTURA_DA_FILEIRA` **mais o inset de baixo**, e sem ele o
+    /// último cartaz de cada tela ficaria embaixo dos rótulos — não da luz, que
+    /// é transparente, mas da fileira, que é sólida.
+    val recuo = ALTURA_DA_FILEIRA +
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().padding(bottom = recuo)) { corpoComGaveta() }
         BarraDoFacho(
             destinos = Aba.entries.map { aba ->
                 DestinoDoFacho(
@@ -848,9 +864,11 @@ private fun EsqueletoComAbas(
                     aoTocar = { if (aba != atual) aoTrocar(aba) },
                 )
             },
-            modifier = Modifier.windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
-            ),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
+                ),
         )
     }
 }

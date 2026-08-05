@@ -33,6 +33,37 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
+/// A altura da **fileira** — ícone, rótulo e respiro.
+///
+/// ## Ela é constante de propósito, e é um contrato
+///
+/// A barra passou a **flutuar por cima do conteúdo** (ver `BarraDoFacho`), e
+/// quem rola atrás dela precisa saber onde parar de desenhar. Medir a fileira em
+/// tempo de layout e devolver o número pra cima daria o mesmo valor com três
+/// peças a mais; uma constante que as duas pontas leem é o contrato mais curto
+/// que resolve.
+///
+/// 72dp é a soma do que está lá dentro: 12 de respiro, 24 de ícone, 5 de vão,
+/// ~15 de rótulo e 16 embaixo.
+val ALTURA_DA_FILEIRA = 72.dp
+
+/// A faixa **só de luz**, acima da fileira.
+///
+/// Nenhum conteúdo mora aqui: é o espaço que o cone precisa pra terminar por
+/// conta própria em vez de ser cortado. Ver o cabeçalho do `BarraDoFacho`.
+///
+/// ## O número sai de uma conta, e a primeira tentativa errou
+///
+/// O cone tem raio de `2,6 × ALTURA_DA_FILEIRA` — 187dp — e nasce colado na
+/// aresta de baixo. Pra ele **fechar dentro da caixa**, sobra `187 − 72 = 115`.
+/// A primeira versão pôs 68dp «de olho», e o screenshot mostrou a luz batendo no
+/// teto outra vez: uma aresta mais fraca que a antiga, mas reta do mesmo jeito.
+///
+/// ⚠️ **Ela não come toque.** A faixa não tem `pointerInput` nenhum, e no Compose
+/// quem não pede evento não recebe: o dedo atravessa pro cartaz que está atrás.
+/// Só a fileira, lá embaixo, é clicável.
+val ALTURA_DA_LUZ = 118.dp
+
 /// Um destino da barra, do jeito que o facho precisa saber dele.
 data class DestinoDoFacho(
     val rotulo: String,
@@ -86,6 +117,27 @@ data class DestinoDoFacho(
 /// demora é a lâmpada firmando, não o app respondendo.
 ///
 /// Se durasse o mesmo tempo **e** apagasse o rótulo, aí o receio valeria.
+///
+/// ## ⚠️ A aresta reta no topo, e por que ela sumiu
+///
+/// A barra era um **retângulo opaco** com o facho desenhado dentro dele. Duas
+/// coisas paravam na mesma linha: o escuro da barra, que começava de repente, e
+/// o cone, que era recortado pela borda do `Canvas`.
+///
+/// E o corte era grande: o radial tem raio de **2,6× a altura**, ou seja mais da
+/// metade da luz ia pro lixo. O resultado era uma faixa clara com um risco reto
+/// em cima — «o limite de cima deixa um pouco feio», nas palavras do dono.
+///
+/// Agora são três mudanças que só fazem sentido juntas:
+///
+/// | | |
+/// |---|---|
+/// | a barra ganhou `ALTURA_DA_LUZ` **só de luz** | é o espaço pro cone acabar sozinho |
+/// | o fundo virou **degradê**, transparente em cima | sem aresta, porque não há borda: o escuro entra |
+/// | ela **flutua** sobre o conteúdo | e por isso a luz sobe pelos cartazes, que foi o que o dono aprovou |
+///
+/// O topo visível passa a ser **a curva do próprio radial** — a cúpula que a luz
+/// faz. Os itens não se moveram um pixel: quem cresceu foi a área de desenho.
 ///
 /// ## A curva de uma lenta não é a de uma curta esticada
 ///
@@ -145,13 +197,59 @@ fun BarraDoFacho(
         )
     }
 
-    Box(modifier.fillMaxWidth().background(Cores.fundo)) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(ALTURA_DA_LUZ + ALTURA_DA_FILEIRA)
+            /// O escuro **entra** em vez de começar.
+            ///
+            /// Transparente no topo, `Cores.fundo` quando a fileira começa, e
+            /// opaco daí pra baixo — a fileira precisa de fundo sólido pra o
+            /// rótulo ser legível sobre qualquer cartaz que passe atrás.
+            ///
+            /// As paradas intermediárias existem contra o mesmo banding que o
+            /// cone enfrenta: num fundo quase preto, uma rampa de alfa em duas
+            /// paradas mostra o degrau de 8 bits, e o olho lê degrau como borda —
+            /// que é justamente o que esta mudança veio tirar.
+            /// ⚠️ As paradas são calculadas a partir da **fileira**, e não
+            /// repartidas na caixa.
+            ///
+            /// Com frações fixas, crescer a faixa de luz espalharia o escuro por
+            /// ela toda — e o degradê passaria a cobrir cartaz que ninguém pediu
+            /// pra cobrir. O escuro tem um trabalho só: dar chão ao rótulo. Ele
+            /// começa 46dp antes da fileira e termina nela.
+            .background(
+                Brush.verticalGradient(
+                    colorStops = run {
+                        val total = ALTURA_DA_LUZ.value + ALTURA_DA_FILEIRA.value
+                        val comeco = (ALTURA_DA_LUZ.value - 46f) / total
+                        val fim = ALTURA_DA_LUZ.value / total
+                        arrayOf(
+                            0.00f to Color.Transparent,
+                            comeco to Color.Transparent,
+                            comeco + (fim - comeco) * 0.45f to Cores.fundo.copy(alpha = 0.42f),
+                            comeco + (fim - comeco) * 0.75f to Cores.fundo.copy(alpha = 0.82f),
+                            fim to Cores.fundo,
+                            1.00f to Cores.fundo,
+                        )
+                    },
+                ),
+            ),
+    ) {
         Canvas(Modifier.matchParentSize()) {
             val larguraDaAba = size.width / quantos
             val eixo = larguraDaAba * (posicao + 0.5f)
             /// A lente fica **abaixo** da borda: a luz entra na barra vinda de
             /// fora dela, que é o que uma janela de projeção faz.
             val base = size.height + 4.dp.toPx()
+            /// ⚠️ O raio agora se mede pela **fileira**, e não pela caixa.
+            ///
+            /// A caixa cresceu com a faixa de luz; se o raio crescesse junto, o
+            /// facho abriria proporcionalmente e ficaria com a mesma silhueta de
+            /// antes — só que maior. O que o dono pediu é a curva **aparecer**, e
+            /// pra isso a luz tem que caber dentro da caixa nova: raio preso à
+            /// fileira, altura sobrando pra ela fechar.
+            val raioDoCone = ALTURA_DA_FILEIRA.toPx() * 2.6f
             val forca = brilho.value
 
             /// ⚠️ **Sete paradas e raio grande, contra o banding.**
@@ -179,7 +277,7 @@ fun BarraDoFacho(
                         1.00f to Color.Transparent,
                     ),
                     center = Offset(eixo, base),
-                    radius = size.height * 2.6f,
+                    radius = raioDoCone,
                 ),
             )
 
@@ -213,7 +311,12 @@ fun BarraDoFacho(
                     val py = y + ry * passoY * 0.85f
 
                     val dist = abs(px - eixo) / (size.width / quantos)
-                    val altura = 1f - (py / size.height)
+                    /// A poeira também mede pela fileira: com a caixa inteira, os
+                    /// grãos de cima ficariam com alfa alto **fora** do cone, e
+                    /// pó brilhando onde não há luz é sujeira na lente, não
+                    /// poeira em suspensão.
+                    val altura = (1f - (py - (size.height - raioDoCone)) / raioDoCone)
+                        .coerceIn(0f, 1f)
                     /// O tamanho também varia: grão de pó não tem calibre.
                     val calibre = 0.6f + (((semente shr 19) and 0x3F) / 63f) * 0.7f
                     val alfa = ((1f - dist) * altura * 0.5f * forca).coerceIn(0f, 1f)
@@ -243,7 +346,12 @@ fun BarraDoFacho(
             )
         }
 
-        Row(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .height(ALTURA_DA_FILEIRA),
+        ) {
             destinos.forEach { destino ->
                 Column(
                     modifier = Modifier

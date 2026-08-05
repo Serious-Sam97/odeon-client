@@ -37,12 +37,63 @@ interface OdeonApi {
     /// `limit` e `offset` e não um cursor: é o que o servidor tem, e cada linha
     /// já traz o `total` do filtro. Trocar por cursor seria mudar o servidor pra
     /// resolver um problema que a tela ainda não tem.
+    /// ⚠️ **Nulo não vira parâmetro.** O Retrofit omite `@Query` nulo, e é isso
+    /// que faz esta assinatura de doze campos mandar `?limit=60` quando não há
+    /// filtro nenhum — em vez de `?state=&sort=&tags=`, que o servidor teria que
+    /// aprender a ignorar.
     @GET("api/library")
     suspend fun biblioteca(
         @Query("limit") limite: Int = 60,
         @Query("offset") pulando: Int = 0,
         @Query("q") busca: String? = null,
+        @Query("kind") tipo: String? = null,
+        @Query("tags") etiquetas: String? = null,
+        @Query("tag_mode") modoDasEtiquetas: String? = null,
+        @Query("year_from") anoDe: Int? = null,
+        @Query("year_to") anoAte: Int? = null,
+        @Query("min_minutes") minutosDe: Int? = null,
+        @Query("max_minutes") minutosAte: Int? = null,
+        @Query("state") estado: String? = null,
+        @Query("person") pessoa: String? = null,
+        @Query("sort") ordem: String? = null,
     ): List<ItemDaBiblioteca>
+
+    /// A listagem **plana** — os episódios de uma série.
+    ///
+    /// Mesmos filtros da agrupada, e mais o `collection`, que é o que a torna
+    /// plana na prática: dentro de uma série, agrupar seria devolver a série de
+    /// volta. Ver `ObraDaLista`.
+    @GET("api/works")
+    suspend fun obras(
+        @Query("limit") limite: Int = 60,
+        @Query("offset") pulando: Int = 0,
+        @Query("collection") colecao: String? = null,
+        @Query("q") busca: String? = null,
+        @Query("kind") tipo: String? = null,
+        @Query("tags") etiquetas: String? = null,
+        @Query("tag_mode") modoDasEtiquetas: String? = null,
+        @Query("year_from") anoDe: Int? = null,
+        @Query("year_to") anoAte: Int? = null,
+        @Query("min_minutes") minutosDe: Int? = null,
+        @Query("max_minutes") minutosAte: Int? = null,
+        @Query("state") estado: String? = null,
+        @Query("person") pessoa: String? = null,
+        @Query("sort") ordem: String? = null,
+    ): List<ObraDaLista>
+
+    /// As etiquetas do acervo, com a contagem de cada uma.
+    ///
+    /// Pedida **uma vez**, na primeira abertura do painel de filtros: são
+    /// centenas de linhas que mudam quando a identificação roda, e não a cada
+    /// toque num chip.
+    @GET("api/tags")
+    suspend fun etiquetas(): List<EtiquetaDoAcervo>
+
+    /// Os grupos das etiquetas — é deles que sai o rótulo «Gênero» e a ordem em
+    /// que os grupos aparecem. Sem eles a tela teria que traduzir `genre` por
+    /// conta própria, e aí a lista de namespaces existiria em dois lugares.
+    @GET("api/tag-namespaces")
+    suspend fun espacosDeEtiqueta(): List<EspacoDeEtiqueta>
 
     // ----------------------------------------------------------------- fase 2
 
@@ -110,6 +161,13 @@ interface OdeonApi {
     @GET("api/guia")
     suspend fun guia(): GuiaDeEixos
 
+    /// A revista da semana — a **capa** do guia.
+    ///
+    /// Rota separada de propósito no servidor, e por isso separada aqui: a
+    /// revista vira toda segunda e o índice não. Ver `Revista`.
+    @GET("api/guia/revista")
+    suspend fun revista(): Revista
+
     @GET("api/locadora/estantes")
     suspend fun estantes(): Loja
 
@@ -123,6 +181,38 @@ interface OdeonApi {
     /// limpeza é no `serious-server`, não daqui.
     @POST("api/locadora/alugar")
     suspend fun alugar(@Body alvo: AlvoDaCaixa): RespostaDoAluguel
+
+    /// O menu do disco — capítulos, legendas, onde parou e o clima.
+    @GET("api/works/{obra}/menu")
+    suspend fun menuDoDisco(@Path("obra") obraId: String): MenuDoDisco
+
+    /// As cenas: as miniaturas da grade de capítulos.
+    ///
+    /// Rota separada do menu de propósito, e a web faz igual: são doze imagens
+    /// e o menu tem que abrir antes delas chegarem. Ver as molduras vazias em
+    /// `MenuDeDVD`.
+    @GET("api/works/{obra}/cenas")
+    suspend fun cenasDoDisco(@Path("obra") obraId: String): List<Cena>
+
+    /// Onde esta fita parou. **Só lê.**
+    @GET("api/locadora/fita/{obra}")
+    suspend fun fita(@Path("obra") obraId: String): Fita
+
+    /// Rebobinar.
+    ///
+    /// ⚠️ Escreve, e mexe **na fita** — não no "continuar de onde parou" de
+    /// ninguém. É por isso que a web não pede confirmação: o gesto é grande, o
+    /// efeito é pequeno, e desfazê-lo é dar play de novo.
+    @POST("api/locadora/rebobinar")
+    suspend fun rebobinar(@Body alvo: AlvoDaCaixa): Map<String, kotlinx.serialization.json.JsonElement>
+
+    /// Pedir de volta.
+    ///
+    /// ⚠️ **Não encurta o prazo de ninguém** (§6 da referência) — dar a um
+    /// morador poder sobre o prazo do outro transformaria a locadora em disputa.
+    /// O que ela faz é avisar: aparece um recado na caixa de quem está com ela.
+    @POST("api/locadora/pedir/{id}")
+    suspend fun pedirDeVolta(@Path("id") emprestimoId: Int): Map<String, kotlinx.serialization.json.JsonElement>
 
     /// Devolver. Escreve, pelo mesmo motivo — e **apagar o empréstimo errado é
     /// apagar o empréstimo de uma pessoa**.
@@ -149,6 +239,21 @@ interface OdeonApi {
         @Path("obra") obraId: String,
         @Body marca: MarcaDeProgresso,
     ): RespostaDeProgresso
+
+    /// Quem você é dentro da casa — nível, XP, conquistas, vitrine, placar.
+    ///
+    /// ## Uma chamada, dois usos, e é de propósito
+    ///
+    /// A insígnia do canto (rosto + anel do nível) e a tela do perfil saem da
+    /// **mesma** resposta. A web faz igual (`App.tsx:238`) e o comentário dela
+    /// diz por quê: «uma requisição, na montagem: o número muda devagar e a
+    /// barra não é lugar de ficar perguntando».
+    ///
+    /// Sem o parâmetro é o seu. Com ele seria o de outra pessoa — e não está
+    /// declarado porque não há por onde chegar no perfil de alguém neste app: o
+    /// mural não tem `gente`, e §53 vale pro contrato também.
+    @GET("api/perfil")
+    suspend fun perfil(): Perfil
 
     /// A folha de sprites do preview de seek.
     ///

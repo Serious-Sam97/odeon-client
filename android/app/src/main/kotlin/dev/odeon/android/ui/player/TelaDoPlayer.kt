@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -137,6 +138,23 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
     /// Mudar de aparelho refaz o plano: os codecs declarados passam a ser os da
     /// TV. Ver `ModeloDoPlayer.mudouParaCast` e `PerfilDeCast`.
     LaunchedEffect(cast.conectado) { modelo.mudouParaCast(cast.conectado) }
+
+    /// **A perseguição** — o outro aparelho mexeu nesta obra.
+    ///
+    /// A tolerância de 5s e o porquê dela estão no `ModeloDoPlayer`. Aqui é só o
+    /// pulo, e ele acontece em `offset + currentTime` como tudo neste arquivo:
+    /// a posição que o servidor conhece é a da **obra**, e o `<video>` só sabe
+    /// da sessão que está tocando (ver o cabeçalho).
+    val perseguir by modelo.perseguir.collectAsStateWithLifecycle()
+    LaunchedEffect(perseguir) {
+        val alvoEmSegundos = perseguir ?: return@LaunchedEffect
+        val p = player ?: return@LaunchedEffect
+        val agoraEmSegundos = (estado.deslocamentoMs + p.currentPosition) / 1000.0
+        if (kotlin.math.abs(alvoEmSegundos - agoraEmSegundos) > 5.0) {
+            p.seekTo((alvoEmSegundos * 1000).toLong() - estado.deslocamentoMs)
+        }
+        modelo.jaPerseguiu()
+    }
 
     /// A posição, lida em relógio de tela e não por evento.
     ///
@@ -428,6 +446,41 @@ private fun Controles(
             },
     ) {
         if (!visiveis) return@Box
+
+        /// ## As duas lavagens, e foi a paisagem que mandou pôr
+        ///
+        /// Em pé, o filme é letterboxed: sobram tarjas pretas em cima e embaixo,
+        /// e o cromo caía justamente nelas — texto branco sobre preto, legível
+        /// por acidente de proporção.
+        ///
+        /// **Deitado o vídeo ocupa a altura toda**, e o screenshot mostrou o
+        /// resultado: «−10s · pausar · +30s» sobre um assoalho de madeira clara,
+        /// e o timecode brigando com a cena. O controle sumia dentro do filme.
+        ///
+        /// Duas faixas de degradê, então — uma em cada ponta, onde o cromo mora.
+        /// Elas não escurecem o meio da imagem, que é onde o filme acontece.
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(110.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.62f), Color.Transparent),
+                    ),
+                ),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(190.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
+                    ),
+                ),
+        )
 
         /// O selo do modo — decidido pra aparecer **nos dois** lugares, aqui e
         /// na ficha. Aqui ele responde a pergunta que só nasce com o filme na

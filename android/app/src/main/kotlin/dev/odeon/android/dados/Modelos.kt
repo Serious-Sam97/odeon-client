@@ -145,6 +145,89 @@ data class ItemDaBiblioteca(
     val total: Int = 0,
 )
 
+/// Uma obra **plana** — `WorkListItem` na web, e o que `/api/works` devolve.
+///
+/// ## Ela é o episódio, e a `ItemDaBiblioteca` é a série
+///
+/// As duas rotas existem porque a pergunta é outra em cada lugar. Fora de
+/// coleção, «o que tem no acervo» tem que responder *Breaking Bad*, e não 62
+/// linhas de *Breaking Bad*. Dentro dela, a pergunta virou «quais episódios», e
+/// aí o agrupamento seria a resposta errada.
+///
+/// ⚠️ **Ela não traz `total`.** A `ItemDaBiblioteca` traz, porque o servidor põe
+/// um `count(*) OVER ()` em toda linha da listagem agrupada; aqui não há. O
+/// denominador de dentro da série vem do `work_count` da própria série, que a
+/// grade já tinha na mão quando alguém tocou nela — ver `ModeloDaBiblioteca`.
+@Serializable
+data class ObraDaLista(
+    val id: String,
+    val kind: String = "",
+    val title: String,
+    val year: Int? = null,
+    @SerialName("season_number") val temporada: Int? = null,
+    @SerialName("episode_number") val episodio: Int? = null,
+    @SerialName("match_state") val estadoDaIdentificacao: String? = null,
+    @SerialName("dominant_color") val corDominante: String? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    /// O quadro **deste** episódio. É o que o cartão usa — com o pôster da
+    /// série, 21 episódios viram 21 cópias da mesma imagem (§4 da referência).
+    val still: String? = null,
+    @SerialName("series_title") val tituloDaSerie: String? = null,
+    @SerialName("media_file_id") val arquivoId: String? = null,
+    @SerialName("duration_seconds") val duracaoEmSegundos: Double? = null,
+    val height: Int? = null,
+    @SerialName("size_bytes") val tamanhoEmBytes: Long? = null,
+    @SerialName("position_seconds") val ondeParou: Double? = null,
+    val finished: Boolean? = null,
+) {
+    /// A arte do cartão, da mais específica pra menos — a mesma régua do
+    /// `ItemPraContinuar`.
+    val arte: String? get() = still ?: backdrop ?: poster
+
+    /// `S02E05`, ou `null` quando não há numeração — e aí o cartão não escreve
+    /// nada no lugar (§24). Episódio sem número existe: é o que a revisão ainda
+    /// não numerou.
+    val codigo: String?
+        get() = when {
+            temporada != null && episodio != null ->
+                "S%02dE%02d".format(temporada, episodio)
+            episodio != null -> "ep $episodio"
+            else -> null
+        }
+}
+
+/// Uma etiqueta do acervo, com quantas obras ela tem — `Tag` na web.
+///
+/// ⚠️ **`work_count` conta só o que foi identificado**, e a web escreve o porquê
+/// no `FilterBar.tsx`: os contadores filtram pela tag `format:`, que só a
+/// identificação escreve. Com 4.415 obras `unmatched` hoje, a soma dos chips
+/// **não** dá o tamanho do acervo — e a web pendura um atalho «N sem
+/// identificar →» no grupo `format` justamente pra a diferença não parecer
+/// defeito. O app não tem tela de revisão pra onde mandar, então não oferece o
+/// atalho (§53) — mas o número continua sendo o que é, e quem ler esta linha
+/// sabe disso.
+@Serializable
+data class EtiquetaDoAcervo(
+    val id: String = "",
+    val namespace: String = "",
+    val value: String = "",
+    val color: String? = null,
+    @SerialName("work_count") val quantasObras: Int = 0,
+) {
+    /// `genre:Terror` — a chave que viaja pro servidor e identifica o chip.
+    val chave: String get() = "$namespace:$value"
+}
+
+/// O grupo de etiquetas: `genre` vira «Gênero», e a ordem é do servidor.
+@Serializable
+data class EspacoDeEtiqueta(
+    val namespace: String = "",
+    val label: String = "",
+    val color: String? = null,
+    val position: Int = 0,
+)
+
 // --------------------------------------------------------------------- fase 2
 //
 // O que segue foi conferido contra `web/src/api.ts`, que é a outra cópia à mão
@@ -463,6 +546,121 @@ data class Prateleira(
     @SerialName("ultimo_ano_vhs") val ultimoAnoVhs: Int = 0,
 )
 
+/// Um capítulo do disco.
+@Serializable
+data class Capitulo(
+    val inicio: Double = 0.0,
+    val fim: Double = 0.0,
+    /// ⚠️ `null` quando o "título" é vazio, `Chapter 01` ou o próprio timecode —
+    /// **o caso de 98,4% dos filmes deste acervo**, medido pela web. Exibir um
+    /// timecode como nome de capítulo seria mentir com cara de metadado (§18).
+    val titulo: String? = null,
+)
+
+/// Uma cena — a miniatura de um ponto do filme.
+@Serializable
+data class Cena(
+    val segundos: Double = 0.0,
+    val imagem: String = "",
+    /// `capitulo` quando o disco disse onde a cena começa, `regular` quando foi
+    /// o relógio que dividiu. A tela usa isto pra escrever a legenda certa, não
+    /// pra mudar o desenho — e é a diferença entre «nos cortes do disco» e
+    /// «divididos pelo relógio».
+    val origem: String = "regular",
+)
+
+/// `GET /api/works/{obra}/menu` — o menu do disco.
+///
+/// ## Ele existe porque um DVD **não é um arquivo**
+///
+/// A biblioteca toca; o disco tem menu. É a diferença que a locadora inteira
+/// existe pra encenar, e é por isso que este menu abre **só por ela** e **só em
+/// DVD** (§14.4): a fita não tem menu, tem rebobinar.
+@Serializable
+data class MenuDoDisco(
+    @SerialName("work_id") val obraId: String = "",
+    @SerialName("media_file_id") val arquivoId: String = "",
+    val titulo: String = "",
+    val ano: Int? = null,
+    val cor: String? = null,
+    val backdrop: String? = null,
+    val duracao: Double? = null,
+    /// `null` quando não há de onde continuar — e aí **o item nem existe** no
+    /// menu (§24). Um «continuar» que começa do zero é um «do começo» com outro
+    /// nome.
+    val posicao: Double? = null,
+    val terminado: Boolean = false,
+    val capitulos: List<Capitulo> = emptyList(),
+    /// Idiomas distintos, na ordem das faixas do disco.
+    val legendas: List<String> = emptyList(),
+    /// Onde a cena de fundo começa. **Sorteada a cada abertura**, no miolo do
+    /// filme — abrir o mesmo disco duas vezes dá dois planos diferentes.
+    @SerialName("cena_de_fundo") val cenaDeFundo: Double = 0.0,
+    /// O clima: o índice da estante que reivindicaria este filme na locadora.
+    ///
+    /// ⚠️ **O índice é o contrato.** Ele é a posição na lista `ESTANTES` do
+    /// servidor, e a tabela de climas do app é indexada por ele — mexer na ordem
+    /// de lá sem mexer aqui troca o clima de todo mundo.
+    val clima: Int = 11,
+    @SerialName("clima_nome") val climaNome: String = "",
+) {
+    /// `1:23:45` de onde parou, pro rótulo do «continuar».
+    val ponteiro: String
+        get() {
+            val total = (posicao ?: 0.0).toLong()
+            return "%d:%02d:%02d".format(total / 3600, (total % 3600) / 60, total % 60)
+        }
+
+    /// Dá pra continuar? Só com posição, não terminado, e passando de um minuto
+    /// — a mesma régua da ficha.
+    val temComoContinuar: Boolean
+        get() = !terminado && (posicao ?: 0.0) > 60
+}
+
+/// `GET /api/locadora/fita/{obra}` — onde esta fita parou, e quem a deixou assim.
+///
+/// ## É o que torna a locadora um lugar com outras pessoas dentro
+///
+/// O `minha` é o campo que decide tudo, e o comentário da web é a regra inteira:
+/// «pausar o próprio filme e voltar é continuar; encontrar a fita de outra
+/// pessoa no minuto 47 é outra coisa».
+///
+/// ⚠️ `vhs` vem do servidor, do corte `ultimo_ano_vhs`. **DVD não rebobina** —
+/// ele lembra onde parou (§35), e oferecer o gesto nele seria a mesma família do
+/// botão que dizia «ver a série» numa obra avulsa.
+@Serializable
+data class Fita(
+    @SerialName("posicao_segundos") val posicaoEmSegundos: Double = 0.0,
+    @SerialName("duracao_segundos") val duracaoEmSegundos: Double? = null,
+    /// Quem deixou assim. `null` quando ninguém tocou — ou quando a conta sumiu,
+    /// porque a fita sobrevive ao dono.
+    @SerialName("deixada_por") val deixadaPor: String? = null,
+    @SerialName("deixada_em") val deixadaEm: String? = null,
+    val minha: Boolean = false,
+    val vhs: Boolean = false,
+) {
+    /// Quanto da fita já rodou, de 0 a 1. `0` quando não se sabe a duração — e
+    /// aí o carretel desenha uma fita no começo, que é o que ela provavelmente
+    /// é (§18: sem dado, não invente um meio).
+    val andado: Float
+        get() {
+            val duracao = duracaoEmSegundos?.takeIf { it > 0 } ?: return 0f
+            return (posicaoEmSegundos / duracao).toFloat().coerceIn(0f, 1f)
+        }
+
+    /// Precisa rebobinar? Só fita, só se alguém andou com ela, e **só se não foi
+    /// você**.
+    val precisaRebobinar: Boolean
+        get() = vhs && !minha && posicaoEmSegundos > 60
+
+    /// `1:23:45`, o ponteiro da fita.
+    val ponteiro: String
+        get() {
+            val total = posicaoEmSegundos.toLong()
+            return "%d:%02d:%02d".format(total / 3600, (total % 3600) / 60, total % 60)
+        }
+}
+
 /// `POST /api/locadora/alugar` — pegar a fita.
 ///
 /// ⚠️ **Escreve no acervo de todo mundo.** O §11 do `CONTINUAR-ANDROID.md` é
@@ -676,6 +874,9 @@ data class FaixaDoGuia(
 )
 
 /// `GET /api/guia` — os eixos pelos quais o acervo pode ser olhado.
+///
+/// ⚠️ Ele é o **índice**, não a capa. A capa é a [Revista], logo abaixo — e
+/// durante uma sessão inteira o app teve só esta metade.
 @Serializable
 data class GuiaDeEixos(
     val direcao: List<PessoaDoGuia> = emptyList(),
@@ -691,3 +892,231 @@ data class GuiaDeEixos(
     /// região valer uma seção».
     @SerialName("fora_de_hollywood") val foraDeHollywood: Int = 0,
 )
+
+// --------------------------------------------------------- a revista da semana
+//
+// `GET /api/guia/revista`. Conferido contra `Revista` do `web/src/api.ts:826`.
+
+/// Um filme da capa.
+@Serializable
+data class FilmeDaCapa(
+    val id: String,
+    val titulo: String,
+    val ano: Int? = null,
+    val poster: String? = null,
+    val diretor: String? = null,
+    /// «A única coisa da capa que é sua» — o comentário é da web, e é a regra de
+    /// desenho junto: a capa é igual pra todo mundo, então o que é seu entra
+    /// como **marca discreta**, não como selo.
+    val visto: Boolean = false,
+)
+
+/// O que está em cartaz esta semana: uma obra ou uma saga.
+///
+/// É o que amarra a revista ao resto — participar dá XP e conquista, e quem
+/// participou aparece pra todo mundo, que é o ponto de ser coletivo.
+@Serializable
+data class EventoDaSemana(
+    /// `"obra"` ou `"saga"`. Só a obra tem ficha pra abrir: o `id` de uma saga é
+    /// de coleção, e mandar isso pra tela da obra daria 404.
+    val tipo: String = "obra",
+    val id: String,
+    val titulo: String,
+    val poster: String? = null,
+    val obras: Int = 0,
+    val suas: Int = 0,
+    val participou: Boolean = false,
+    val participantes: List<String> = emptyList(),
+)
+
+/// `GET /api/guia/revista` — a capa do guia.
+///
+/// ## Ela é uma revista semanal, e não um índice
+///
+/// Um tema sorteado do acervo, os filmes que se encaixam, o ensaio e o evento em
+/// cartaz. **Igual pra todo mundo**, e virando na mesma segunda-feira que a
+/// vitrine da locadora — é o que dá assunto em comum (`IDEIAS.md` §2.4). Os
+/// desafios são o oposto: sorteados por pessoa.
+@Serializable
+data class Revista(
+    @SerialName("semana_de") val semanaDe: String = "",
+    /// Quando vira. A mesma segunda da vitrine — ver `Loja.viraEm`.
+    @SerialName("vira_em") val viraEm: String = "",
+    /// `"genero"`, `"decada"`, `"pais"`, `"diretor"` ou `"saga"`.
+    val eixo: String = "",
+    /// O tema: "Romance". É o letreiro da capa.
+    val tema: String = "",
+    val filmes: List<FilmeDaCapa> = emptyList(),
+    /// ⚠️ O comentário da web **é regra**: «`null` quando não há chave do LLM ou
+    /// o texto ainda não foi gerado. A tela **omite a seção** — não mostra
+    /// "carregando" nem inventa prosa (§18, §24).»
+    val ensaio: String? = null,
+    /// ⚠️ E este também: «O selo. Quem lê tem direito de saber que aquele
+    /// parágrafo **não foi escrito por gente** — a mesma regra do crédito
+    /// `WIKIPÉDIA` das curiosidades (§32).»
+    ///
+    /// Texto de máquina sai sempre creditado. Não é enfeite: é obrigação
+    /// editorial do projeto.
+    @SerialName("ensaio_por") val ensaioPor: String? = null,
+    val evento: EventoDaSemana? = null,
+) {
+    /// «gênero da semana», «década da semana».
+    ///
+    /// Montado aqui pelo mesmo motivo do `Acontecimento.frase`: o servidor manda
+    /// o eixo em código e a frase em português é do cliente. `null` num eixo que
+    /// este app não conhece — e aí o rótulo não desenha, em vez de escrever
+    /// «saga da semana» sobre um eixo que talvez não seja isso (§18).
+    val rotuloDoEixo: String?
+        get() = when (eixo) {
+            "genero" -> "gênero da semana"
+            "decada" -> "década da semana"
+            "pais" -> "país da semana"
+            "diretor" -> "diretor da semana"
+            "saga" -> "saga da semana"
+            else -> null
+        }
+
+    /// Os parágrafos do ensaio, já limpos. Vazia quando não há ensaio — e aí a
+    /// seção inteira some.
+    val paragrafos: List<String>
+        get() = ensaio.orEmpty().split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+}
+
+// ------------------------------------------------------------------- o perfil
+//
+// `GET /api/perfil`. Conferido campo a campo contra `PerfilCompleto` do
+// `web/src/api.ts:2296`.
+//
+// ## O que **não** foi mapeado, e por quê
+//
+// A resposta traz mais três listas — `rostos`, `capas`, `molduras` — e mais dois
+// catálogos, `titulos_disponiveis` e `tags_disponiveis`. Os cinco existem pro
+// **editor** do perfil (§10.2 da referência), que este app não tem: eles são a
+// lista do que dá pra escolher, e escolher é o que falta.
+//
+// Declará-los aqui seria contrato que ninguém confere — é a régua que o próprio
+// `ObraDetalhada` aplicou às `tags` até a R3, e o `ignoreUnknownKeys` do `Rede`
+// já os descarta em silêncio, que é o comportamento certo pra campo sem tela.
+
+/// A cor, o rosto ou a capa que a pessoa escolheu — `EnfeiteNaTela` na web.
+///
+/// O servidor **já resolve** a escolha: manda o caminho da arte e o hex da cor
+/// prontos. Traduzir a chave (`rosto:bogart`) em arte aqui seria a mesma tabela
+/// escrita duas vezes, e a segunda cópia envelheceria sozinha.
+@Serializable
+data class EnfeiteEscolhido(
+    val chave: String = "",
+    val rotulo: String = "",
+    /// Caminho servível em `/artwork/…`. `null` na cor, que não tem arte.
+    val arte: String? = null,
+    /// O hex, quando é cor de moldura.
+    val cor: String? = null,
+    val aberto: Boolean = true,
+)
+
+/// Nível, XP e conquistas — `ProgressoDoUsuario` na web.
+///
+/// ⚠️ `xp_do_nivel` e `xp_do_proximo` vêm **do servidor**, e o comentário da web
+/// diz por quê: «a curva é regra, e regra mora num lugar só». Recalcular a curva
+/// aqui é como o app e a web passariam a discordar sobre quanto falta pro nível
+/// 7 — em silêncio, e só pra quem tem os dois abertos lado a lado.
+@Serializable
+data class ProgressoNoPerfil(
+    val xp: Int = 0,
+    val nivel: Int = 1,
+    @SerialName("xp_do_nivel") val xpDoNivel: Int = 0,
+    @SerialName("xp_do_proximo") val xpDoProximo: Int = 0,
+    val desbloqueadas: Int = 0,
+    val total: Int = 0,
+)
+
+/// Uma obra na vitrine. **A ordem é o conteúdo** (§10.2) — por isso é lista.
+@Serializable
+data class NaVitrine(
+    val id: String,
+    val titulo: String,
+    val ano: Int? = null,
+    val poster: String? = null,
+)
+
+/// Uma conquista, aberta ou trancada.
+///
+/// ⚠️ `em` é `null` enquanto trancada, e é o único jeito de saber. A trancada
+/// mostra nome e descrição **mas não os pontos** (§10.5): ponto de conquista que
+/// não se tem é promessa, e o projeto não promete número.
+@Serializable
+data class ConquistaNaTela(
+    val chave: String = "",
+    val nome: String = "",
+    val descricao: String = "",
+    /// `facil` · `media` · `dificil` · `impossivel` · `nivel` · `saga`.
+    val camada: String = "",
+    val pontos: Int = 0,
+    val em: String? = null,
+) {
+    val aberta: Boolean get() = em != null
+}
+
+/// Uma linha do placar — `AmigoNoPlacar` na web.
+@Serializable
+data class AmigoNoPlacar(
+    val id: String = "",
+    @SerialName("display_name") val nome: String = "",
+    val nivel: Int = 1,
+    val xp: Int = 0,
+    val titulo: String? = null,
+    val eu: Boolean = false,
+)
+
+/// `GET /api/perfil` — quem você é dentro da casa.
+///
+/// ## Ele entrou pela insígnia, e não pela tela
+///
+/// O pedido foi o canto superior direito: o rosto redondo e o nível, como na
+/// web. Só que a insígnia da web (`App.tsx:400`) sai **desta** rota — nível,
+/// fatia do nível, rosto e a cor da moldura vêm todos de uma chamada só, feita
+/// uma vez na montagem. Ou seja: pra desenhar 38dp de canto o app teve que
+/// passar a falar o perfil inteiro.
+///
+/// E aí a tela veio junto de graça: o que a rota devolve já é quase tudo o que
+/// o §10 desenha. O que ficou de fora ficou por não estar aqui — os desafios
+/// (`/api/desafios`) e a retrospectiva (`/api/retrospectiva`) são outras rotas,
+/// e o editor é um `PUT` que este app ainda não manda.
+@Serializable
+data class Perfil(
+    @SerialName("user_id") val id: String = "",
+    val username: String = "",
+    @SerialName("display_name") val nome: String = "",
+    /// É o seu? A rota serve os dois casos (`/api/perfil/{id}` traz o de outra
+    /// pessoa), e a diferença decide o que a tela oferece.
+    val meu: Boolean = true,
+    val progresso: ProgressoNoPerfil = ProgressoNoPerfil(),
+    @SerialName("titulo_nome") val tituloNome: String? = null,
+    val tags: List<String> = emptyList(),
+    val bio: String? = null,
+    val vitrine: List<NaVitrine> = emptyList(),
+    val conquistas: List<ConquistaNaTela> = emptyList(),
+    val amigos: List<AmigoNoPlacar> = emptyList(),
+    val avatar: EnfeiteEscolhido? = null,
+    val capa: EnfeiteEscolhido? = null,
+    /// A cor da moldura, em hex, já traduzida pelo servidor. `null` é o normal
+    /// de quem não escolheu — e aí quem desenha cai no dourado da casa, nunca
+    /// numa cor sorteada.
+    val moldura: String? = null,
+) {
+    /// Quanto do nível atual já foi andado, de 0 a 1.
+    ///
+    /// É a conta do `App.tsx:244`, copiada com o `max(1, …)` junto: a faixa vira
+    /// denominador, e um nível de faixa zero — que o servidor pode mandar no
+    /// último nível da curva — dividiria por zero e pintaria o anel de `NaN`.
+    val fatiaDoNivel: Float
+        get() {
+            val faixa = maxOf(1, progresso.xpDoProximo - progresso.xpDoNivel)
+            return ((progresso.xp - progresso.xpDoNivel).toFloat() / faixa).coerceIn(0f, 1f)
+        }
+
+    /// Quanto falta pro próximo nível. `null` quando não há próximo — e aí a
+    /// frase não escreve «faltam 0», que seria dizer que o nível vira já (§24).
+    val faltamPraSubir: Int?
+        get() = (progresso.xpDoProximo - progresso.xp).takeIf { it > 0 }
+}

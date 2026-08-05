@@ -28,6 +28,15 @@ class OdeonApp : Application(), SingletonImageLoader.Factory {
     val cofre: Cofre by lazy { Cofre(this) }
     val odeon: RepositorioOdeon by lazy { RepositorioOdeon(cofre) }
 
+    /// O barramento — **uma conexão pro app inteiro** (§62).
+    ///
+    /// Aqui pelo mesmo motivo do OkHttp e do cofre: uma conexão por tela seriam
+    /// cinco SSE abertos contra o servidor de casa, e cinco reconexões a cada
+    /// piscada de wifi. Ver `Barramento`.
+    val barramento: dev.odeon.android.dados.Barramento by lazy {
+        dev.odeon.android.dados.Barramento(cofre, odeon.clienteHttp())
+    }
+
     /// A fila de downloads — fase 6.
     ///
     /// Aqui pelo mesmo motivo dos outros dois: ela abre um cache em disco e um

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -64,6 +65,8 @@ import dev.odeon.android.ui.corDeHex
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.RotuloDeSecao
 import dev.odeon.android.ui.chega
+import dev.odeon.android.ui.prazoDoEmprestimo
+import dev.odeon.android.ui.viraQuando
 
 /// A locadora.
 ///
@@ -87,9 +90,52 @@ import dev.odeon.android.ui.chega
 /// O botão físico de voltar continua levando à biblioteca — quem trata disso é o
 /// `BackHandler` no `AppOdeon`, que é onde a navegação mora.
 @Composable
-fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {}) {
+fun TelaDaLocadora(
+    modelo: ModeloDaLocadora,
+    aoAbrirObra: (String) -> Unit = {},
+    /// Tocar direto, vindo do menu do disco — com o ponto de partida escolhido
+    /// lá (o começo, o «continuar» ou um capítulo).
+    aoTocar: (obraId: String, arquivoId: String, titulo: String, de: Double, duracao: Double?) -> Unit =
+        { _, _, _, _, _ -> },
+    /// Avisa quem desenha a barra de abas que há uma **sobreposição de tela
+    /// cheia** aqui dentro.
+    ///
+    /// ## Foi a paisagem que revelou a necessidade
+    ///
+    /// Em pé, a barra fica embaixo e o palco escuro por cima dela quase engana.
+    /// Deitado, a navegação vira **trilho lateral** — e o menu do disco apareceu
+    /// com «biblioteca · locadora · mural» de pé ao lado dele, recortados pela
+    /// largura do trilho. Um menu de DVD com a navegação do app do lado não é
+    /// uma tela cheia: é uma janela.
+    ///
+    /// O palco e o menu são sobreposições (§14 da referência), como a ficha e o
+    /// player — e esses dois já são desenhados fora do esqueleto.
+    aoMudarSobreposicao: (Boolean) -> Unit = {},
+) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
+    val cheia = estado.naMao != null || estado.menu != null
+    androidx.compose.runtime.LaunchedEffect(cheia) { aoMudarSobreposicao(cheia) }
+
+    Box(Modifier.fillMaxSize()) {
+        Loja(modelo = modelo, estado = estado)
+        PalcoPorCima(
+            modelo = modelo,
+            estado = estado,
+            aoAbrirObra = aoAbrirObra,
+            aoTocarDoMenu = { menu, segundos ->
+                modelo.fecharOMenu()
+                modelo.guardar()
+                aoTocar(menu.obraId, menu.arquivoId, menu.titulo, segundos, menu.duracao)
+            },
+            aoTocarOFilme = aoTocar,
+        )
+    }
+}
+
+/// A loja: as regras, o que saiu da estante e a vitrine.
+@Composable
+private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
     if (estado.carregando && estado.prateleira == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Cores.destaque)
@@ -105,6 +151,19 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
 
         estado.erro?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = Cores.perigo)
+        }
+
+        /// O recado ao vivo — o barramento chegando na tela.
+        ///
+        /// Ele fica **acima** das regras da casa, que é onde o olho já está ao
+        /// abrir a loja, e some sozinho em 6s. §24 na volta: sem recado, nada
+        /// ocupa a linha.
+        estado.recado?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Cores.destaque,
+            )
         }
 
         /// As regras da casa, ditas pelo servidor e não por constante daqui.
@@ -129,6 +188,29 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
                             /// §11 é explícito sobre isso.
                             aoDevolver = { modelo.devolver(fita.id) },
                             devolvendo = estado.devolvendo == fita.id,
+                            ehVhs = estado.ehVhs(fita.ano),
+                        )
+                    }
+                }
+            }
+        }
+
+        /// **As devoluções** — a terceira dívida do §8 paga.
+        ///
+        /// `devolvidas` chega em toda resposta da prateleira e nunca foi
+        /// desenhada. É o balcão da web (§6): o que acabou de voltar, e **como**
+        /// voltou — rebobinada ou não. A distinção não é decorativa: é ela que
+        /// dá sentido à reputação de quem devolve fita sem rebobinar.
+        ///
+        /// Some inteira quando não houve devolução nenhuma (§24).
+        estado.prateleira?.devolvidas?.takeIf { it.isNotEmpty() }?.let { devolvidas ->
+            Secao("acabou de voltar", quantos = devolvidas.size) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    devolvidas.forEach { devolvida ->
+                        Text(
+                            text = frasedaDevolucao(devolvida),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Cores.textoApagado,
                         )
                     }
                 }
@@ -145,6 +227,9 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
                             arte = modelo.arte(fita.poster),
                             aoDevolver = null,
                             devolvendo = false,
+                            aoPedirDeVolta = { modelo.pedirDeVolta(fita.id) },
+                            pedindo = estado.pedindo == fita.id,
+                            ehVhs = estado.ehVhs(fita.ano),
                         )
                     }
                 }
@@ -179,7 +264,15 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
         /// dava e o cliente não pegava. A diferença é o tamanho — não era um
         /// campo, era metade de uma tela.
         estado.loja?.estantes?.forEach { estante ->
-            Estante(estante = estante, arte = modelo::arte, aoAbrir = aoAbrirObra)
+            /// ⚠️ Tocar numa caixa **não abre mais a ficha**: põe a caixa na
+            /// mão. É a locadora da web (§6) — a ficha é o caminho da
+            /// biblioteca, e aqui o caminho é o objeto. Quem quiser a ficha
+            /// abre a caixa e toca na mídia.
+            Estante(
+                estante = estante,
+                arte = modelo::arte,
+                aoAbrir = { id -> estante.caixas.firstOrNull { it.id == id }?.let(modelo::pegarNaMao) },
+            )
         }
 
         /// Quando a vitrine vira.
@@ -189,9 +282,15 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
         /// anunciada é aleatoriedade; com data, é programação — e é a diferença
         /// entre um acervo embaralhado e uma locadora que troca a vitrine na
         /// segunda.
-        estado.loja?.viraEm?.let { quando ->
+        ///
+        /// ⚠️ A palavra vem do `viraQuando`, e não do campo cru. Até aqui esta
+        /// linha imprimia o `vira_em` como veio do banco — uma data ISO no meio
+        /// de uma frase em português. E é o **mesmo instante** da revista do
+        /// guia: duas telas dizendo a mesma segunda com palavras diferentes
+        /// pareceriam dois relógios.
+        viraQuando(estado.loja?.viraEm)?.let { quando ->
             Text(
-                text = "a vitrine vira em $quando",
+                text = "a vitrine vira $quando",
                 style = MaterialTheme.typography.labelSmall,
                 color = Cores.textoApagado,
                 modifier = Modifier.padding(top = 8.dp),
@@ -240,6 +339,81 @@ fun TelaDaLocadora(modelo: ModeloDaLocadora, aoAbrirObra: (String) -> Unit = {})
 /// `total` é quantas caixas a estante tem **no acervo**, não quantas estão à
 /// vista. O comentário da web insiste nisso, e é o que impede a placa de mentir:
 /// a vitrine é uma amostra que gira, não o estoque.
+/// O palco fica **por cima da tela inteira**, e fora da rolagem.
+///
+/// Dentro da `Column` que rola, a caixa na mão subiria e desceria com a
+/// prateleira — e o que se quer é o contrário: o resto da loja para, e sobra o
+/// objeto. É o mesmo arranjo do véu do `AppOdeon`.
+@Composable
+private fun PalcoPorCima(
+    modelo: ModeloDaLocadora,
+    estado: EstadoDaLocadora,
+    aoAbrirObra: (String) -> Unit,
+    aoTocarDoMenu: (dev.odeon.android.dados.MenuDoDisco, Double) -> Unit,
+    aoTocarOFilme: (obraId: String, arquivoId: String, titulo: String, de: Double, duracao: Double?) -> Unit,
+) {
+    /// O menu do disco vem **por cima do palco**: quem está no menu já tirou o
+    /// disco da caixa, e voltar é fechar o menu, não a caixa.
+    estado.menu?.let { menu ->
+        androidx.activity.compose.BackHandler(onBack = modelo::fecharOMenu)
+        MenuDeDVD(
+            disco = menu,
+            cenas = estado.cenas,
+            arte = modelo::arte,
+            aoTocar = { segundos -> aoTocarDoMenu(menu, segundos) },
+            aoFechar = modelo::fecharOMenu,
+        )
+        return
+    }
+
+    val naMao = estado.naMao ?: return
+    androidx.activity.compose.BackHandler(onBack = modelo::guardar)
+    Palco(
+        caixa = naMao,
+        arte = modelo.arte(naMao.poster),
+        fita = estado.fita,
+        obra = estado.obraNaMao,
+        arteDe = modelo::arte,
+        rebobinando = estado.rebobinando,
+        aoFechar = modelo::guardar,
+        /// ## Assistir **é assistir** — não é abrir a ficha
+        ///
+        /// O botão do verso e a fita rebobinada caem aqui, e daqui vai pro
+        /// player. A ficha era o caminho da versão anterior e o dono cortou:
+        /// «clicar em play tem que cair no filme, não nos detalhes».
+        ///
+        /// E o verso já é a ficha, aliás: sinopse, cena e ficha técnica estão
+        /// impressos na própria caixa que a pessoa está segurando.
+        ///
+        /// ⚠️ Sem arquivo, **nada acontece** — e o botão nem nasce, porque a
+        /// `Contracapa` só o desenha com `files` na mão (§53).
+        aoAssistir = {
+            val obra = estado.obraNaMao
+            val arquivo = obra?.files?.firstOrNull()
+            if (obra != null && arquivo != null) {
+                modelo.guardar()
+                aoTocarOFilme(
+                    obra.id,
+                    arquivo.id,
+                    obra.title,
+                    obra.ondeParou,
+                    arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
+                )
+            }
+        },
+        /// O disco abre o menu — §14.4, «só pela locadora, e só em DVD». Quando
+        /// o menu não vem, cai na ficha: um caminho que às vezes não leva a
+        /// lugar nenhum é o §8b.
+        aoAbrirOMenu = {
+            modelo.abrirOMenu(naMao.id) {
+                modelo.guardar()
+                aoAbrirObra(naMao.id)
+            }
+        },
+        aoRebobinar = modelo::rebobinar,
+    )
+}
+
 @Composable
 private fun Estante(
     estante: EstanteExposta,
@@ -300,93 +474,181 @@ private fun CaixaNaEstante(
     indice: Int,
     aoAbrir: () -> Unit,
 ) {
-    val espessura = 26.dp
+    /// ## Ela virou um objeto de verdade — 05/08/2026
+    ///
+    /// Até aqui eram duas `graphicsLayer` encostadas à mão, cada uma com a
+    /// própria câmera. Agora é o `CaixaEm3D`, com uma projeção só — e o ganho
+    /// não é só a junta fechar: é o **topo** existir, que é o lado que prova
+    /// espessura, e a luz mudar de face conforme o ângulo.
+    ///
+    /// ⚠️ **Na estante ela não gira com o dedo, e é decisão.** A fileira rola na
+    /// horizontal, e um arrasto que começasse na caixa seria roubado dela — a
+    /// prateleira deixaria de rolar justamente onde há caixa, que é o lugar todo.
+    /// O giro no dedo é do **palco**, onde a caixa está sozinha e o arrasto não
+    /// disputa com nada.
     Column(
-        modifier = Modifier
-            .chega(indice)
-            .width(96.dp + espessura)
-            .clickable(onClick = aoAbrir),
+        modifier = Modifier.chega(indice),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .width(96.dp + espessura)
-                .aspectRatio((96f + 26f) / 144f),
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .width(espessura)
-                    .fillMaxHeight()
-                    .graphicsLayer {
-                        rotationY = 68f
-                        transformOrigin = TransformOrigin(1f, 0.5f)
-                        cameraDistance = 12f * density
-                    }
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Cores.fundoAfundado, Cores.fundoElevado, Cores.fundoAfundado),
-                        ),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = caixa.titulo,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Cores.textoApagado,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.requiredWidth(130.dp).graphicsLayer { rotationZ = 90f },
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .width(96.dp)
-                    .fillMaxHeight()
-                    .graphicsLayer {
-                        rotationY = -22f
-                        transformOrigin = TransformOrigin(0f, 0.5f)
-                        cameraDistance = 12f * density
-                    }
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(corDeHex(caixa.corDominante) ?: Cores.fundoElevado),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (arte != null) {
-                    AsyncImage(
-                        model = arte,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Text(
-                        text = caixa.titulo,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Cores.texto,
-                        textAlign = TextAlign.Center,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(6.dp),
-                    )
-                }
-                /// O verniz, o mesmo das caixas emprestadas.
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.linearGradient(
-                            0.00f to Color.White.copy(alpha = 0.24f),
-                            0.14f to Color.White.copy(alpha = 0.05f),
-                            0.32f to Color.Transparent,
-                            0.74f to Color.Transparent,
-                            1.00f to Color.White.copy(alpha = 0.10f),
-                        ),
-                    ),
-                )
-            }
+        CaixaEm3D(
+            largura = 96.dp,
+            altura = 144.dp,
+            espessura = 26.dp,
+            aoTocar = aoAbrir,
+        ) { lado, luz ->
+            FaceDaCaixa(
+                lado = lado,
+                luz = luz,
+                titulo = caixa.titulo,
+                arte = arte,
+                cor = corDeHex(caixa.corDominante),
+            )
         }
     }
+}
+
+/// O desenho de cada lado de uma caixa da vitrine.
+///
+/// Separado do `CaixaEm3D` porque aquele é geometria e este é arte: o mesmo
+/// projetor serve pra caixa da estante, pra caixa na mão e — quando ela existir
+/// — pra qualquer outra coisa que tenha lados.
+@Composable
+internal fun FaceDaCaixa(
+    lado: Lado,
+    luz: Float,
+    titulo: String,
+    arte: String?,
+    cor: Color?,
+    verso: (@Composable BoxScope.() -> Unit)? = null,
+) {
+    when (lado) {
+        Lado.Capa -> Box(
+            Modifier.fillMaxSize().background(cor ?: Cores.fundoElevado),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (arte != null) {
+                AsyncImage(
+                    model = arte,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = titulo,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Cores.texto,
+                    textAlign = TextAlign.Center,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(6.dp),
+                )
+            }
+            /// O verniz — `.brilho` da folha (`:4385`). «É o que faz o olho ler
+            /// objeto em vez de imagem.»
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        0.00f to Color.White.copy(alpha = 0.24f),
+                        0.14f to Color.White.copy(alpha = 0.05f),
+                        0.32f to Color.Transparent,
+                        0.74f to Color.Transparent,
+                        1.00f to Color.White.copy(alpha = 0.10f),
+                    ),
+                ),
+            )
+            VeuDeLuz(luz)
+        }
+
+        Lado.Lombada -> Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(
+                    listOf(Cores.fundoAfundado, Cores.fundoElevado, Cores.fundoAfundado),
+                ),
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = titulo,
+                style = MaterialTheme.typography.labelSmall,
+                color = Cores.textoApagado,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                /// O título deitado, como em toda lombada de fita. A largura
+                /// requerida é a **altura** da lombada — o texto é medido antes
+                /// de girar.
+                modifier = Modifier.requiredWidth(130.dp).graphicsLayer { rotationZ = 90f },
+            )
+            VeuDeLuz(luz)
+        }
+
+        /// O topo e a base: papelão de perfil. O degradê dá a aresta — sem ele
+        /// são duas tarjas, e o olho não fecha o volume.
+        ///
+        /// A base é mais escura que o topo de propósito: ela é a face que
+        /// encosta na prateleira, e nenhuma luz de loja chega ali.
+        Lado.Topo -> Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Cores.linha, Cores.fundoAfundado)),
+            ),
+        ) {
+            VeuDeLuz(luz)
+        }
+
+        Lado.Base -> Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Cores.fundoAfundado, Color.Black)),
+            ),
+        ) {
+            VeuDeLuz(luz)
+        }
+
+        /// A **lateral da abertura** — o lado por onde a caixa abre.
+        ///
+        /// Ela não é lisa como a lombada: numa caixa de verdade é aqui que as
+        /// duas metades se encontram, e o que se vê é uma **fresta** no meio da
+        /// espessura. É o detalhe que diz de que lado a caixa abre mesmo antes de
+        /// alguém tocar nela — e o gesto de abrir é justamente deste lado.
+        Lado.LateralDireita -> Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(
+                    listOf(Cores.fundoAfundado, Cores.linha, Cores.fundoAfundado),
+                ),
+            ),
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .fillMaxHeight()
+                    .width(1.dp)
+                    .background(Color.Black.copy(alpha = 0.65f)),
+            )
+            VeuDeLuz(luz)
+        }
+
+        Lado.Contracapa -> Box(
+            Modifier.fillMaxSize().background(Cores.fundoElevado),
+        ) {
+            verso?.invoke(this)
+            VeuDeLuz(luz)
+        }
+    }
+}
+
+/// «fulano devolveu Tetris — rebobinada».
+///
+/// O `devolvido_como` vem do servidor em código, e a frase em português é do
+/// cliente — a mesma divisão do `Acontecimento.frase` do mural. Um código que o
+/// app não conhece **não vira texto**: a frase acaba no título, em vez de
+/// escrever «devolveu — unknown» (§18).
+internal fun frasedaDevolucao(devolvida: dev.odeon.android.dados.Devolvida): String {
+    val como = when (devolvida.devolvidoComo) {
+        "rebobinada" -> " — rebobinada"
+        "sem_rebobinar" -> " — sem rebobinar"
+        "ate_o_fim" -> " — até o fim"
+        else -> ""
+    }
+    return "${devolvida.quemNome} devolveu ${devolvida.titulo}$como"
 }
 
 @Composable
@@ -547,6 +809,11 @@ private fun Caixa(
     aoDevolver: (() -> Unit)?,
     devolvendo: Boolean,
     indice: Int = 0,
+    /// Nulo nas minhas: não se pede de volta o que já está com você.
+    aoPedirDeVolta: (() -> Unit)? = null,
+    pedindo: Boolean = false,
+    /// O corte entre fita e disco, vindo do `ultimo_ano_vhs` do servidor.
+    ehVhs: Boolean = false,
 ) {
     var virada by remember { mutableStateOf(false) }
     val giro by animateFloatAsState(
@@ -821,6 +1088,25 @@ private fun Caixa(
                             style = MaterialTheme.typography.labelSmall,
                             color = Cores.textoApagado,
                         )
+
+                        /// O prazo — e ele **chegava e ninguém desenhava**.
+                        ///
+                        /// `vence_em` está na resposta desde que esta tela
+                        /// existe, e o §8 deste documento listava o campo como
+                        /// dívida. Sem ele, uma caixa emprestada não dizia
+                        /// quando volta — que é a única coisa que um prazo tem
+                        /// pra dizer.
+                        ///
+                        /// Vermelho a dois dias, como na web: `vence hoje` e
+                        /// `vence amanhã` são aviso, `5 dias` é informação.
+                        prazoDoEmprestimo(fita.venceEm)?.let { (frase, dias) ->
+                            Text(
+                                text = frase,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (dias <= 1) Cores.perigo else Cores.textoApagado,
+                            )
+                        }
+
                         fita.pedidoPorNome?.let {
                             Text(
                                 text = "$it pediu de volta",
@@ -828,6 +1114,26 @@ private fun Caixa(
                                 color = Cores.destaque,
                             )
                         }
+                        /// Pedir de volta — só nas dos outros, e some quando
+                        /// alguém já pediu.
+                        ///
+                        /// ⚠️ Ele **não encurta o prazo de ninguém**. O que faz
+                        /// é pôr o recado que aparece logo acima, na caixa de
+                        /// quem está com ela. Oferecer o botão duas vezes seria
+                        /// oferecer mandar o mesmo recado de novo (§53).
+                        if (aoPedirDeVolta != null && fita.pedidoPorNome == null) {
+                            TextButton(
+                                onClick = aoPedirDeVolta,
+                                enabled = !pedindo,
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Text(
+                                    text = if (pedindo) "pedindo…" else "pedir de volta",
+                                    color = Cores.destaque,
+                                )
+                            }
+                        }
+
                         if (aoDevolver != null) {
                             TextButton(
                                 onClick = {

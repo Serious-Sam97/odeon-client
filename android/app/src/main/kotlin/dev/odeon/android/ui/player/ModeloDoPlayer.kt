@@ -121,7 +121,52 @@ class ModeloDoPlayer(
     ondeParou: Double,
     duracaoEmSegundos: Double?,
     capaUrl: String?,
+    /// O barramento, quando há — é por ele que este player sabe que **outro
+    /// aparelho** mexeu na mesma obra.
+    private val barramento: dev.odeon.android.dados.Barramento? = null,
 ) : ViewModel() {
+
+    /// Pra onde o outro aparelho mandou o filme. `null` quando não há nada a
+    /// perseguir — que é o estado normal de quem assiste sozinho.
+    private val _perseguir = kotlinx.coroutines.flow.MutableStateFlow<Double?>(null)
+    val perseguir: kotlinx.coroutines.flow.StateFlow<Double?> = _perseguir
+
+    /// A sincronia entre aparelhos — o que o barramento existe pra fazer.
+    ///
+    /// ## Os 5 segundos, e por que há uma tolerância
+    ///
+    /// O número é da web (§1.4 da referência): «persegue a posição do outro
+    /// aparelho se a diferença passar de 5s». A tolerância não é folga
+    /// preguiçosa — é o que separa **duas pessoas vendo a mesma obra em
+    /// aparelhos diferentes**, cujo progresso chega a toda hora e difere por
+    /// segundos, de **alguém que pulou de propósito**, que difere por minutos.
+    ///
+    /// Sem ela, cada batida de progresso do outro aparelho daria um pulinho no
+    /// filme de quem está assistindo aqui.
+    ///
+    /// ⚠️ O eco do próprio aparelho já foi descartado lá no `Barramento`, pelo
+    /// `device_id`. Se não fosse, este seria o pior lugar pra descobrir isso: o
+    /// player perseguiria a própria posição de um segundo atrás, pra sempre.
+    init {
+        ouvirOutrosAparelhos()
+    }
+
+    private fun ouvirOutrosAparelhos() {
+        val barramento = barramento ?: return
+        viewModelScope.launch {
+            barramento.eventos.collect { evento ->
+                if (evento !is dev.odeon.android.dados.EventoDoServidor.Progresso) return@collect
+                if (evento.obraId != obraId) return@collect
+                _perseguir.value = evento.posicaoEmSegundos
+            }
+        }
+    }
+
+    /// Consumido por quem já pulou. Sem isto, a mesma posição seria perseguida a
+    /// cada recomposição — e o filme ficaria preso naquele segundo.
+    fun jaPerseguiu() {
+        _perseguir.value = null
+    }
 
     /// A sessão de HLS aberta por este player, se houve.
     ///

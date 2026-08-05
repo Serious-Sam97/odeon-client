@@ -99,9 +99,72 @@ class RepositorioOdeon(private val cofre: Cofre) {
         exigirApi().quemSouEu()
     }
 
-    suspend fun biblioteca(pulando: Int = 0, limite: Int = PAGINA, busca: String? = null): List<ItemDaBiblioteca> =
+    /// A listagem agrupada, com o filtro inteiro.
+    ///
+    /// O `Filtros` é desmontado **aqui**, e num lugar só: a tela mexe num objeto
+    /// e nunca vê o nome de um parâmetro de query. É o papel que o `queryString`
+    /// faz na web.
+    suspend fun biblioteca(
+        pulando: Int = 0,
+        limite: Int = PAGINA,
+        filtros: Filtros = Filtros(),
+    ): List<ItemDaBiblioteca> = withContext(Dispatchers.IO) {
+        exigirApi().biblioteca(
+            limite = limite,
+            pulando = pulando,
+            busca = filtros.busca.takeIf { it.isNotBlank() },
+            tipo = filtros.tipo,
+            etiquetas = filtros.etiquetasEmTexto,
+            modoDasEtiquetas = filtros.modoParaMandar,
+            anoDe = filtros.anoDe,
+            anoAte = filtros.anoAte,
+            minutosDe = filtros.minutosDe,
+            minutosAte = filtros.minutosAte,
+            estado = filtros.estado,
+            pessoa = filtros.pessoa,
+            ordem = filtros.ordem,
+        )
+    }
+
+    /// A listagem plana — os episódios de dentro de uma série.
+    suspend fun obras(
+        pulando: Int = 0,
+        limite: Int = PAGINA,
+        filtros: Filtros,
+    ): List<ObraDaLista> = withContext(Dispatchers.IO) {
+        exigirApi().obras(
+            limite = limite,
+            pulando = pulando,
+            colecao = filtros.colecao,
+            busca = filtros.busca.takeIf { it.isNotBlank() },
+            tipo = filtros.tipo,
+            etiquetas = filtros.etiquetasEmTexto,
+            modoDasEtiquetas = filtros.modoParaMandar,
+            anoDe = filtros.anoDe,
+            anoAte = filtros.anoAte,
+            minutosDe = filtros.minutosDe,
+            minutosAte = filtros.minutosAte,
+            estado = filtros.estado,
+            pessoa = filtros.pessoa,
+            /// ⚠️ Dentro da série, a ordem **é** a numeração — e não a que está
+            /// escolhida na barra. Ordenar 62 episódios por «aleatório» ou «em
+            /// destaque» é embaralhar um enredo; o `sort` do acervo continua
+            /// valendo lá fora, quando se sair da série.
+            ordem = "title",
+        )
+    }
+
+    /// O catálogo de etiquetas e os grupos delas, numa viagem só.
+    ///
+    /// Falhar devolve as duas listas vazias — e aí o painel de filtros **não
+    /// abre nada de tags**, em vez de abrir vazio. O resto do painel (duração e
+    /// identificação) é escrito no app e continua funcionando: são três listas
+    /// independentes, e uma falha não deve levar as outras.
+    suspend fun etiquetasDoAcervo(): Pair<List<EtiquetaDoAcervo>, List<EspacoDeEtiqueta>> =
         withContext(Dispatchers.IO) {
-            exigirApi().biblioteca(limite = limite, pulando = pulando, busca = busca?.takeIf { it.isNotBlank() })
+            val etiquetas = runCatching { exigirApi().etiquetas() }.getOrDefault(emptyList())
+            val espacos = runCatching { exigirApi().espacosDeEtiqueta() }.getOrDefault(emptyList())
+            etiquetas to espacos
         }
 
     // ----------------------------------------------------------------- fase 2
@@ -193,6 +256,17 @@ class RepositorioOdeon(private val cofre: Cofre) {
         runCatching { exigirApi().guia() }.getOrDefault(GuiaDeEixos())
     }
 
+    /// A revista da semana — a capa do guia.
+    ///
+    /// Falha devolve **`null`**, e não uma revista vazia: sem tema e sem filmes
+    /// não há capa nenhuma pra desenhar, e um objeto de campos em branco só
+    /// empurraria a decisão pra tela. É o mesmo arranjo da locadora — duas
+    /// rotas, duas falhas independentes. **Revista fora do ar não apaga os
+    /// eixos.**
+    suspend fun revista(): Revista? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().revista() }.getOrNull()
+    }
+
     /// A loja: as estantes com as caixas expostas.
     ///
     /// Falha devolve loja **vazia** em vez de estourar. A locadora tem duas
@@ -206,6 +280,41 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// Pegar a fita. **Escreve em produção** — ver `OdeonApi.alugar`.
     suspend fun alugar(obraId: String): RespostaDoAluguel = withContext(Dispatchers.IO) {
         exigirApi().alugar(AlvoDaCaixa(obraId))
+    }
+
+    /// O menu do disco. `null` quando não deu — e aí a locadora abre a ficha,
+    /// que é o caminho que sempre existiu.
+    suspend fun menuDoDisco(obraId: String): MenuDoDisco? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().menuDoDisco(obraId) }
+            .onFailure { android.util.Log.w("Odeon", "menu do disco não veio: $it") }
+            .getOrNull()
+    }
+
+    /// As cenas do disco. Lista vazia quando não há — e aí a grade de capítulos
+    /// mostra os capítulos sem miniatura, em vez de não mostrar capítulo nenhum.
+    suspend fun cenasDoDisco(obraId: String): List<Cena> = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().cenasDoDisco(obraId) }.getOrDefault(emptyList())
+    }
+
+    /// Onde a fita parou.
+    ///
+    /// Falha vira `null`, e a tela trata como «fita no começo»: sem resposta não
+    /// dá pra afirmar que alguém deixou o filme pela metade, e afirmar isso de
+    /// errado obrigaria a pessoa a rebobinar uma fita que já estava rebobinada.
+    suspend fun fita(obraId: String): Fita? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().fita(obraId) }.getOrNull()
+    }
+
+    /// Rebobinar. Escreve — ver `OdeonApi.rebobinar`.
+    suspend fun rebobinar(obraId: String) = withContext(Dispatchers.IO) {
+        exigirApi().rebobinar(AlvoDaCaixa(obraId))
+        Unit
+    }
+
+    /// Pedir de volta. Escreve, e o efeito aparece na tela de outra pessoa.
+    suspend fun pedirDeVolta(emprestimoId: Int) = withContext(Dispatchers.IO) {
+        exigirApi().pedirDeVolta(emprestimoId)
+        Unit
     }
 
     /// Devolver. Também escreve.
@@ -222,6 +331,28 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// igual — a fileira é que some.
     suspend fun paraContinuar(): List<ItemPraContinuar> = withContext(Dispatchers.IO) {
         runCatching { exigirApi().paraContinuar() }.getOrDefault(emptyList())
+    }
+
+    /// O perfil. `null` quando não deu.
+    ///
+    /// ## Falhar aqui não pode apagar nada, e por isso é `null` e não exceção
+    ///
+    /// Esta chamada serve duas coisas ao mesmo tempo: a **insígnia**, que fica
+    /// por cima de toda aba, e a **tela** do perfil. As duas têm de sobreviver à
+    /// falha, e de jeitos diferentes:
+    ///
+    /// - a insígnia **some** — um canto vazio é melhor que um anel a zero, que
+    ///   afirmaria «você não tem XP nenhum» (§18);
+    /// - a tela mostra o erro, porque ali havia uma pergunta e ela ficou sem
+    ///   resposta (§8b).
+    ///
+    /// Um `Perfil()` vazio de campos-padrão serviria às duas mal: a insígnia
+    /// desenharia nível 1 pra quem está no 7, e a tela diria «0 de 0 conquistas»
+    /// com cara de verdade.
+    suspend fun perfil(): Perfil? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().perfil() }
+            .onFailure { android.util.Log.w("Odeon", "perfil não veio: $it") }
+            .getOrNull()
     }
 
     /// A URL de uma arte qualquer (`still`, `backdrop` ou `poster`), com o token.

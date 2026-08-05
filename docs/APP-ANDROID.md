@@ -105,7 +105,25 @@ e o gesto de girar a caixa vira um `flip` de duas faces. O objeto continua
 sendo objeto — o que se perde é a profundidade da cena, não a metáfora.
 
 Se a estante 3D for requisito, o caminho é uma superfície OpenGL/Compose com
-render próprio, e isso é um projeto dentro do projeto. **Fica em aberto.**
+render próprio, e isso é um projeto dentro do projeto. ~~**Fica em aberto.**~~
+
+> ### ⚠️ Decidido em 05/08/2026: **ela é requisito**
+>
+> Palavra de quem decide, e ela fecha o «em aberto» acima:
+>
+> > «no modo locadora os itens vêm em 3D? a capa em 3D, o cd, o vhs a fita
+> > etc… igual no web. caso não tenhamos, adiciona nessa lista para fazer tb,
+> > **usar o touch para isso vai ser muito legal**.»
+>
+> O que estava escrito continua verdade — o Compose não tem `preserve-3d`, e o
+> que o app fez até aqui (duas faces com pose fixa) é o teto desse caminho. O que
+> muda é a conclusão: a caixa passa a **girar com o dedo**, e a mídia — disco e
+> fita — passa a sair dela.
+>
+> O plano técnico e o estado de cada peça estão em
+> [`PARIDADE-ANDROID.md`](PARIDADE-ANDROID.md) §11. O caminho escolhido **não** é
+> OpenGL: é uma projeção própria num `Canvas` do Compose, com uma câmera só pras
+> faces todas — o que o `preserve-3d` dá de graça, escrito à mão numa função.
 
 ### A trilha sintetizada do menu de DVD
 

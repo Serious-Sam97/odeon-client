@@ -23,6 +23,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,14 +42,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemDaBiblioteca
+import dev.odeon.android.dados.ObraDaLista
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.MolduraDoCartaz
 import dev.odeon.android.ui.LampadasDaMarquise
@@ -151,10 +158,54 @@ fun TelaDaBiblioteca(
             /// acervo, e volta ao topo pra reler.
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Cabecalho(
-                    quantos = estado.itens.size,
+                    quantos = estado.quantosNaTela,
                     total = estado.total,
+                    busca = estado.filtros.busca,
+                    aoBuscar = modelo::mudouBusca,
                     aoAbrirBaixados = aoAbrirBaixados,
+                    serie = estado.serie,
+                    aoSairDaSerie = modelo::sairDaSerie,
                 )
+            }
+
+            /// A barra de filtros — e ela **não existe dentro da série**.
+            ///
+            /// Lá dentro a lista é a numeração de um enredo: filtrar 62
+            /// episódios por gênero devolveria os mesmos 62, e por duração
+            /// devolveria um recorte que ninguém pediu. O que serve ali é sair,
+            /// e o chip «Dentro de» já faz isso.
+            if (!estado.dentroDaSerie) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    BarraDeFiltros(
+                        filtros = estado.filtros,
+                        etiquetasPorEspaco = estado.etiquetasPorEspaco,
+                        aberto = estado.painelAberto,
+                        aoAlternarPainel = modelo::alternarPainel,
+                        aoMudar = modelo::mudouFiltros,
+                    )
+                }
+            }
+
+            /// Filtrou (ou buscou) e não veio nada.
+            ///
+            /// ⚠️ Aqui o §24 **não** vale, e é o mesmo caso da locadora sem
+            /// caixa fora: uma grade em branco depois de digitar parece defeito
+            /// — o campo tem texto, a tela não tem nada, e nada explica a
+            /// ligação. A frase repete o que foi pedido porque é ela que fecha
+            /// a pergunta.
+            if (estado.vazioComFiltro) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = if (estado.filtros.busca.isNotBlank()) {
+                            "nada com «${estado.filtros.busca}» no acervo"
+                        } else {
+                            "nada no acervo com esses filtros"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Cores.textoApagado,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                    )
+                }
             }
 
             /// A fileira de "continuar de onde parou", **acima** do acervo.
@@ -190,7 +241,27 @@ fun TelaDaBiblioteca(
             ///
             /// ⚠️ **Sem nada pela metade, não há herói** (§24). A tela volta a
             /// abrir na grade, sem faixa vazia e sem "nada por aqui".
-            if (estado.paraContinuar.isNotEmpty()) {
+            /// ⚠️ **Buscando, o herói e a fileira somem** — e foi o screenshot
+            /// que mandou.
+            ///
+            /// Com «goldfinger» no campo, a tela mostrava: o herói de 16:9 do
+            /// que se estava assistindo, a fileira de continuar com quatro
+            /// cartazes, e só então os **2 de 2** resultados — abaixo da dobra.
+            /// Ou seja, a resposta à pergunta feita ficava atrás de duas coisas
+            /// que ninguém perguntou.
+            ///
+            /// Os dois são contexto de **chegada** («onde você parou»), e quem
+            /// digita já sabe o que quer. Some enquanto durar a busca, e volta
+            /// inteiro quando o campo esvazia.
+            ///
+            /// E somem **dentro da série** pelo mesmo motivo: quem entrou em
+            /// *Breaking Bad* está olhando a lista de episódios, e um herói de
+            /// outro filme no topo dela é a tela mudando de assunto sozinha.
+            val buscando = estado.filtros.busca.isNotBlank() ||
+                estado.filtros.algumLigado ||
+                estado.dentroDaSerie
+
+            if (!buscando && estado.paraContinuar.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     HeroiDaChegada(
                         item = estado.paraContinuar.first(),
@@ -200,7 +271,7 @@ fun TelaDaBiblioteca(
                 }
             }
 
-            if (estado.paraContinuar.size > 1) {
+            if (!buscando && estado.paraContinuar.size > 1) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     FileiraParaContinuar(
                         /// O primeiro virou herói, então a fileira mostra o
@@ -213,23 +284,178 @@ fun TelaDaBiblioteca(
                 }
             }
 
-            items(estado.itens, key = { it.id }) { item ->
-                Cartaz(
-                    item = item,
-                    capa = modelo.capa(item),
-                    aoTocar = { aoAbrirObra(item.id) },
-                    moldura = moldura,
-                )
+            if (estado.dentroDaSerie) {
+                /// A lista quebra **por temporada** — §4 da referência.
+                ///
+                /// `Especiais` pra a temporada 0 (é o que a numeração do TMDB
+                /// usa) e `Sem temporada` pra o episódio que a identificação
+                /// ainda não numerou. Nenhum dos dois é caso raro num acervo
+                /// com 3.350 obras esperando revisão.
+                porTemporada(estado.episodios).forEach { (rotulo, doGrupo) ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        /// `TEMPORADA 2 · 3 VISTOS ——— 10`.
+                        ///
+                        /// O «vistos» some quando é zero (§24): uma temporada
+                        /// que ninguém começou não precisa anunciar que ninguém
+                        /// a começou, e o número da direita já diz o tamanho.
+                        val vistos = doGrupo.count { it.finished == true }
+                        RotuloDeSecao(
+                            texto = if (vistos > 0) "$rotulo · $vistos vistos" else rotulo,
+                            numero = doGrupo.size,
+                        )
+                    }
+                    items(doGrupo, key = { it.id }) { episodio ->
+                        CartaoDeEpisodio(
+                            item = episodio,
+                            arte = modelo.arte(episodio),
+                            aoTocar = { aoAbrirObra(episodio.id) },
+                        )
+                    }
+                }
+            } else {
+                items(estado.itens, key = { it.id }) { item ->
+                    Cartaz(
+                        item = item,
+                        capa = modelo.capa(item),
+                        /// ⚠️ **Série não abre ficha, série abre a série.**
+                        ///
+                        /// É a regra da web (§4): o cartão agrupado «vira filtro
+                        /// de coleção». A ficha de uma série responde «o que é
+                        /// esta obra», e quem toca numa capa de *Breaking Bad*
+                        /// está perguntando outra coisa — quais episódios há, e
+                        /// quais já viu.
+                        aoTocar = {
+                            if (item.eSerie) modelo.entrarNaSerie(item) else aoAbrirObra(item.id)
+                        },
+                        moldura = moldura,
+                    )
+                }
             }
         }
     }
 }
 
+/// O cartão de um episódio — e ele é **16:9**, não 2:3.
+///
+/// ## O `still` é a razão de este cartão existir
+///
+/// O comentário da web é a especificação: «usa o `still` 16:9 do episódio, não o
+/// pôster da série — com o pôster, 21 episódios eram 21 cópias da mesma
+/// imagem». Uma grade de capas idênticas não é uma lista de episódios, é um
+/// papel de parede.
+///
+/// Sem `still`, cai no backdrop e depois no pôster — e sem nenhum dos três,
+/// mostra o código sobre a cor da obra, que é o que o cartaz da grade já faz
+/// pelas 8.598 obras sem arte.
+@Composable
+private fun CartaoDeEpisodio(item: ObraDaLista, arte: String?, aoTocar: () -> Unit) {
+    val cor = corDeHex(item.corDominante)
+
+    Column(
+        modifier = Modifier.clickable(onClick = aoTocar),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(cor?.copy(alpha = 0.35f) ?: Cores.fundoElevado),
+        ) {
+            if (arte != null) {
+                AsyncImage(
+                    model = arte,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            /// O código no canto, sobre uma lavagem — sem ela, um `S02E05`
+            /// branco sobre um quadro claro some, e é justamente no quadro que
+            /// ele precisa ser lido.
+            item.codigo?.let { codigo ->
+                Text(
+                    text = codigo,
+                    style = Tipo.pilula,
+                    color = Cores.texto,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Cores.fundo.copy(alpha = 0.72f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+
+            /// A barra de progresso, igual à do cartaz. Terminado **não** desenha
+            /// barra cheia: quem terminou não está no meio de nada.
+            val fracao = item.ondeParou
+                ?.takeIf { it > 30 && item.finished != true }
+                ?.let { onde ->
+                    item.duracaoEmSegundos?.takeIf { it > 0 }?.let { (onde / it).toFloat() }
+                }
+                ?.coerceIn(0f, 1f)
+
+            if (fracao != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(Cores.fundo.copy(alpha = 0.6f)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(fracao)
+                            .height(3.dp)
+                            .background(Cores.destaque),
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.bodySmall,
+            /// Visto fica apagado — a marca é a mesma da capa da revista do
+            /// guia: o que já se viu recua, em vez de ganhar um selo a mais.
+            color = if (item.finished == true) Cores.textoApagado else Cores.texto,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/// Os episódios agrupados por temporada, na ordem em que se assiste.
+///
+/// ⚠️ **`Sem temporada` vai pro fim**, e não pro começo. Ele é onde caem os
+/// episódios que a identificação não numerou — e pôr o não identificado antes da
+/// primeira temporada faria a série parecer começar por um monte de arquivo
+/// solto.
+internal fun porTemporada(episodios: List<ObraDaLista>): List<Pair<String, List<ObraDaLista>>> =
+    episodios
+        .groupBy { it.temporada }
+        .toList()
+        .sortedWith(compareBy(nullsLast<Int>()) { it.first })
+        .map { (temporada, doGrupo) ->
+            val rotulo = when (temporada) {
+                null -> "sem temporada"
+                0 -> "especiais"
+                else -> "temporada $temporada"
+            }
+            rotulo to doGrupo.sortedWith(compareBy(nullsLast<Int>()) { it.episodio })
+        }
+
 @Composable
 private fun Cabecalho(
     quantos: Int,
     total: Int?,
+    busca: String,
+    aoBuscar: (String) -> Unit,
     aoAbrirBaixados: () -> Unit,
+    serie: SerieAberta?,
+    aoSairDaSerie: () -> Unit,
 ) {
     /// Sem padding lateral próprio: dentro da grade quem alinha é o
     /// `contentPadding` de 16.dp dela, e somar os dois afastaria o título dos
@@ -237,9 +463,14 @@ private fun Cabecalho(
     /// de graça, do `verticalArrangement`.
     Column {
         Text(
-            text = "biblioteca",
+            /// Dentro da série, o título **é a série**. Manter «biblioteca» com
+            /// os episódios de *Breaking Bad* embaixo faria a tela mentir sobre
+            /// onde se está — e o chip logo abaixo é o caminho de volta.
+            text = serie?.titulo ?: "biblioteca",
             style = MaterialTheme.typography.headlineSmall,
             color = Cores.texto,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         /// A contagem só aparece quando existe.
         ///
@@ -252,6 +483,34 @@ private fun Cabecalho(
                 color = Cores.textoApagado,
             )
         }
+
+        /// O chip «Dentro de» — o caminho de volta, e o único que existe aqui.
+        ///
+        /// Ele é da web (§4), e o ✕ é o gesto inteiro: sair da série é desfazer
+        /// um filtro, não navegar pra trás. O botão físico de voltar continua
+        /// levando à aba anterior, que é outra coisa — e é por isso que este
+        /// chip precisa existir mesmo com ele.
+        if (serie != null) {
+            Text(
+                text = "dentro de ${serie.titulo}  ✕",
+                style = Tipo.pilula,
+                color = Cores.destaque,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Cores.fundoElevado)
+                    .clickable(onClick = aoSairDaSerie)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+            return@Column
+        }
+
+        /// A busca fica **colada na contagem**, e não depois do atalho.
+        ///
+        /// As duas respondem a mesma coisa — *o que estou vendo desta grade* —,
+        /// e o screenshot mostrou o custo de separá-las: com o `no aparelho ›`
+        /// no meio, o link ficava boiando entre dois pedaços do mesmo assunto.
+        CampoDeBusca(valor = busca, aoMudar = aoBuscar)
 
         /// ## Os três links saíram daqui
         ///
@@ -297,6 +556,83 @@ private fun Cabecalho(
             Text("no aparelho ›", color = Cores.destaque, style = Tipo.pilula)
         }
     }
+}
+
+/// O campo de busca.
+///
+/// ## Ele rola junto, e é a mesma decisão medida do cabeçalho
+///
+/// A web põe a busca na barra de cima, que é fixa e condensa. Aqui ela é a
+/// última linha do cabeçalho — que é **item da grade** desde que a versão fixa
+/// custou 180px de 1080 em paisagem, uma fileira e meia de cartaz.
+///
+/// O que se perde é a busca sair de vista depois da primeira rolada. É o mesmo
+/// preço que a contagem paga, e pelo mesmo motivo: quem já rolou está olhando o
+/// acervo, e quem vai buscar volta ao topo — que é um gesto só, e o gesto que
+/// todo mundo já faz.
+///
+/// ## `BasicTextField`, e não o `TextField` do Material
+///
+/// Pelo mesmo motivo que o `NavigationSuiteScaffold` saiu: o campo do Material
+/// traz um esquema de cores inteiro atrás — fundo do contêiner, indicador,
+/// cursor, rótulo flutuante —, e cada um deles que não estiver definido no
+/// `EsquemaEscuro` cai no padrão de fábrica. Foi assim que a cápsula da barra
+/// virou lilás. Aqui são quatro cores da casa e nada mais.
+@Composable
+private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit) {
+    val foco = LocalFocusManager.current
+
+    BasicTextField(
+        value = valor,
+        onValueChange = aoMudar,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Cores.texto),
+        cursorBrush = SolidColor(Cores.destaque),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        /// Buscar já aconteceu — o debounce cuidou disso enquanto se digitava.
+        /// O que a tecla faz é **guardar o teclado**, que é o que sobrou pra ela
+        /// fazer e o que a pessoa quer nesse momento: ver a grade.
+        keyboardActions = KeyboardActions(onSearch = { foco.clearFocus() }),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        decorationBox = { campo ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Cores.fundoElevado)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    /// A frase é a da web, letra por letra. Duas telas do mesmo
+                    /// produto pedindo a mesma coisa com palavras diferentes é
+                    /// como um produto parece dois.
+                    if (valor.isEmpty()) {
+                        Text(
+                            text = "buscar na biblioteca…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Cores.textoApagado,
+                        )
+                    }
+                    campo()
+                }
+
+                /// O ✕ só nasce quando há o que limpar (§24), e limpar devolve o
+                /// foco ao campo — quem apaga a busca quase sempre vai digitar
+                /// outra, não fechar o teclado.
+                if (valor.isNotEmpty()) {
+                    Text(
+                        text = "✕",
+                        style = Tipo.pilula,
+                        color = Cores.textoApagado,
+                        modifier = Modifier
+                            .clickable { aoMudar("") }
+                            .padding(start = 8.dp),
+                    )
+                }
+            }
+        },
+    )
 }
 
 /// O herói da biblioteca: o que você deixou pela metade, em tamanho de cartaz.

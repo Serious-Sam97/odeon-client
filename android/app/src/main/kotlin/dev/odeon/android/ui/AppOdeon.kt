@@ -67,6 +67,9 @@ import dev.odeon.android.ui.mural.ModeloDoMural
 import dev.odeon.android.ui.mural.TelaDoMural
 import dev.odeon.android.ui.paravoce.ModeloParaVoce
 import dev.odeon.android.ui.paravoce.TelaParaVoce
+import dev.odeon.android.ui.perfil.GavetaDoEu
+import dev.odeon.android.ui.perfil.ModeloDoPerfil
+import dev.odeon.android.ui.perfil.TelaDoPerfil
 import dev.odeon.android.ui.obra.ModeloDaObra
 import dev.odeon.android.ui.obra.TelaDaObra
 import dev.odeon.android.ui.player.ModeloDoPlayer
@@ -125,6 +128,12 @@ private sealed interface Onde {
     /// e a seis cada uma fica com 68,5dp — «biblioteca» ocupa 61dp a 12sp, ou
     /// seja **não cabe** com o respiro. Medido em 04/08/2026.
     data object Baixados : Onde
+
+    /// O perfil, e ele **não é aba** pelo mesmo motivo que a ficha não é: chega-se
+    /// nele pela gaveta do canto, que já está em toda aba. Uma sexta entrada na
+    /// barra pra o que cabe num toque no próprio rosto seria gastar um dos cinco
+    /// lugares permanentes com o destino menos visitado do app.
+    data object Perfil : Onde
 
     data class Assistindo(
         /// A obra **e** o arquivo. O player toca o arquivo, mas quem recebe a
@@ -201,6 +210,87 @@ private val Onde.aba: Aba?
 fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) {
     val app = LocalContext.current.applicationContext as OdeonApp
     var onde: Onde by remember { mutableStateOf(Onde.Decidindo) }
+
+    /// O "eu" mora **aqui**, e não dentro da gaveta que o desenha.
+    ///
+    /// A insígnia aparece por cima de toda aba e a tela do perfil lê a mesma
+    /// resposta; criando o modelo lá dentro, cada troca de aba redesenharia a
+    /// gaveta e o `viewModel()` teria que reencontrar a instância pelo tipo.
+    /// Aqui em cima ele é um só, explicitamente, e é o mesmo que a tela recebe.
+    val eu: ModeloDoPerfil = viewModel(factory = fabricaDoPerfil(app.odeon))
+    val estadoDoEu by eu.estado.collectAsStateWithLifecycle()
+    val saiu by eu.saiu.collectAsStateWithLifecycle()
+
+    /// Sair volta pro login, e **não** pro "decidindo".
+    ///
+    /// O `Decidindo` pergunta ao cofre se há sessão guardada — e acabou de não
+    /// haver, porque foi isto que o `sair` fez. Passar por ele seria um piscar
+    /// de tela pra chegar na mesma resposta.
+    LaunchedEffect(saiu) {
+        if (saiu) {
+            onde = Onde.Login
+            eu.jaSaiu()
+        }
+    }
+
+    /// O perfil é buscado quando se **chega numa aba** — ou seja, depois de
+    /// haver sessão. Pedir antes daria 401, e o §53 vale aqui: não perguntar o
+    /// que se sabe que vai ser negado.
+    LaunchedEffect(onde) {
+        if (onde.aba != null) eu.carregarSePreciso()
+    }
+
+    /// O barramento, ligado assim que há sessão e token.
+    ///
+    /// ## Ele é ligado **daqui**, e não do `Application`
+    ///
+    /// Porque só aqui se sabe que há sessão: o `OdeonApp` nasce antes do login, e
+    /// conectar sem token seria abrir uma conexão pra tomar 401. O `ligar` é
+    /// idempotente — chamar de novo a cada troca de aba não abre uma segunda.
+    ///
+    /// ⚠️ O escopo é o da composição, e é de propósito: quando o app sai da
+    /// frente, a corrotina é cancelada e a conexão fecha. Um SSE vivo em segundo
+    /// plano é o servidor de casa segurando uma conexão pra ninguém.
+    val progressoDeFora = remember { mutableIntStateOf(0) }
+
+    /// Há uma sobreposição de tela cheia dentro de uma aba? Ver o parâmetro
+    /// `aoMudarSobreposicao` da `TelaDaLocadora`.
+    var sobreposicaoCheia by remember { mutableStateOf(false) }
+    LaunchedEffect(onde) {
+        if (onde.aba == null) return@LaunchedEffect
+        val base = app.odeon.base ?: return@LaunchedEffect
+        app.barramento.ligar(this, base)
+    }
+    LaunchedEffect(Unit) {
+        app.barramento.eventos.collect { evento ->
+            /// ## O que o app faz com cada um, hoje
+            ///
+            /// `progress` de **outro aparelho** relê a fileira de continuar e a
+            /// ficha aberta — é a sincronia que a §5 da espec chama de «você
+            /// parou na TV e continua no ônibus», e era o único buraco que o
+            /// barramento custava com as telas que existem.
+            ///
+            /// Os outros seguem pra quem os ouve: a locadora tem o próprio
+            /// coletor, e mural, junto e ao vivo ainda não têm tela.
+            if (evento is dev.odeon.android.dados.EventoDoServidor.Progresso) {
+                progressoDeFora.intValue++
+            }
+        }
+    }
+
+    /// O filtro que o guia pediu, esperando a biblioteca.
+    ///
+    /// ## Por que ele mora aqui, e não é parâmetro de tela
+    ///
+    /// Quem toca é o guia; quem filtra é a biblioteca; e as duas são abas
+    /// irmãs, sem uma pilha entre elas. O `AppOdeon` é o único lugar que
+    /// enxerga as duas — é o mesmo papel que ele já faz com `voltasDoPlayer`.
+    ///
+    /// ⚠️ **Consumir é zerar.** Sem o `= null` depois de aplicar, qualquer
+    /// recomposição reaplicaria o filtro e a biblioteca ficaria presa em
+    /// «Terror» — o mesmo defeito que o atalho de aba teve e que está descrito
+    /// mais abaixo.
+    var filtroPedido: dev.odeon.android.dados.Filtros? by remember { mutableStateOf(null) }
 
     /// Quantas vezes se voltou do player. Serve de sinal, não de contagem: o que
     /// importa é que o número **mudou**, pra a ficha reler o `position_seconds`.
@@ -339,6 +429,13 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
 
                 Onde.Biblioteca -> {
                     val modelo: ModeloDaBiblioteca = viewModel(factory = fabrica(app.odeon))
+                    /// O filtro que veio do guia.
+                    LaunchedEffect(filtroPedido) {
+                        filtroPedido?.let {
+                            modelo.mudouFiltros(it)
+                            filtroPedido = null
+                        }
+                    }
                     /// A fileira de "continuar" relê ao voltar do player, pelo
                     /// mesmo motivo da ficha: o `ViewModel` fica em cache, e sem
                     /// isto quem acabou de assistir volta pra uma fileira que
@@ -347,8 +444,13 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     /// **Só a fileira**, e não a grade: o acervo tem 8.316
                     /// entradas paginadas e não muda porque alguém assistiu.
                     /// Recarregar tudo jogaria fora a rolagem por nada.
-                    LaunchedEffect(voltasDoPlayer) {
-                        if (voltasDoPlayer > 0) modelo.recarregarParaContinuar()
+                    /// Relê ao voltar do player **e** quando outro aparelho
+                    /// mexeu no progresso — as duas coisas dizem o mesmo: a
+                    /// fileira de continuar está velha.
+                    LaunchedEffect(voltasDoPlayer, progressoDeFora.intValue) {
+                        if (voltasDoPlayer > 0 || progressoDeFora.intValue > 0) {
+                            modelo.recarregarParaContinuar()
+                        }
                     }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         TelaDaBiblioteca(
@@ -361,10 +463,27 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                 }
 
                 Onde.Locadora -> {
-                    val modelo: ModeloDaLocadora = viewModel(factory = fabricaDaLocadora(app.odeon))
+                    val modelo: ModeloDaLocadora = viewModel(factory = fabricaDaLocadora(app.odeon, app.barramento))
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        TelaDaLocadora(modelo = modelo, aoAbrirObra = { onde = Onde.Ficha(it) })
+                        TelaDaLocadora(
+                            modelo = modelo,
+                            aoAbrirObra = { onde = Onde.Ficha(it) },
+                            /// O menu do disco toca **direto**, sem passar pela
+                            /// ficha: escolher «do começo» ou um capítulo já é a
+                            /// decisão que a ficha existiria pra ajudar a tomar.
+                            aoMudarSobreposicao = { sobreposicaoCheia = it },
+                            aoTocar = { obraId, arquivoId, titulo, de, duracao ->
+                                indoAssistir = Onde.Assistindo(
+                                    obraId = obraId,
+                                    arquivoId = arquivoId,
+                                    titulo = titulo,
+                                    ondeParou = de,
+                                    capaUrl = null,
+                                    duracaoEmSegundos = duracao,
+                                )
+                            },
+                        )
                     }
                 }
 
@@ -374,6 +493,20 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         TelaDosBaixados(modelo = modelo)
+                    }
+                }
+
+                Onde.Perfil -> {
+                    BackHandler { onde = Onde.Biblioteca }
+                    /// Sem `safeDrawingPadding`, e pelo mesmo motivo da ficha: a
+                    /// capa é borda a borda e quem respeita as áreas seguras é o
+                    /// conteúdo, lá dentro.
+                    Box(Modifier.fillMaxSize()) {
+                        TelaDoPerfil(
+                            modelo = eu,
+                            aoVoltar = { onde = Onde.Biblioteca },
+                            aoAbrirObra = { onde = Onde.Ficha(it) },
+                        )
                     }
                 }
 
@@ -389,7 +522,18 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     val modelo: ModeloDoGuia = viewModel(factory = fabricaDoGuia(app.odeon))
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        TelaDoGuia(modelo = modelo)
+                        TelaDoGuia(
+                            modelo = modelo,
+                            aoAbrirObra = { onde = Onde.Ficha(it) },
+                            /// O eixo leva à biblioteca **já filtrada**. A troca
+                            /// de aba é parte do gesto: quem toca em «Terror»
+                            /// está pedindo pra ver os filmes, e vê-los é na
+                            /// biblioteca.
+                            aoFiltrar = {
+                                filtroPedido = it
+                                onde = Onde.Biblioteca
+                            },
+                        )
                     }
                 }
 
@@ -415,8 +559,10 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         factory = fabricaDaObra(app.odeon, alvo.obraId),
                     )
                     /// Voltar do player relê a ficha. Ver `relerSeJaTem`.
-                    LaunchedEffect(voltasDoPlayer) {
-                        if (voltasDoPlayer > 0) modelo.relerSeJaTem()
+                    LaunchedEffect(voltasDoPlayer, progressoDeFora.intValue) {
+                        if (voltasDoPlayer > 0 || progressoDeFora.intValue > 0) {
+                            modelo.relerSeJaTem()
+                        }
                     }
                     BackHandler { onde = Onde.Biblioteca }
                     /// **Sem `safeDrawingPadding` aqui, e é a R8.**
@@ -465,7 +611,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     }
                     val modelo: ModeloDoPlayer = viewModel(
                         key = "player:${alvo.arquivoId}",
-                        factory = fabricaDoPlayer(app.odeon, alvo),
+                        factory = fabricaDoPlayer(app.odeon, alvo, app.barramento),
                     )
                     BackHandler(onBack = voltarPraFicha)
                     /// **Sem `safeDrawingPadding` aqui**, e é de propósito: o
@@ -549,12 +695,29 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         )
                     }
 
-                    val abaAtual = alvo.aba
+                    /// Uma sobreposição de tela cheia dispensa o esqueleto — o
+                    /// mesmo caminho que o player já toma.
+                    val abaAtual = if (sobreposicaoCheia) null else alvo.aba
                     if (abaAtual != null) {
                         EsqueletoComAbas(
                             atual = abaAtual,
                             aoTrocar = { onde = it.destino },
                             conteudo = { corpo(moldura) },
+                            /// A gaveta do canto — o único pedaço de cromo que
+                            /// existe em toda aba. Ela fica **fora** do
+                            /// `conteudo` porque as telas rolam e ela não:
+                            /// dentro, o rosto sumiria na primeira rolada, e um
+                            /// `sair` que só existe no topo da biblioteca é um
+                            /// `sair` que ninguém acha.
+                            gaveta = {
+                                GavetaDoEu(
+                                    nome = estadoDoEu.perfil?.nome.orEmpty(),
+                                    perfil = estadoDoEu.perfil,
+                                    rosto = eu.arte(estadoDoEu.perfil?.avatar?.arte),
+                                    aoAbrirPerfil = { onde = Onde.Perfil },
+                                    aoSair = { eu.sair() },
+                                )
+                            },
                         )
                     } else {
                         corpo(moldura)
@@ -607,10 +770,36 @@ private fun EsqueletoComAbas(
     atual: Aba,
     aoTrocar: (Aba) -> Unit,
     conteudo: @Composable () -> Unit,
+    /// A gaveta do "eu", desenhada por cima do conteúdo e alinhada ao canto de
+    /// cima à direita — nas duas formas, barra e trilho. Em paisagem o trilho
+    /// come a esquerda, e o canto direito continua livre; é o mesmo lugar.
+    gaveta: @Composable () -> Unit = {},
 ) {
     val info = currentWindowAdaptiveInfo()
     val alturaEspremida = !info.windowSizeClass
         .isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
+
+    /// O conteúdo e a gaveta, empilhados.
+    ///
+    /// ⚠️ A gaveta leva os **insets** por conta própria: o conteúdo de cada aba
+    /// já aplica o `safeDrawingPadding`, mas este `Box` não, e sem isso o rosto
+    /// nasceria debaixo do relógio do sistema.
+    val corpoComGaveta: @Composable () -> Unit = {
+        Box(Modifier.fillMaxSize()) {
+            conteudo()
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.End,
+                        ),
+                    ),
+            ) {
+                gaveta()
+            }
+        }
+    }
 
     if (alturaEspremida) {
         Row(Modifier.fillMaxSize()) {
@@ -643,13 +832,13 @@ private fun EsqueletoComAbas(
                     )
                 }
             }
-            Box(Modifier.weight(1f)) { conteudo() }
+            Box(Modifier.weight(1f)) { corpoComGaveta() }
         }
         return
     }
 
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) { conteudo() }
+        Box(Modifier.weight(1f)) { corpoComGaveta() }
         BarraDoFacho(
             destinos = Aba.entries.map { aba ->
                 DestinoDoFacho(
@@ -689,6 +878,10 @@ private fun fabricaParaVoce(odeon: RepositorioOdeon) = viewModelFactory {
     initializer { ModeloParaVoce(odeon) }
 }
 
+private fun fabricaDoPerfil(odeon: RepositorioOdeon) = viewModelFactory {
+    initializer { ModeloDoPerfil(odeon) }
+}
+
 private fun fabricaDoMural(odeon: RepositorioOdeon) = viewModelFactory {
     initializer { ModeloDoMural(odeon) }
 }
@@ -697,15 +890,22 @@ private fun fabricaDoGuia(odeon: RepositorioOdeon) = viewModelFactory {
     initializer { ModeloDoGuia(odeon) }
 }
 
-private fun fabricaDaLocadora(odeon: RepositorioOdeon) = viewModelFactory {
-    initializer { ModeloDaLocadora(odeon) }
+private fun fabricaDaLocadora(
+    odeon: RepositorioOdeon,
+    barramento: dev.odeon.android.dados.Barramento,
+) = viewModelFactory {
+    initializer { ModeloDaLocadora(odeon, barramento) }
 }
 
 private fun fabricaDaObra(odeon: RepositorioOdeon, obraId: String) = viewModelFactory {
     initializer { ModeloDaObra(odeon, obraId) }
 }
 
-private fun fabricaDoPlayer(odeon: RepositorioOdeon, alvo: Onde.Assistindo) = viewModelFactory {
+private fun fabricaDoPlayer(
+    odeon: RepositorioOdeon,
+    alvo: Onde.Assistindo,
+    barramento: dev.odeon.android.dados.Barramento,
+) = viewModelFactory {
     initializer {
         ModeloDoPlayer(
             odeon = odeon,
@@ -715,6 +915,7 @@ private fun fabricaDoPlayer(odeon: RepositorioOdeon, alvo: Onde.Assistindo) = vi
             ondeParou = alvo.ondeParou,
             duracaoEmSegundos = alvo.duracaoEmSegundos,
             capaUrl = alvo.capaUrl,
+            barramento = barramento,
         )
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /// O cabeçalho de seção: versalete espaçado, régua até a margem, número à
 /// direita quando houver um.
@@ -110,7 +111,19 @@ fun RotuloDeSecao(
         if (numero != null) {
             Text(
                 text = "$numero",
-                style = Tipo.rotulo,
+                /// ⚠️ **Sem o tracking do rótulo**, e foi um screenshot que
+                /// mandou tirar.
+                ///
+                /// `Tipo.rotulo` tem letra espaçada, que é o que faz
+                /// `TEMPORADA 2` respirar em caixa alta. Aplicado a um número de
+                /// dois dígitos, o mesmo espaçamento separa os algarismos: a
+                /// segunda temporada de *Breaking Bad* dizia **`1 3`** em vez de
+                /// `13`, e a leitura de relance era «uma temporada, três
+                /// episódios».
+                ///
+                /// Letra espaçada é regra de texto. Número não é texto — é
+                /// quantidade, e quantidade se lê junta.
+                style = Tipo.rotulo.copy(letterSpacing = 0.sp),
                 color = Cores.textoApagado,
             )
         }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,14 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.C
@@ -129,6 +138,15 @@ internal fun BotaoDeAudio(aoTocar: () -> Unit) {
     AlvoDeToque(rotulo = "faixa de áudio", aoTocar = aoTocar) { desenharAudio() }
 }
 
+/// Quanto cada linha do menu ocupa.
+///
+/// ⚠️ **Ela é constante porque a rolagem depende disso.** Pra abrir o menu já
+/// mostrando a faixa que está no ar, é preciso saber a que altura ela está — e a
+/// conta só é exata se toda linha tiver a mesma. Medir por
+/// `onGloballyPositioned` daria o mesmo resultado com três vezes mais código, e
+/// só serviria pra permitir alturas variáveis que ninguém quer aqui.
+private val ALTURA_DO_ITEM = 34.dp
+
 /// A lista de faixas, aberta acima do transporte.
 ///
 /// ⚠️ Ela nasce **dentro** da coluna de baixo, e não flutuando com `align`: o
@@ -136,18 +154,62 @@ internal fun BotaoDeAudio(aoTocar: () -> Unit) {
 /// `padding(top = 56.dp)` — um número que só valia enquanto o cabeçalho tivesse
 /// aquela altura. Em fluxo, ele abre onde o botão está e acompanha o que muda em
 /// volta.
+///
+/// ## ⚠️ Ele rola, e antes não rolava
+///
+/// A primeira versão era uma `Column` seca. Com dois ou três itens — que é o
+/// caso de todo menu de áudio e da maioria dos de legenda — nunca deu problema, e
+/// foi por isso que passou.
+///
+/// **Medido em 06/08/2026** em *Família de Aluguel*, que tem **16 faixas de
+/// legenda**: o menu ia de `y 37` a `y 1080` — a tela inteira —, com
+/// `Chinese (Traditional)` cortado na borda de baixo e o que vinha depois
+/// inalcançável. As faixas existiam, apareciam na lista, e não havia como chegar
+/// nelas: §8b por omissão.
+///
+/// ## O teto é fração do espaço **disponível**, e não um número em dp
+///
+/// Um `max` fixo que sirva em pé sobra deitado, onde a tela toda tem ~411dp e o
+/// cromo de baixo já come 120. **55% da altura** dá ~220dp deitado e ~490 em pé —
+/// nos dois casos o menu para antes de empurrar a tira e o transporte pra fora.
+///
+/// ⚠️ A medida vem do `BoxWithConstraints`, e não de
+/// `LocalConfiguration.screenHeightDp`: o segundo está desencorajado (o lint
+/// aponta `ConfigurationScreenWidthHeight`) e mede a **tela**, que não é a mesma
+/// coisa que o espaço que sobrou pra este menu — em janela dividida ou na
+/// janelinha as duas divergem.
+///
+/// ⚠️ E o título fica **fora** do que rola: com ele dentro, arrastar até o fim de
+/// dezesseis idiomas deixaria a lista sem dizer se é de legenda ou de áudio.
 @Composable
 internal fun MenuDeFaixas(
     titulo: String,
     itens: List<Pair<String, Boolean>>,
     aoEscolher: (Int) -> Unit,
 ) {
+    val rolagem = rememberScrollState()
+    val densidade = LocalDensity.current
+
+    /// Abre já mostrando o que está no ar.
+    ///
+    /// ⚠️ Sem isto, num filme de dezesseis legendas quem escolheu a décima quinta
+    /// reabre o menu no topo e não vê nenhuma marcada — a tela pareceria ter
+    /// esquecido a escolha. Rola sem animação de propósito: é o estado inicial do
+    /// menu, não um movimento que alguém pediu.
+    val escolhido = itens.indexOfFirst { it.second }
+    LaunchedEffect(escolhido) {
+        if (escolhido > 0) {
+            rolagem.scrollTo(with(densidade) { (ALTURA_DO_ITEM * escolhido).roundToPx() })
+        }
+    }
+
+    BoxWithConstraints {
     Column(
         modifier = Modifier
+            .heightIn(max = maxHeight * 0.55f)
             .clip(RoundedCornerShape(8.dp))
             .background(Cores.fundoAfundado.copy(alpha = 0.95f))
             .padding(vertical = 6.dp, horizontal = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
             text = titulo,
@@ -155,20 +217,34 @@ internal fun MenuDeFaixas(
             color = Cores.textoApagado,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
         )
-        itens.forEachIndexed { indice, (rotulo, escolhido) ->
-            Text(
-                text = rotulo,
-                style = MaterialTheme.typography.bodySmall,
-                /// A escolhida em âmbar, e não com um ✓ na frente: o tique
-                /// empurraria todas as outras linhas pra direita pra abrir
-                /// espaço a uma coluna que fica vazia em quase todas.
-                color = if (escolhido) Cores.destaque else Cores.texto,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable { aoEscolher(indice) }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-            )
+        Column(
+            /// `fill = false` é o que faz o menu de duas faixas continuar do
+            /// tamanho de duas faixas: com `fill` ele esticaria até o teto e
+            /// abriria um retângulo escuro vazio embaixo dos itens.
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rolagem),
+        ) {
+            itens.forEachIndexed { indice, (rotulo, escolhidoAqui) ->
+                Text(
+                    text = rotulo,
+                    style = MaterialTheme.typography.bodySmall,
+                    /// A escolhida em âmbar, e não com um ✓ na frente: o tique
+                    /// empurraria todas as outras linhas pra direita pra abrir
+                    /// espaço a uma coluna que fica vazia em quase todas.
+                    color = if (escolhidoAqui) Cores.destaque else Cores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .height(ALTURA_DO_ITEM)
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { aoEscolher(indice) }
+                        .padding(horizontal = 12.dp)
+                        .wrapContentHeight(),
+                )
+            }
         }
+    }
     }
 }
 

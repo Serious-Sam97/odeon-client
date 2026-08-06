@@ -23,19 +23,25 @@ Este documento **não decide nada**. Ele não muda a sequência da
 apagar o que já foi escrito. Onde ele sugere ordem, a sugestão está marcada como
 **Proposto** e é isso que ela é.
 
-**Medido em 05/08/2026**, sobre `android/app/src`:
+**Medido em 06/08/2026**, sobre `android/app/src`:
 
 | | |
 |---|---|
-| arquivos `.kt` (main) | **54** · **13.259 linhas** |
-| testes | **9 arquivos** · **817 linhas** · **61 testes**, todos passando |
-| rotas declaradas no `OdeonApi` | **25**, de 113 |
+| arquivos `.kt` (main) | **70** · **22.503 linhas** |
+| testes | **19 arquivos** · **2.079 linhas** · **144 testes**, todos passando |
+| rotas declaradas no `OdeonApi` | **30**, de 113 |
 | rotas servidas por URL montada (sem Retrofit) | 3 — `/artwork/*`, `/api/stream/*`, a playlist HLS |
 | telas | **8** — 5 abas, a ficha, o player e o perfil |
 | sobreposições | **1** — a gaveta do "eu" |
 
-⚠️ Os números acima já incluem **as duas rodadas de 05/08/2026**, que mexeram
-nesta tabela enquanto ela era escrita. O que elas fizeram está no §10.
+⚠️ A tabela estava parada em **54 arquivos e 61 testes** — os números da manhã de
+05/08, escritos antes das rodadas daquele dia e nunca refeitos. Ficou registrado
+porque é o modo mais comum de um documento assim envelhecer: a prosa cresce, e a
+medida no alto continua dizendo o que era verdade quando alguém a escreveu.
+
+O que mudou desde então está no §10: as **doze rodadas de 05/08** (a caixa, o
+balcão, a locadora, o player) e as **doze de 06/08** (o relógio do player, as
+faixas de áudio, o dono da sessão, a ficha).
 
 E o mesmo recorte do lado da web, pra comparação ficar honesta: **29 arquivos**,
 **16.891 linhas**, **11 telas** com endereço próprio e **6** sobreposições.
@@ -55,7 +61,8 @@ E o mesmo recorte do lado da web, pra comparação ficar honesta: **29 arquivos*
 | 7 | A inversão de ordem, registrada |
 | 8 | Campos que chegam e ninguém desenha |
 | 9 | Um desalinhamento de contrato dentro do app |
-| 10 | A rodada de 05/08/2026 — o que ela mudou nesta tabela |
+| 10 | As rodadas de 05/08/2026 — o que elas mudaram nesta tabela |
+| 10b | As rodadas de 06/08/2026 — o player cobra, e a ficha vira fachada |
 | 11 | A caixa em 3D — o que existe hoje, e o que foi **decidido** |
 
 ---
@@ -530,7 +537,7 @@ mexer no código.
 
 ---
 
-## 10. A rodada de 05/08/2026
+## 10. As rodadas de 05/08/2026
 
 Ela nasceu deste documento e mexeu nele — por isso está registrada aqui, e não
 só no histórico do git.
@@ -1667,6 +1674,468 @@ rotulado **`COUNTRY`**, em inglês, porque é isso que `/api/tag-namespaces`
 manda no `label`. A web mostra o mesmo. Não foi traduzido aqui de propósito —
 traduzir no cliente criaria a segunda cópia da tabela de rótulos, que é
 exatamente o que buscar o `label` do servidor evita.
+
+---
+
+## 10b. As rodadas de 06/08/2026 — o player cobra, e a ficha vira fachada
+
+Doze rodadas, e elas têm uma forma em comum que vale dizer antes: **quase nada
+aqui foi achado lendo código**. Foi o dono usando o app, uma queixa por vez, e
+cada queixa desmontando uma suposição que tinha passado por compilação, testes e
+lint. A lista de defeitos abaixo é, quase inteira, coisa que estava verde.
+
+### A primeira: o relógio do player mentia, e ninguém tinha olhado
+
+O `deslocamentoMs` existe desde 04/08 com um comentário de dez linhas explicando
+exatamente o defeito que ele evita: em HLS a sessão abre em `start=N`, então o
+segundo zero do player é o segundo N do filme. Ele era aplicado em **dois**
+lugares — a marca de progresso e a perseguição — e esquecido em todos os outros.
+
+**Fotografado**, retomando *007: A Serviço Secreto* aos 1h22 por HLS: o filme
+aparecia certo, Blofeld no chalé, e o cromo dizia **`0:43`** com «faltam
+**2:21:35**» — o filme inteiro. A janela do projetor morava na primeira célula da
+tira, e a lavagem do trecho visto media meio por cento.
+
+| | quem morde |
+|---|---|
+| o relógio e o «faltam» | contavam da sessão contra a duração do arquivo |
+| a janela na tira | primeira célula o filme todo |
+| **tocar na tira** | **o pior** — fração do filme, `seekTo` da sessão: tocar em 20% de um filme retomado em 1h19 pedia 1h47 |
+| os saltos de −10s e +30s | ✅ relativos, e relativo não se desloca |
+| a marca de progresso | ✅ |
+
+⚠️ **A prova de que era só a tela:** o servidor recebeu a posição certa o tempo
+todo. A biblioteca foi de `faltam 63min` pra `faltam 60min` enquanto o cromo
+anunciava o filme inteiro pela frente.
+
+E havia agravante de dado: um toque errado na tira pulava pro lugar errado, e a
+marca gravava **aquele** lugar. Erro de tela virando erro no banco de três
+pessoas.
+
+O conserto são duas funções com nome — `tempoDeFilme` e `tempoDeSessao` — e a
+tela convertendo **na borda**, numa linha só. Espalhar `+ deslocamentoMs` pelos
+sete pontos de uso foi o que criou o defeito da primeira vez.
+
+⚠️ **Só morde com `deslocamentoMs > 0`**, que é continuar um filme que vem por
+HLS. Em Direct Play as duas funções são a identidade — e é por isso que 109
+testes verdes e um lint limpo não pegaram nada, e por que a tira tinha sido dada
+como verificada na véspera: ela foi aberta num filme começando do zero.
+
+**Depois:** `1:20:29` · «faltam `1:01:49`», soma fechando com a duração do probe.
+
+### A segunda: o filme não parava ao voltar, e a barra de status estava no ar
+
+Duas queixas na mesma frase, e a primeira era de desenho do serviço.
+
+O `ServicoDeMidia` foi escrito pra o player **sobreviver** à tela — é o que faz a
+janelinha e os controles da tela de bloqueio existirem. Só que «a tela saiu de
+cena» tinha virado sinônimo de «continue tocando». A distinção que faltava é *por
+que* ela saiu:
+
+| | |
+|---|---|
+| janelinha, ou o app foi pro fundo | a tela continua composta, e o filme segue |
+| `voltar`, ou o botão do sistema | a tela é destruída, e o filme acaba |
+
+⚠️ **Girar não passa por aqui**, e é o `configChanges` do manifesto que garante.
+⚠️ **Quem está na TV não para** — desligar a sala porque alguém fechou a tela do
+celular seria o oposto do que a §4c promete.
+
+**Medido:** antes de voltar, `PLAYING(3)`; depois, **`NONE(0)`**, notificação de
+mídia fora.
+
+E o player era a única tela que usava a tela inteira **e ainda tinha** a hora, o
+sinal e a bateria desenhados sobre a imagem — está nas fotos da véspera: `11:40`
+sobre o rosto de quem está no quadro. Entrou o `ModoDeSala`, com
+`BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`: escondida pra sempre prenderia quem quer
+ver a hora.
+
+### A terceira: o cabeçalho do player, que o dono chamou de feio
+
+> «me dê um redesign da parte de cima do Player, o que temos hj ta mt feio»
+
+Eram **quatro blocos** empilhados à esquerda, cada um com um tamanho e nenhuma
+margem em comum: título serifado truncado, `janelinha` e `voltar` como palavras
+cruas, a pílula do plano, e noventa caracteres explicando o Cast.
+
+Três defeitos de fundo, e nenhum é gosto:
+
+- **O `voltar` era a palavra mais apagada da tela** — a ação mais usada de um
+  player, em 13sp, sem alvo próprio, no canto oposto ao polegar. Virou galo na
+  borda de entrada com 44dp.
+- **O dado menos importante era o segundo mais gritante.** `transcodificando` diz
+  respeito a uma decisão já tomada pelo servidor. Virou **lâmpada** — âmbar
+  transcodificando, verde direto —, com a palavra ao toque. A forma já existia no
+  app: é a lâmpada da marquise da cortina.
+- **A frase do Cast era a coisa mais larga da tela.** Deitada, caía sobre madeira
+  clara e sumia. O ícone nasce riscado e a frase é a resposta ao toque.
+
+⚠️ **Isso não afrouxa o §53 nem o §8b:** um ícone riscado não oferece — nega de
+cara —, e o toque responde com a frase inteira, incluindo onde se resolve. O que
+saiu foi só a permanência.
+
+⚠️ **E uma coisa que o código respondeu e mudou o desenho:** não existe ação de
+«mandar pra TV». O `EstadoDoCast` apenas *observa* uma sessão iniciada por fora.
+Um ícone de cast aceso seria um clique que não faz nada — então ele nasce **só
+quando há impedimento**.
+
+**Duas rodadas de ícone, as duas cobradas por ampliação:** na primeira os arcos do
+cast entravam por dentro do retângulo e viraram rabisco; na segunda o vão do
+riscado tinha 3,2× a barra e apagava o glifo.
+
+### A quarta: `cc` e o áudio no rodapé
+
+> «O icon de legenda tu pode colocar em baixo e mude o icon para o icon cc. Tem
+> que adicionar um icon do lado de legenda para o audio tb, alguns filmes tem
+> dual audio»
+
+Legenda e áudio respondem à **mesma** pergunta — «em que língua eu vou ver isto?».
+Separá-los, um no alto e outro em lugar nenhum, era o que fazia a legenda parecer
+prima do `voltar` e do PiP, que são navegação.
+
+⚠️ **`cc` contraria a regra 1, e é decisão do dono.** A primeira versão desenhou
+duas barras de propósito, com o argumento escrito. O contra-argumento dele é bom e
+está registrado: `cc` não se lê como palavra em lugar nenhum — se lê como símbolo,
+do mesmo jeito que `▶` não é inglês.
+
+**E um defeito que a foto pegou:** o menu de áudio abriu com a faixa chamada
+**`und`**. Não é idioma — em ISO 639 quer dizer *undetermined*, o contêiner
+declarando que não sabe. Agora `und` e vazio caem pro rótulo posicional.
+
+### A quinta: o dual audio que sumia, e por que só ele
+
+O botão de áudio não aparecia em lugar nenhum, e o dono mandou o caso: *Família de
+Aluguel*, que no Jellyfin mostra `PT-BR 5.1 Dolby Digital+` e `Inglês 5.1 AAC`.
+
+**A causa não era o app.** Perguntar ao `Player.currentTracks` sempre responde
+«uma»: ele oferece o que está na **playlist**, e em transcodificação o `ffmpeg`
+põe uma faixa só. E o filme é transcodificado porque o PT-BR é `eac3` — medi o
+emulador, e ele não tem decodificador de ac3 nem de eac3:
+
+```
+audio/mp4a-latm · audio/mpeg · audio/opus · audio/vorbis · audio/flac
+```
+
+⚠️ **Ou seja: o dual audio sumia exatamente nos arquivos que o têm.** O servidor
+mediu depois: **3.469 arquivos** do acervo com duas ou mais faixas, e o formato
+recorrente é `ac3:por | aac:eng` — o PT-BR ser ac3 é o que força o transcode que
+faz a segunda faixa desaparecer.
+
+O servidor entregou `audio_tracks[]` no plano e `audio_track=N` em `/plan` e
+`/session`. Do lado do cliente: a lista passou a vir do **plano**, e trocar refaz
+o plano e não só a sessão — porque o `mode` depende do codec da faixa escolhida.
+
+**Medido, ponta a ponta:** sem pedido, `transcodificando` e lâmpada âmbar; pedindo
+a faixa 1 (`aac:eng`), **`direto`** e lâmpada **verde**, com a posição
+atravessando a troca (`5:05` → `5:49`). Escolher a faixa inglesa removeu o único
+motivo de transcodificar.
+
+⚠️ **Em `direct_play` a faixa é reaplicada no cliente**, senão o menu mudaria o
+rótulo sem mudar uma nota: o plano novo devolve a **mesma** URL, e o player
+recarrega escolhendo a primeira sozinho.
+
+### A sexta: a reprodução morria sem dizer nada
+
+> «quando eu passo o filme pra frente clicando em um ponto avançado da timeline o
+> mesmo só trava e não funciona mais»
+
+**Não havia `Player.Listener` no app inteiro.** O `estado.erro` cobria falha ao
+*montar o plano*; tudo que quebrasse **depois** do `prepare` não tinha por onde
+aparecer.
+
+**Medido**, cortando a rede no meio do filme:
+
+| | |
+|---|---|
+| o player | `ERROR(7)` |
+| a rede voltando sozinha | continua `ERROR` |
+| apertar o play | continua `ERROR`, posição congelada |
+| a tela | título, relógio e «faltam» **como se estivesse tocando** |
+
+Duas coisas somadas, e a primeira é do Media3 e não é defeito: depois de um
+`PlaybackException` o player fica ocioso, e **`play()` não faz nada** — só
+`prepare()` levanta.
+
+Agora há um ouvinte, **uma** tentativa calada de `prepare()` — que resolve piscada
+de rede sem ninguém ver mais que um engasgo — e, no segundo erro, uma frase que
+sai do código que o Media3 afirma, com um `tentar de novo` que refaz plano e
+sessão **no ponto onde parou** (`1:28:11`, verificado).
+
+⚠️ **Um teste pagou por si aqui:** `ERROR_CODE_DECODING_FAILED` vale **4003**, e eu
+tinha mapeado o decodificador como `3000..3999` — a faixa 3000 é de *parsing*.
+Compilava, e a frase num aparelho sem decodificador seria a genérica.
+
+### A sétima: filme terminado ficava impossível de reabrir
+
+> «tentei começar o família de aluguel que tu tinha terminado, o filme abre no
+> final dele e dps aparece essa mensagem»
+
+`position_seconds` de um filme visto até o fim **é** o fim, e o app retomava lá.
+Em `direct_play` seria só esquisito; em HLS a sessão nascia sem nada pela frente e
+a reprodução morria com «este trecho não está na sessão de transcodificação».
+
+⚠️ **A régua não foi inventada.** O `Details.tsx` da web tem a linha, com o
+comentário sobre o piso:
+
+```js
+const retomando = work.position_seconds > 30 && !work.finished && restam > 60;
+```
+
+O `ObraDetalhada` **já recebia `finished`** do servidor, e o app inteiro ignorava.
+Virou uma função só — `ondeContinuar` —, usada pela ficha e pelos baixados, e o
+rótulo do botão sai da **mesma** função que decide a posição.
+
+⚠️ **E um teste cobrou outro erro meu:** `duration_seconds` chega **zerado** em
+arquivo sem probe, e sem tratar zero como ausente a conta `0 − 3401 ≤ 60` mandava
+pro começo *todo* filme não medido.
+
+**Um pedaço ficou do lado do servidor**, e ele fechou depois: o `finished` era
+grudento — a posição gravava, mas a obra nunca voltava a poder ser continuada. O
+`RESTART_RATIO` de 5% resolveu, e o app não precisou de uma linha: ele já
+escrevia o heartbeat e já honrava o campo. **Verificado:** `assistir` → tocar 54s
+do começo → **`continuar`**, e a obra de volta à fileira.
+
+⚠️ **E um erro de diagnóstico meu, registrado porque é instrutivo:** eu afirmei que
+a posição não estava sendo gravada, com base na barra de progresso do cartão não
+se mover. Estava sendo gravada — o que eu li era **a lista em cache**, carregada
+antes da reprodução, e o app não a refaz.
+
+### A oitava: a sessão de HLS não tinha dono
+
+> «aperta assistir no família de aluguel que já tá aberto e o mesmo continua em um
+> ponto avançado (…) se continuar indo e voltando tu vai ver que o filme avança
+> bastante»
+
+**Medido**, abrindo o mesmo filme quatro vezes com ~17 segundos de relógio entre
+uma e outra:
+
+| abertura | posição |
+|---|---|
+| 1 | `0:13` |
+| 2 | `11:02` |
+| 3 | `20:24` |
+| 4 | `27:35` |
+
+Não era o filme avançando — era a **borda viva** da playlist. O
+`viewModel(key = "player:…")` do `AppOdeon` é do escopo da **atividade**, não da
+rota: sair do player não limpa o modelo, ele fica guardado com a URL da sessão
+anterior dentro, e aquela sessão continua sendo escrita pelo ffmpeg. Reabrir uma
+playlist sem `ENDLIST` faz o ExoPlayer entrar na borda dela.
+
+⚠️ **E o mesmo escopo era um vazamento de ffmpeg.** O `onCleared` só roda quando a
+atividade morre, então cada filme aberto deixava uma sessão viva no
+`serious-server` até o app ser fechado. **É a hipótese que o comentário da
+`sessaoAberta` registrava sem conseguir provar** — a que explicava o mesmo arquivo
+devolvendo `direto` numa execução e `transcodificando` na outra, com capacidades
+idênticas.
+
+Trocar o escopo mexeria na navegação inteira. A tela passou a declarar as duas
+pontas: `garantirPreparado` ao entrar, `encerrar` ao sair.
+
+### A nona: o salto que congelava, e por que só num filme
+
+> «no família de aluguel se eu tento dar um avanço clicando na timeline o mesmo só
+> trava e não funciona mais»
+
+Em HLS a playlist só contém o trecho entre o `start` da sessão e o ponto a que a
+transcodificação chegou. Pedir fora disso **não dá erro**: o ExoPlayer espera.
+**Medido**, saltando de `47:20` pra `1:32:52`: `BUFFERING`, e ficou. Destravou
+sozinho depois de ~15s, quando o ffmpeg alcançou — o que é sorte, não desenho.
+
+⚠️ **E o conserto da oitava rodada tornou isto visível antes de melhorar.**
+Enquanto as sessões ficavam abandonadas, o ffmpeg seguia transcodificando em
+segundo plano e a playlist ficava minutos à frente — o que fazia o salto funcionar
+por acidente. Fechar a sessão ao sair tirou esse colchão.
+
+⚠️ **E é a resposta do «por que só o Família de Aluguel»:** ele era o único
+`transcodificando` dos que o dono testou. Os outros são `direto`, onde o arquivo
+inteiro está no aparelho e todo instante existe. A transcodificação anda a ~**35×**
+o tempo real neste servidor — medido nas quatro reaberturas —, então uma sessão
+com 30s de vida tem uns 17 minutos escritos: clicar dentro deles funciona, além
+deles congela.
+
+Agora salto pra fora da sessão vira **sessão nova naquele ponto**. Quem diz o que
+a sessão tem é o `Player.duration` — justamente o número que a timeline não usa
+porque mente durante a transcodificação. Inútil como denominador, exato como «até
+onde dá».
+
+E isso resolve a outra ponta de graça: o `tempoDeSessao` documentava que rebobinar
+antes do início da sessão parava no começo dela, porque «voltar de verdade exigiria
+abrir outra sessão». Exigia — e agora existe.
+
+**Medido:** `0:12` → `1:33:09` e `1:33:09` → `22:09`, os dois tocando em 3s, sem
+passar por `BUFFERING`.
+
+### A décima: a cortina que reabria, e a legenda que caía junto
+
+> «pq no família de aluguel quando eu clico avanço na timeline o mesmo abre as
+> cortinas novamente? no guns akimbo e em outros não aparece»
+
+Refazer a sessão desmonta e remonta o `Reprodutor`, e ele levava junto o
+`remember` que guardava «a cortina já abriu». O comentário dela sempre disse a
+intenção certa — «acontece uma vez só na vida **desta tela**» — mas o estado morava
+na vida da **fonte**, e a distinção não custava nada enquanto a fonte nunca trocava
+no meio de uma visita.
+
+Conferindo o que mais caía junto apareceu coisa pior: com `PT-BR FULL` no ar, um
+salto devolvia o menu marcando **`sem legenda`** — e não era só o rótulo, a faixa
+sumia, porque o `MediaItem` novo traz outros `TrackGroup`s e o override antigo não
+casa com nenhum.
+
+Cortina que reabre é feio; **legenda que cai sozinha é a pessoa perdendo uma
+escolha sem ninguém dizer nada**. As duas subiram pro `TelaDoPlayer`, e a legenda é
+reaplicada no `onTracksChanged` — o único momento em que dá, porque um override
+aponta pra um grupo *daquela* fonte.
+
+⚠️ **Anotado e não consertado:** o menu de legendas deste filme tem 16+ faixas e é
+uma coluna sem rolagem — medido de `y 37` a `y 1080`, com a última entrada cortada
+na borda. As faixas existem, aparecem, e não dá pra chegar nelas.
+
+### A décima primeira: o progresso que oscilava, e o piso do «teco»
+
+> «tem hora que o botão volta como assistir (…) tem hora que ele aparece continuar
+> e funciona tranquilo»
+
+**Duas causas somadas.**
+
+Sair do player dispara a marca de `abandon` e a releitura da ficha **no mesmo
+instante**, e quem chega primeiro ao servidor é sorteio. Quando a leitura ganhava,
+o botão saía do dado **anterior** à sessão que acabou de acontecer. Agora o player
+anota a posição a cada 200ms e o `voltar` leva o número junto como **dica** — não
+há releitura mais fresca que o que o app viu com os próprios olhos.
+
+⚠️ **A segunda era minha:** ao refazer a sessão eu zerava o `deslocamentoMs`
+**antes** de o `Reprodutor` desmontar, e o desmonte grava uma marca convertendo com
+o deslocamento que estiver no estado. Zerado, tempo de sessão virava tempo de
+filme: posição errada no banco a cada salto que refazia sessão.
+
+E uma regra nova, ditada pelo dono:
+
+> «Ao iniciar um filme a pessoa pode assistir um teco e voltar, isso já deve salvar
+> o progresso dela.»
+
+O piso de «começou» caiu de **30s pra 5s**. Com 30, um teco de quinze segundos era
+salvo no servidor e **ignorado pelo botão**. Os 5 que sobram separam só o toque
+acidental.
+
+⚠️ **Diverge da web e do `/api/continue` de propósito**, e fica registrado: a
+fileira do servidor ainda considera «começou» a partir de 30s, então um teco de 15s
+retoma pela ficha mas não aparece na fileira. **Alinhar é pedido pro
+`serious-server`.**
+
+**Medido:** três voltas seguidas, três `continuar`, posição batendo (`1:04:50` →
+`1:04:51`), sem a deriva de dez minutos por volta.
+
+### A décima segunda: a ficha vira fachada
+
+> «Quero um redesign dessa tela, tá absurdamente simples, feia. Gosto de coisas
+> experimentais, com animação, luzes, algo que lembre odeon»
+
+Era pôster à esquerda, quatro linhas de metadado à direita, sinopse, pílulas e um
+botão. **A única tela do app que não sabia que o app é um cinema:** o player tinha
+cortina, película e facho; a locadora tinha caixa, cinta e estante; a ficha tinha
+um formulário.
+
+Foram desenhadas **dez direções** e mostradas ao dono. Ele escolheu duas — a
+**marquise** e o **varal** — e pediu o misto. As duas viraram uma só, e a costura
+não é decorativa: **o fio sai dos cantos de baixo do letreiro** e verga com o peso
+das fotos. É o que os cinemas de rua faziam — o letreiro em cima, as fotos de cena
+na vitrine embaixo. Empilhar as duas seria pôr dois enfeites na mesma tela.
+
+| | |
+|---|---|
+| a marquise | letreiro serifado com 14 lâmpadas, e o selo do plano **dentro** dele |
+| o varal | três cenas reais penduradas por prendedores, com o fio vergando |
+| o bilhete | o «continuar» como ingresso picotado, com o canhoto dizendo de onde parou |
+| os canhotos | baixar e pegar a fita, como talões arrancados do bilhete |
+
+As lâmpadas acendem com a **mesma curva de `keyframes` da cortina** do player, e
+depois respiram — **cada bulbo com seu desvio**, porque letreiro em que todas as
+lâmpadas fazem a mesma coisa ao mesmo tempo é um retângulo que pisca. As fotos caem
+com `spring` de amortecimento baixo e balançam até assentar, e a rotação nasce **no
+prendedor**, que é por onde elas estão presas.
+
+⚠️ **E o varal é navegação, não enfeite.** Cada foto é uma cena real de
+`GET /api/works/{obra}/cenas` — a mesma rota que enche a tira do player — e tocar
+numa abre o filme naquele minuto: **`CENA 07` levou a `55:10`**, verificado. As três
+são espalhadas pelo filme, e não as três primeiras: essas são sempre logo de
+distribuidora, plano de estabelecimento e primeira fala.
+
+Sem cenas, o varal não nasce — nem fio, nem espaço vazio. §24 e §53 juntos: um fio
+pendurado sem fotos prometeria uma navegação que não existe.
+
+⚠️ **Entraram três cores no tema** — `papel`, `tintaDoPapel`, `tintaDoBilhete`. Não
+é «tema claro», e não deve haver um: a sala é escura por decisão, e clarear a
+interface desfaria o facho, a cortina e a lâmpada do plano de uma vez. Elas existem
+só onde a tela desenha **um objeto de papel**, e o branco é sujo de propósito
+(`F2ECE0`) porque branco puro no meio de tela escura vira buraco de luz em vez de
+objeto.
+
+**E os dois botões do rodapé ficaram pra trás na primeira entrega** — «você esqueceu
+de atualizar esses dois tb». Eram a tela velha sobrevivendo embaixo: dois
+`TextButton` de cinza apagado, empilhados. Viraram canhotos vazados, lado a lado,
+com o picote na borda de cima dizendo de onde foram arrancados. **Vazados onde o
+bilhete é cheio**, porque baixar é a exceção e dar a eles o mesmo peso faria a tela
+perguntar uma coisa que já estava respondida.
+
+### O botão de girar, no cabeçalho do player
+
+Pedido à parte, e pequeno: um botão que trava a orientação, à esquerda da
+janelinha. O ícone mostra o **destino** e não o estado — deitado desenha uma tela
+em pé, e vice-versa —, que é a mesma régua dos arcos de `10` e `30`.
+
+⚠️ **O `ModoDeSala` devolve a orientação ao sair**, junto com as barras. Sem isso a
+trava vazaria pro app inteiro: a biblioteca ficaria deitada porque alguém quis ver
+um filme deitado, e a única saída seria fechar o app. Devolve como `UNSPECIFIED` —
+o **não pedido** —, pra valer a trava de rotação da própria pessoa.
+
+### O que a foto pegou, e o código não
+
+É a lição do §1 do `CONTINUAR-ANDROID.md` cobrada mais uma vez, e vale a lista
+porque **todos passaram por compilação, 144 testes e lint limpo**:
+
+1. **Um `padding` negativo derrubou o app** na primeira abertura da ficha
+   redesenhada. O Compose recusa em tempo de execução com «Padding must be
+   non-negative» — é `offset`.
+2. **O selo do plano cobria oito bulbos** da marquise. A causa era sutil: o
+   `padding` estava no `Box`, e padding encolhe a **área de conteúdo** — que é onde
+   o `align` das lâmpadas mira. Elas deixavam de morar na borda do cartão.
+3. **O fio do varal sumia**, por ser o cinza de divisória sobre preto.
+4. **O ícone de girar precisou de duas rodadas** até o arco parar de parecer um
+   gancho solto pendurado num retângulo.
+5. **O ícone de cast precisou de duas**, pelo mesmo motivo.
+6. **O relógio do player mentia** desde a véspera, com a tira apontando pra célula
+   errada.
+
+### O que ficou aberto, e é decisão do dono
+
+| | |
+|---|---|
+| **o menu de legendas sem rolagem** | 16+ faixas, as de baixo inalcançáveis |
+| **os saltos de 10s não acumulam** | trinta toques seguidos andaram 6 segundos: cada `seekTo` em HLS ainda buferiza quando o próximo chega |
+| **o piso de 30s do `/api/continue`** | pedido pro servidor: um teco de 15s retoma pela ficha e não aparece na fileira |
+| **o rótulo de áudio repete os canais** | `PT-BR 5.1 (5.1)` — é do servidor, e o `label` não se reescreve aqui |
+| **faixa dupla de áudio nunca foi vista em `direct_play`** | o glifo e o menu estão fotografados, mas com o limiar baixado numa build descartável; num celular que decodifique eac3 o caso aparece sozinho |
+| os quatro de antes | o borrão do «foco», a recuperação do token 401, a insígnia que rouba o toque, o botão de gerar sprites |
+
+### O que foi escrito no acervo
+
+Tudo na conta do `sam`, e quase tudo em **um** filme — *Família de Aluguel* virou o
+banco de provas do dia:
+
+- ele **não tinha marca nenhuma** antes de 06/08. A marca existe porque eu abri o
+  filme pra ver as faixas de áudio, e depois ficou sendo o único transcodificado à
+  mão pra reproduzir os defeitos de sessão. Terminou em **~55min**, com o `finished`
+  ligado e desligado no meio do caminho;
+- *Armas em Jogo* saiu de `faltam 40min` pra **38min**, e a deriva é de restaurações
+  feitas na mão depois da falha de retomada;
+- *007: A Serviço Secreto* saiu de `faltam 63min` pra **58min**;
+- o exemplar `direto` do *007* e o *Cassino Royale* foram abertos por engano ao
+  procurar o transcodificado, e ganharam marca.
+
+⚠️ **Três minutos da deriva do 007 são meus e não do teste:** toques às cegas no
+emulador caíram na tira e jogaram o filme pra `1:59`. Devolvi na hora, mas as
+tentativas de reencostar no número original são elas mesmas escritas.
 
 ---
 

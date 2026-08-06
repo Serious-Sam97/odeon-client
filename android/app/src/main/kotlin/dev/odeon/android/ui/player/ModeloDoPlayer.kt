@@ -417,6 +417,40 @@ class ModeloDoPlayer(
     @Volatile
     private var sessaoAberta: String? = null
 
+    /// Onde o filme está, **agora**, em milissegundos de filme.
+    ///
+    /// ## ⚠️ Existe porque a ficha corria contra a marca de `abandon`
+    ///
+    /// > «tem hora que o botão volta como assistir (…) tem hora que ele aparece
+    /// > continuar e funciona tranquilo»
+    ///
+    /// Sair do player dispara duas requisições no mesmo instante: a marca de
+    /// `abandon` (escrita) e a releitura da ficha (leitura). Quem chega primeiro
+    /// ao servidor é sorteio — e quando a leitura ganha, o botão sai do dado
+    /// **anterior** à sessão que acabou de acontecer. Era exatamente o «tem
+    /// hora».
+    ///
+    /// A saída é não reperguntar o que o app acabou de ver: a tela anota aqui a
+    /// posição a cada batida de relógio (200ms), e o `voltarPraFicha` leva o
+    /// valor junto como **dica**. A ficha continua relendo o servidor — a dica só
+    /// cobre a janela em que a releitura ainda pode estar velha.
+    @Volatile
+    var ultimaPosicaoNoFilmeMs: Long? = null
+        private set
+
+    fun anotarPosicao(posicaoDoFilmeMs: Long) {
+        if (posicaoDoFilmeMs > 0) ultimaPosicaoNoFilmeMs = posicaoDoFilmeMs
+    }
+
+    /// Se há um `preparar` voando agora.
+    ///
+    /// ⚠️ Separado do `estado.preparando` de propósito: aquele é o que a **tela**
+    /// desenha, e o [encerrar] o deixa ligado entre visitas justamente pra não
+    /// piscar erro. Se a guarda de reentrada lesse ele, `garantirPreparado`
+    /// nunca rodaria. Este diz só uma coisa: já há requisição no ar.
+    @Volatile
+    private var preparoEmCurso = false
+
     private val _estado = MutableStateFlow(
         EstadoDoPlayer(
             arquivoId = arquivoId,
@@ -431,6 +465,77 @@ class ModeloDoPlayer(
     init {
         preparar(paraCast = false)
         pedirFolhaDeSprites()
+    }
+
+    /// ## ⚠️ Este modelo vive mais que a tela, e é daí que vinha o defeito
+    ///
+    /// > «aperta assistir (no família de aluguel que já tá aberto por exemplo) o
+    /// > mesmo continua em um ponto avançado (…) se continuar indo e voltando tu
+    /// > vai ver que o filme avança bastante»
+    ///
+    /// **Medido em 06/08/2026**, abrindo o mesmo filme quatro vezes seguidas com
+    /// ~17 segundos de relógio entre uma e outra:
+    ///
+    /// | abertura | posição |
+    /// |---|---|
+    /// | 1 | `0:13` |
+    /// | 2 | `11:02` |
+    /// | 3 | `20:24` |
+    /// | 4 | `27:35` |
+    ///
+    /// A causa é o `viewModel(key = "player:…")` do `AppOdeon`: o dono do escopo
+    /// é a **atividade**, não a rota. Sair do player não limpa o modelo — ele
+    /// fica guardado, com a URL da sessão de HLS anterior dentro. E aquela sessão
+    /// **continua sendo escrita**: o `ffmpeg` do servidor segue transcodificando
+    /// pro fim do arquivo. Reabrir uma playlist sem `ENDLIST` faz o ExoPlayer
+    /// entrar na **borda viva** dela — que a cada volta está dez minutos à
+    /// frente. Daí o filme "avançar bastante".
+    ///
+    /// ⚠️ **E o mesmo escopo era um vazamento de ffmpeg.** O `onCleared` só roda
+    /// quando a atividade morre, então cada filme aberto deixava uma sessão viva
+    /// no `serious-server` até o app ser fechado. Abrir cinco filmes numa tarde
+    /// deixava cinco. É exatamente a hipótese que o comentário da `sessaoAberta`
+    /// registrava sem provar: «se o servidor considera uma sessão já aberta ao
+    /// montar o plano, sessões abandonadas por mim é o que faria a resposta
+    /// oscilar sem nada ter mudado do lado de cá».
+    ///
+    /// ## O conserto é a tela mandar, e não o escopo
+    ///
+    /// Trocar o escopo do `viewModel` seria mexer na navegação inteira, que é de
+    /// outra tela e de outra rodada. Aqui a tela passa a declarar as duas pontas:
+    /// [encerrar] ao sair, [garantirPreparado] ao entrar. O modelo continua
+    /// guardado — e passa a estar **vazio** entre uma visita e outra, que é a
+    /// única coisa que importava.
+    fun encerrar() {
+        encerrarSessaoAberta()
+        /// ⚠️ **`preparando = true`, e não `false`.** Entre uma visita e outra o
+        /// estado certo é "carregando", não "vazio": o `TelaDoPlayer` mostra a
+        /// tela de erro quando `url` é nula e nada está em curso, e reentrar
+        /// piscaria «não deu pra preparar a reprodução» por um quadro antes de o
+        /// efeito de entrada rodar. Quem destrava de verdade é o
+        /// `preparoEmCurso`, abaixo.
+        _estado.update { it.copy(url = null, preparando = true, erro = null) }
+    }
+
+    /// Prepara de novo quando a tela volta e não há fonte no ar.
+    ///
+    /// `ondeParou` vem **fresco da ficha**, e não do que este modelo lembrava: é
+    /// ela que aplica o `ondeContinuar`, e é ela que sabe se o filme terminou
+    /// desde a última visita. O valor guardado aqui tem a idade da primeira
+    /// abertura.
+    ///
+    /// ⚠️ Não faz nada quando já há URL ou quando um preparo está em curso — a
+    /// primeira entrada é servida pelo `init`, e chamar duas vezes abriria duas
+    /// sessões pro mesmo filme.
+    fun garantirPreparado(ondeParou: Double) {
+        val agora = _estado.value
+        if (agora.url != null || preparoEmCurso) return
+        val alvo = (ondeParou * 1000).toLong()
+        anotarPosicao(alvo)
+        /// Sem zerar o `deslocamentoMs` — quem o define é o `preparar`, ramo a
+        /// ramo, pelo motivo escrito no `reabrir`.
+        _estado.update { it.copy(comecarEm = alvo) }
+        preparar(paraCast = agora.paraCast)
     }
 
     /// As legendas que este player consegue mostrar.
@@ -519,8 +624,15 @@ class ModeloDoPlayer(
     /// só apareceu porque a falha ia pro log. Ver `RepositorioOdeon.marcarProgresso`.
     fun marcar(posicaoDoPlayerMs: Long, duracaoDoPlayerMs: Long, tipo: String) {
         /// Tempo de **arquivo**, não tempo de sessão. Ver `deslocamentoMs`.
-        val posicaoMs = posicaoDoPlayerMs + _estado.value.deslocamentoMs
+        marcarNoFilme(posicaoDoPlayerMs + _estado.value.deslocamentoMs, duracaoDoPlayerMs, tipo)
+    }
+
+    /// A mesma marca, já em tempo de **filme** — pra quem não passou pelo player.
+    /// O `reabrir` usa: no instante do salto o alvo é conhecido em tempo de
+    /// filme, e o deslocamento em vigor ainda é o da sessão que está morrendo.
+    private fun marcarNoFilme(posicaoMs: Long, duracaoDoPlayerMs: Long, tipo: String) {
         if (posicaoMs <= 0) return
+        anotarPosicao(posicaoMs)
         /// ⚠️ A duração que sobe é a **conhecida**, não a do player. Ver o campo
         /// `duracaoConhecidaMs` pro que a do player grava no banco quando a
         /// fonte é HLS em geração.
@@ -575,15 +687,72 @@ class ModeloDoPlayer(
     /// `transcodificando` sem nada ter mudado do lado de cá.
     fun trocarFaixaDeAudio(indice: Int, posicaoDoFilmeMs: Long) {
         if (indice == _estado.value.faixaDeAudioEmUso) return
+        reabrir(posicaoDoFilmeMs, faixaDeAudio = indice)
+    }
+
+    /// Refaz a sessão **num ponto do filme que a atual não alcança**.
+    ///
+    /// ## ⚠️ O defeito: o salto que congelava
+    ///
+    /// > «no família de aluguel se eu tento dar um avanço clicando na timeline o
+    /// > mesmo só trava e não funciona mais»
+    ///
+    /// Medido em 06/08/2026, saltando de `47:20` pra `1:32:52` num filme
+    /// transcodificado: o player entrou em **`BUFFERING`** e ficou. Não é erro —
+    /// e é por isso que o `Player.Listener` desta rodada não pegava: não há
+    /// exceção nenhuma. O `ffmpeg` escreve a playlist do começo ao fim, e o
+    /// ExoPlayer estava simplesmente esperando um segmento que ainda não existia.
+    ///
+    /// Neste emulador ele destravou sozinho depois de ~15s, quando a
+    /// transcodificação alcançou o ponto. **Isso é sorte, não desenho:** depende
+    /// de quão longe se salta e de quão rápido o servidor transcodifica. Num
+    /// salto maior, ou num servidor ocupado, a espera é de minutos — e do lado de
+    /// quem assiste isso é indistinguível de travar.
+    ///
+    /// ## E ele resolve o outro lado também
+    ///
+    /// O `tempoDeSessao` documentava um limite: rebobinar antes do ponto onde a
+    /// sessão começou parava no começo dela, porque «voltar de verdade exigiria
+    /// abrir outra sessão». Exigia — e agora existe. Salto pra trás do início e
+    /// salto pra frente do fim são o mesmo caso: **fora da sessão**.
+    ///
+    /// A faixa de áudio em uso viaja junto, senão pular no tempo desfaria a
+    /// escolha de língua de quem estava assistindo dublado.
+    fun reabrirEm(posicaoDoFilmeMs: Long) {
+        reabrir(posicaoDoFilmeMs, faixaDeAudio = _estado.value.faixaDeAudioEmUso)
+    }
+
+    private fun reabrir(posicaoDoFilmeMs: Long, faixaDeAudio: Int?) {
         encerrarSessaoAberta()
+        val alvo = posicaoDoFilmeMs.coerceAtLeast(0)
+        /// A marca de `seek` sobe já, como a web faz no `onSeeked` — sem ela,
+        /// sair do filme enquanto a sessão nova ainda monta deixaria no banco a
+        /// posição de **antes** do salto.
+        marcarNoFilme(alvo, 0L, "seek")
         _estado.update {
             it.copy(
-                comecarEm = posicaoDoFilmeMs.coerceAtLeast(0),
-                deslocamentoMs = 0L,
+                comecarEm = alvo,
+                /// ## ⚠️ O deslocamento fica — e zerá-lo aqui era um defeito
+                ///
+                /// Zerar o `deslocamentoMs` neste update parecia arrumação. Só que
+                /// pôr `url = null` **desmonta o `Reprodutor`**, e o desmonte
+                /// dispara a marca de `abandon` com a posição da sessão que está
+                /// morrendo — convertida com o deslocamento que estiver no
+                /// estado. Zerado, tempo de sessão virava tempo de filme: uma
+                /// posição errada, às vezes minúscula, gravada no banco a cada
+                /// salto que refazia sessão. Era metade do «tem hora que volta
+                /// como assistir».
+                ///
+                /// Quem zera é o `preparar`, ramo a ramo, quando a fonte nova
+                /// existe de verdade.
                 url = null,
+                /// «Carregando», e não «vazio» — o mesmo motivo do [encerrar]: com
+                /// `false` a tela pisca o ramo de erro entre uma sessão e outra.
+                preparando = true,
+                erro = null,
             )
         }
-        preparar(paraCast = _estado.value.paraCast, faixaDeAudio = indice)
+        preparar(paraCast = _estado.value.paraCast, faixaDeAudio = faixaDeAudio)
     }
 
     private fun encerrarSessaoAberta() {
@@ -593,6 +762,7 @@ class ModeloDoPlayer(
     }
 
     private fun preparar(paraCast: Boolean, faixaDeAudio: Int? = null) {
+        preparoEmCurso = true
         viewModelScope.launch {
             _estado.update { it.copy(preparando = true, erro = null, paraCast = paraCast) }
             try {
@@ -617,7 +787,18 @@ class ModeloDoPlayer(
                     val url = odeon.urlDeMidia(plano.urlDireta)
                         ?: error("plano direto sem URL")
                     _estado.update {
-                        it.copy(preparando = false, url = url, eHls = false, plano = plano)
+                        it.copy(
+                            preparando = false,
+                            url = url,
+                            eHls = false,
+                            plano = plano,
+                            /// Arquivo direto não tem sessão, logo não tem
+                            /// deslocamento. Dito aqui porque o valor anterior
+                            /// pode ser o de uma sessão de HLS que acabou de
+                            /// morrer num `reabrir` — herdá-lo somaria o começo
+                            /// da sessão velha a toda marca de progresso.
+                            deslocamentoMs = 0L,
+                        )
                     }
                 } else {
                     /// Remux ou transcodificação: quem serve é uma sessão de HLS,
@@ -655,6 +836,12 @@ class ModeloDoPlayer(
                 _estado.update {
                     it.copy(preparando = false, erro = e.message ?: "não deu pra preparar a reprodução")
                 }
+            } finally {
+                /// ⚠️ No `finally`, e não no fim do `try`: se o plano estourar, a
+                /// bandeira ficaria ligada pra sempre e o `garantirPreparado`
+                /// nunca mais rodaria — o filme ficaria travado na tela de erro
+                /// mesmo depois de voltar e entrar de novo.
+                preparoEmCurso = false
             }
         }
     }

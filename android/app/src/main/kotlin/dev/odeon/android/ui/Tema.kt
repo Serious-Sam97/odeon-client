@@ -45,6 +45,24 @@ object Cores {
     val perigo = Color(0xFFFF6B6B)
     val certo = Color(0xFF4ADE80)
 
+    /// ## O papel, e as duas tintas que vivem sobre superfície clara
+    ///
+    /// Este app é escuro do começo ao fim, e estas três cores são a exceção —
+    /// elas existem só onde a tela desenha **um objeto de papel**: a foto de cena
+    /// pendurada no varal da ficha, e o bilhete do «continuar».
+    ///
+    /// ⚠️ **Não são «o tema claro».** Não há tema claro aqui, e nem deve haver:
+    /// a sala é escura por decisão, e clarear a interface inteira desfaria o
+    /// facho, a cortina e a lâmpada do plano de uma vez. O que estas cores dizem
+    /// é outra coisa — que naquele retângulo há papel, e papel não é preto.
+    ///
+    /// O branco é sujo de propósito (`F2ECE0`, não `FFFFFF`): foto revelada e
+    /// ingresso de bilheteria amarelam, e um branco puro no meio de uma tela
+    /// escura vira um buraco de luz em vez de um objeto.
+    val papel = Color(0xFFF2ECE0)
+    val tintaDoPapel = Color(0xFF5C5548)
+    val tintaDoBilhete = Color(0xFF241A09)
+
     /// ⚠️ **O vermelho da cortina é matéria, não significado.**
     ///
     /// O app já tem um vermelho — o `perigo` —, e ele é **semântico**: quer

@@ -306,9 +306,9 @@ data class ObraDetalhada(
 /// na sessão de transcodificação». Um filme terminado ficava, na prática,
 /// impossível de reassistir.
 ///
-/// ## As três condições são da web, e não foram inventadas aqui
+/// ## As três condições, e de onde cada uma vem
 ///
-/// O `Details.tsx` tem a mesma linha, com o mesmo comentário sobre o piso:
+/// A forma é a do `Details.tsx` da web:
 ///
 /// ```js
 /// const retomando = work.position_seconds > 30 && !work.finished && restam > 60;
@@ -316,20 +316,28 @@ data class ObraDetalhada(
 ///
 /// | | por quê |
 /// |---|---|
-/// | `> 30` | é o piso que o `/api/continue` usa pra decidir o que "começou" |
+/// | `> 5` | **decisão do dono, 06/08/2026** — ver abaixo |
 /// | `!finished` | o veredito é do **servidor**, e é o mesmo que tira a obra da fileira de continuar |
 /// | `restam > 60` | pega o filme parado a 99% que o servidor ainda não marcou |
 ///
-/// A terceira é a que resolve o caso de borda sem inventar limiar novo: mesmo
-/// que `finished` não venha, um minuto de filme pela frente é pouco pra chamar
-/// de "continuar" — e é pouco demais pra uma sessão de transcodificação existir.
+/// ## ⚠️ O piso era 30s, como o da web, e o dono o derrubou
 ///
-/// ⚠️ **Escrever aqui um limiar próprio seria a terceira redação da mesma regra**
-/// entre web, Android e servidor. É a mesma armadilha do `label` das legendas e
-/// do `reasons` do plano, e por isso os dois números vêm de lá.
+/// > «Ao iniciar um filme a pessoa pode assistir um teco e voltar, isso já deve
+/// > salvar o progresso dela.»
+///
+/// Com 30s, um teco de quinze segundos era salvo no servidor e **ignorado pelo
+/// botão**: a ficha dizia `assistir` e recomeçava do zero. A regra dele é que
+/// teco conta. Os 5s que sobram separam só o toque acidental — abrir e fechar —
+/// de assistir de verdade, e retomar aos 4s é indistinguível de começar do zero
+/// de qualquer jeito.
+///
+/// ⚠️ **Isso diverge da web e do `/api/continue` de propósito**, e fica
+/// registrado: a fileira de continuar do servidor ainda considera "começou" a
+/// partir de 30s, então um teco de 15s retoma pela ficha mas não aparece na
+/// fileira. Alinhar os dois é pedido pro `serious-server`.
 fun ondeContinuar(ondeParou: Double, duracaoEmSegundos: Double?, finished: Boolean): Double {
     if (finished) return 0.0
-    if (ondeParou <= 30) return 0.0
+    if (ondeParou <= 5) return 0.0
     /// Sem duração não dá pra saber quanto falta — e aí a decisão é retomar, que
     /// é o que o app fazia antes desta função existir. Recusar por falta de
     /// informação jogaria fora a posição de quem está no meio de um filme cuja

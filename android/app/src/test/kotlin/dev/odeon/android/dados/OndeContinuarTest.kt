@@ -45,13 +45,17 @@ class OndeContinuarTest {
 
     // ---- o piso de baixo ------------------------------------------------------
 
-    /// 30s é o que o `/api/continue` chama de "começou". Abaixo disso ninguém
-    /// começou nada — foi um toque errado, ou a vinheta.
+    /// ⚠️ **5s, e não os 30 da web — decisão do dono**: «assistir um teco e
+    /// voltar já deve salvar o progresso». O que sobra de piso separa o toque
+    /// acidental de assistir de verdade. Este teste prende a fronteira nova; o
+    /// registro da divergência está na própria função.
     @Test
-    fun `os primeiros trinta segundos nao contam como comecar`() {
+    fun `um teco conta, so o toque acidental nao`() {
         assertEquals(0.0, ondeContinuar(0.0, duracao, finished = false), 0.001)
-        assertEquals(0.0, ondeContinuar(30.0, duracao, finished = false), 0.001)
-        assertEquals(31.0, ondeContinuar(31.0, duracao, finished = false), 0.001)
+        assertEquals(0.0, ondeContinuar(5.0, duracao, finished = false), 0.001)
+        assertEquals(6.0, ondeContinuar(6.0, duracao, finished = false), 0.001)
+        /// O teco do relato: quinze segundos retomam.
+        assertEquals(15.0, ondeContinuar(15.0, duracao, finished = false), 0.001)
     }
 
     // ---- o piso de cima, que é o que o relato expôs ---------------------------
@@ -89,8 +93,9 @@ class OndeContinuarTest {
 
     /// Mas o piso de baixo continua valendo sem duração: ele não depende dela.
     @Test
-    fun `sem duracao o piso de trinta segundos continua de pe`() {
-        assertEquals(0.0, ondeContinuar(12.0, null, finished = false), 0.001)
+    fun `sem duracao o piso do toque acidental continua de pe`() {
+        assertEquals(0.0, ondeContinuar(4.0, null, finished = false), 0.001)
+        assertEquals(12.0, ondeContinuar(12.0, null, finished = false), 0.001)
     }
 
     /// E `finished` continua ganhando de tudo, inclusive da falta de duração.

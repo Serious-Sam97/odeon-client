@@ -108,7 +108,16 @@ import dev.odeon.android.widget.WidgetDeContinuar
 private sealed interface Onde {
     data object Decidindo : Onde
     data object Login : Onde
-    data class Ficha(val obraId: String) : Onde
+    data class Ficha(
+        val obraId: String,
+        /// Onde o filme está, **segundo o player que acabou de fechar** — em
+        /// segundos de filme. Só vem preenchida ao voltar do player, e existe
+        /// porque a releitura da ficha corre contra a marca de `abandon`: as
+        /// duas requisições saem no mesmo instante, e quando a leitura ganha a
+        /// corrida o botão sairia do dado velho. Ver
+        /// `ModeloDoPlayer.ultimaPosicaoNoFilmeMs`.
+        val dicaDeOndeParou: Double? = null,
+    ) : Onde
     /// As quatro que são **aba**, e não tela empilhada.
     ///
     /// A distinção não é decorativa: quem está nesta lista aparece na barra de
@@ -690,6 +699,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     Box(Modifier.fillMaxSize()) {
                         TelaDaObra(
                             modelo = modelo,
+                            dicaDeOndeParou = alvo.dicaDeOndeParou,
                             moldura = molduraDoCartaz,
                             aoVoltar = { onde = Onde.Biblioteca },
                             aoBaixar = { arquivoId -> app.baixarArquivo(arquivoId, alvo.obraId) },
@@ -716,20 +726,34 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     /// obra, com a sinopse, as versões e o botão que agora diz
                     /// "continuar". Quem fecha um filme quase sempre quer
                     /// exatamente aquela tela — foi de lá que veio.
-                    val voltarPraFicha = {
-                        voltasDoPlayer++
-                        onde = Onde.Ficha(alvo.obraId)
-                    }
                     val modelo: ModeloDoPlayer = viewModel(
                         key = "player:${alvo.arquivoId}",
                         factory = fabricaDoPlayer(app.odeon, alvo, app.barramento),
                     )
+                    val voltarPraFicha = {
+                        voltasDoPlayer++
+                        onde = Onde.Ficha(
+                            alvo.obraId,
+                            /// A posição que o player conhece **agora**, pra ficha
+                            /// não depender de ganhar a corrida contra a marca de
+                            /// `abandon`. Ver o campo em `Onde.Ficha`.
+                            dicaDeOndeParou = modelo.ultimaPosicaoNoFilmeMs?.let { it / 1000.0 },
+                        )
+                    }
                     BackHandler(onBack = voltarPraFicha)
                     /// **Sem `safeDrawingPadding` aqui**, e é de propósito: o
                     /// vídeo usa a tela inteira, entalhe e barras incluídos.
                     /// Respeitar as áreas seguras num player é desenhar duas
                     /// tarjas pretas em volta de uma imagem que já é preta.
-                    TelaDoPlayer(modelo = modelo, aoVoltar = voltarPraFicha)
+                    /// O `ondeParou` do alvo, e não o que o modelo guardou: o
+                    /// modelo é do escopo da atividade e sobrevive à saída, então
+                    /// o que ele lembra tem a idade da primeira abertura. Ver
+                    /// `ModeloDoPlayer.garantirPreparado`.
+                    TelaDoPlayer(
+                        modelo = modelo,
+                        ondeParou = alvo.ondeParou,
+                        aoVoltar = voltarPraFicha,
+                    )
                 }
         }
     }

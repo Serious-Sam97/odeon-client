@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
@@ -68,6 +69,18 @@ import dev.odeon.android.ui.corDeHex
 @Composable
 fun TelaDaObra(
     modelo: ModeloDaObra,
+    /// Onde o filme está segundo o player que acabou de fechar, em segundos.
+    /// `null` quando se chegou aqui navegando — e aí vale o que o servidor diz.
+    ///
+    /// ## ⚠️ Ela ganha da releitura, e é esse o ponto
+    ///
+    /// Sair do player dispara a marca de `abandon` e a releitura desta ficha
+    /// **ao mesmo tempo**. Quando a leitura chega antes da escrita, o
+    /// `obra.ondeParou` relido é o de **antes** da sessão que acabou de
+    /// acontecer — e o botão dizia `assistir` pra quem tinha acabado de ver
+    /// meia hora. A dica é o que o app viu com os próprios olhos 200ms atrás;
+    /// não há releitura mais fresca que isso.
+    dicaDeOndeParou: Double? = null,
     aoVoltar: () -> Unit,
     aoTocar: (arquivoId: String, titulo: String, ondeParou: Double, duracao: Double?, capa: String?) -> Unit,
     aoBaixar: (arquivoId: String) -> Unit = {},
@@ -210,48 +223,53 @@ fun TelaDaObra(
             Text("‹ biblioteca", color = Cores.destaque)
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            /// O pôster em 2:3, a mesma proporção da grade — a ficha tem que
-            /// parecer a continuação do cartão em que se tocou, não outra tela.
-            Box(
-                modifier = Modifier
-                    .width(120.dp)
-                    .aspectRatio(2f / 3f)
-                    .then(moldura.de(obra.id))
-                    .clip(RoundedCornerShape(6.dp)),
-            ) {
-                val poster = modelo.capa(obra.artwork["poster"])
-                if (poster != null) {
-                    AsyncImage(
-                        model = poster,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+        /// ## A fachada: a marquise, e o varal pendurado nela
+        ///
+        /// Era pôster à esquerda e quatro linhas de metadado à direita. Virou o
+        /// letreiro de lâmpadas com as fotos de cena penduradas embaixo — o
+        /// porquê inteiro está no [Marquise], e o resumo é que esta era a única
+        /// tela do app que não sabia que o app é um cinema.
+        ///
+        /// ⚠️ **O selo do plano entra dentro do letreiro**, e não solto abaixo
+        /// dele: estado é coisa da fachada, e é onde a lâmpada do player já mora.
+        Marquise(
+            titulo = obra.title,
+            /// §24 aplicado **antes** de montar a linha: o que não existe não
+            /// deixa um `·` solto pra trás.
+            linhaDeBaixo = listOfNotNull(
+                obra.tituloOriginal?.takeIf { it != obra.title },
+                obra.year?.toString(),
+                obra.duracaoEmSegundos?.let { duracao(it) },
+            ).joinToString(" · "),
+            plano = { Selo(plano = estado.plano, carregando = estado.planoCarregando) },
+        )
+
+        /// ⚠️ **Sem margem entre a marquise e o varal**, e é o ponto do desenho:
+        /// o fio nasce nos cantos de baixo do letreiro. Um respiro aqui soltaria
+        /// a corda no ar e as duas metáforas voltariam a ser duas.
+        Varal(
+            cenas = estado.cenas,
+            urlDaCena = { cena -> modelo.capa(cena.imagem) },
+            /// ⚠️ **Não é uma rota nova** — é o mesmo `aoTocar` da ficha, com o
+            /// segundo da cena no lugar da posição salva. O player não precisa
+            /// saber que veio de uma foto pendurada: pra ele é «abra este arquivo
+            /// neste ponto», que é o que ele já faz.
+            aoTocarNaCena = { cena ->
+                estado.arquivo?.let { arquivo ->
+                    aoTocar(
+                        arquivo.id,
+                        obra.title,
+                        cena.segundos,
+                        arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
+                        modelo.capa(obra.artwork["poster"]),
                     )
                 }
-
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = obra.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Cores.texto,
-                )
-                /// §24: cada linha só existe se tiver o que dizer. Nada de "—".
-                obra.tituloOriginal?.takeIf { it != obra.title }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = Cores.textoApagado)
-                }
-                obra.year?.let {
-                    Text("$it", style = MaterialTheme.typography.bodyMedium, color = Cores.textoApagado)
-                }
-                obra.duracaoEmSegundos?.let {
-                    Text(duracao(it), style = MaterialTheme.typography.bodySmall, color = Cores.textoApagado)
-                }
-            }
-        }
-
-        Selo(plano = estado.plano, carregando = estado.planoCarregando)
+            },
+            /// ⚠️ `offset` e não `padding` negativo — ver a nota gêmea no
+            /// `Marquise`. Padding negativo é `IllegalArgumentException` em tempo
+            /// de execução, e só a tela denuncia.
+            modifier = Modifier.offset(y = (-12).dp),
+        )
 
         obra.overview?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = Cores.texto)
@@ -288,6 +306,7 @@ fun TelaDaObra(
 
         Reproduzir(
             estado = estado,
+            dicaDeOndeParou = dicaDeOndeParou,
             /// A duração sai do **arquivo** e só cai pra da obra se ele não
             /// trouxer: a do arquivo é o que o probe mediu naquele rip; a da
             /// obra é o tempo de execução do catálogo, que pode divergir de um
@@ -300,7 +319,7 @@ fun TelaDaObra(
                     /// recomeça do zero, e as três condições são da web. Ver
                     /// `dados.ondeContinuar`.
                     dev.odeon.android.dados.ondeContinuar(
-                        ondeParou = obra.ondeParou,
+                        ondeParou = dicaDeOndeParou ?: obra.ondeParou,
                         duracaoEmSegundos = arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
                         finished = obra.finished,
                     ),
@@ -316,48 +335,49 @@ fun TelaDaObra(
             },
         )
 
-        /// Baixar.
+        /// ## Os dois canhotos, lado a lado
         ///
-        /// Fica **abaixo** do assistir e mais discreto: baixar é a exceção, e
-        /// quem abriu a ficha quase sempre veio pra ver agora. Dar o mesmo peso
-        /// aos dois faria a tela perguntar uma coisa que já estava respondida.
-        if (estado.temComoTocar) {
-            TextButton(
-                onClick = { estado.arquivo?.let { aoBaixar(it.id) } },
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-            ) {
-                Text("baixar pra ver sem rede", color = Cores.textoApagado)
-            }
-        }
-
-        /// Pegar a fita.
+        /// > «Você esqueceu de atualizar esses dois tb»
         ///
-        /// ## Ela existe mesmo com a biblioteca livre, e o motivo é a locadora
+        /// E estava certo: a marquise, o varal e o bilhete entraram, e estas duas
+        /// continuaram dois `TextButton` de cinza apagado, empilhados, sem nada em
+        /// volta — a tela velha sobrevivendo no rodapé. Viraram talões arrancados
+        /// do bilhete, com o porquê inteiro no [Canhoto].
         ///
-        /// Desde o §71 não é preciso empréstimo pra assistir. Pegar a fita virou
-        /// gesto **da locadora** — tirar a caixa da estante, com prazo e com
-        /// escassez, que é a parte de jogo do produto. Quem pega quer a fita, não
-        /// a permissão.
-        /// O toque de pegar a fita — R5, e é a primeira vez que o app usa o
-        /// corpo do aparelho.
+        /// ⚠️ **`weight(1f)` nos dois**, e não largura fixa: `pegar a fita na
+        /// locadora` tem quase o dobro dos caracteres de `baixar…`, e duas
+        /// larguras diferentes lado a lado leriam como hierarquia diferente. Elas
+        /// têm o mesmo peso — a hierarquia que importa é entre elas e o bilhete.
         ///
-        /// `LongPress` é o mais encorpado dos dois tipos que o Compose expõe, e
-        /// é o certo aqui: pegar uma fita **escreve no acervo de três pessoas**
-        /// — com a escassez ligada, a caixa sai da estante de todo mundo. A mão
-        /// deve sentir que isto não é o mesmo que virar uma caixa pra ler o
-        /// verso, que leva o tique seco (`TextHandleMove`, em `TelaDaLocadora`).
+        /// O toque de pegar a fita continua sendo `LongPress`, e o motivo é o de
+        /// sempre: pegar uma fita **escreve no acervo de três pessoas** — com a
+        /// escassez ligada, a caixa sai da estante de todo mundo. A mão deve
+        /// sentir que isto não é o mesmo que virar uma caixa pra ler o verso.
         val haptico = LocalHapticFeedback.current
-        TextButton(
-            onClick = {
-                haptico.performHapticFeedback(HapticFeedbackType.LongPress)
-                modelo.pegarAFita()
-            },
-            enabled = !estado.pegando,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-        ) {
-            Text(
-                text = if (estado.pegando) "pegando…" else "pegar a fita na locadora",
-                color = Cores.textoApagado,
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            /// Baixar só existe quando há arquivo — §53, e a mesma condição de
+            /// antes. Sem ele o canhoto não nasce, e o da locadora fica sozinho
+            /// na fileira em vez de dividir espaço com um botão morto.
+            if (estado.temComoTocar) {
+                Canhoto(
+                    rotulo = "baixar pra ver sem rede",
+                    glifo = { desenharBaixar() },
+                    habilitado = true,
+                    aoTocar = { estado.arquivo?.let { aoBaixar(it.id) } },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Canhoto(
+                rotulo = if (estado.pegando) "pegando…" else "pegar a fita na locadora",
+                glifo = {
+                    desenharFita(if (estado.pegando) Cores.destaqueApagado else Cores.destaque)
+                },
+                habilitado = !estado.pegando,
+                aoTocar = {
+                    haptico.performHapticFeedback(HapticFeedbackType.LongPress)
+                    modelo.pegarAFita()
+                },
+                modifier = Modifier.weight(1f),
             )
         }
 
@@ -429,7 +449,13 @@ private fun Selo(plano: PlanoDeReproducao?, carregando: Boolean) {
 /// por quê. Então some o botão e fica a frase, que é o §53 e o §8b concordando:
 /// não oferecer o que vai ser negado, e não negar em silêncio.
 @Composable
-private fun Reproduzir(estado: EstadoDaObra, aoTocar: (ArquivoDeMidia) -> Unit) {
+private fun Reproduzir(
+    estado: EstadoDaObra,
+    /// Ver o parâmetro homônimo da [TelaDaObra] — o rótulo do botão sai da mesma
+    /// conta que decide a posição, então a dica precisa chegar até aqui.
+    dicaDeOndeParou: Double?,
+    aoTocar: (ArquivoDeMidia) -> Unit,
+) {
     val arquivo = estado.arquivo
 
     when {
@@ -439,28 +465,13 @@ private fun Reproduzir(estado: EstadoDaObra, aoTocar: (ArquivoDeMidia) -> Unit) 
             color = Cores.textoApagado,
         )
 
-        /// O botão principal do app, **aceso** — leva 1 do segundo redesenho.
+        /// O botão principal do app virou **bilhete** — ver [Bilhete].
         ///
-        /// Ele era um `Button` do Material com o dourado chapado de fundo. É o
-        /// único botão cheio do app inteiro e o mais importante — e ficava com a
-        /// mesma aparência de um botão de diálogo de sistema.
-        ///
-        /// Agora ele **projeta luz**: o halo dourado sai dele e cai no que está
-        /// em volta. É o que um botão de "assistir" num app de cinema deveria
-        /// fazer, e é a mesma conta do `Luz.acesa` — o `spotColor` degrada pra
-        /// sombra preta abaixo da API 28, e continua dando profundidade.
-        else -> Button(
-            onClick = { arquivo?.let(aoTocar) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 20.dp,
-                    shape = RoundedCornerShape(percent = 50),
-                    clip = false,
-                    spotColor = Cores.destaque,
-                    ambientColor = Cores.destaque,
-                ),
-        ) {
+        /// Ele já tinha sido aceso uma vez (o halo dourado saindo dele), e
+        /// continuava sendo um retângulo arredondado. O ingresso dá forma ao
+        /// gesto e abre lugar pro «de onde parou» sem inventar uma linha de
+        /// metadado ao lado dele.
+        else -> {
             /// ⚠️ O rótulo sai da **mesma** função que decide a posição, e não de
             /// uma condição parecida escrita ao lado. Prometer «continuar» e
             /// começar do zero é o §8b visto do outro lado — e duas regras que
@@ -468,13 +479,36 @@ private fun Reproduzir(estado: EstadoDaObra, aoTocar: (ArquivoDeMidia) -> Unit) 
             val obra = estado.obra
             val de = obra?.let {
                 dev.odeon.android.dados.ondeContinuar(
-                    ondeParou = it.ondeParou,
+                    ondeParou = dicaDeOndeParou ?: it.ondeParou,
                     duracaoEmSegundos = arquivo?.duracaoEmSegundos ?: it.duracaoEmSegundos,
                     finished = it.finished,
                 )
             } ?: 0.0
-            Text(if (de > 0) "continuar" else "assistir")
+
+            Bilhete(
+                chamada = if (de > 0) "continuar · ${relogioCurto(de)}" else "assistir",
+                sobrelinha = if (de > 0) "SESSÃO · DE ONDE PAROU" else "SESSÃO · DO COMEÇO",
+                aoTocar = { arquivo?.let(aoTocar) },
+            )
         }
+    }
+}
+
+/// `1:04:51`, ou `4:51` num filme curto. É a mesma leitura do relógio do player,
+/// e a razão de a hora sumir quando é zero é a mesma: um `0:04:51` faz quem lê
+/// procurar a hora que não existe.
+private fun relogioCurto(segundos: Double): String {
+    val total = segundos.toLong()
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    /// `Locale.ROOT`: o relógio é o mesmo em qualquer idioma, e um locale de
+    /// dígitos próprios escreveria a hora em outro alfabeto.
+    val ptBr = java.util.Locale.ROOT
+    return if (h > 0) {
+        String.format(ptBr, "%d:%02d:%02d", h, m, s)
+    } else {
+        String.format(ptBr, "%d:%02d", m, s)
     }
 }
 

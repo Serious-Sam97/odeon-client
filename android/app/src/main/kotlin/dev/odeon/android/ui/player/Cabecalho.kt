@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -32,6 +33,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,6 +196,7 @@ internal fun CabecalhoDoPlayer(
                     .padding(start = 6.dp, end = 4.dp),
             )
 
+            BotaoDeGirar()
             AlvoDeToque(rotulo = "janelinha", aoTocar = aoEntrarNaJanelinha) { desenharJanelinha() }
             impedimentoDoCast?.let { frase ->
                 AlvoDeToque(
@@ -213,6 +217,121 @@ internal fun CabecalhoDoPlayer(
             )
         }
     }
+}
+
+/// O botão de girar a tela.
+///
+/// ## ⚠️ Ele existe porque o sensor não é a única vontade
+///
+/// Até aqui a orientação era só do sistema: quem assiste deitado com o celular
+/// apoiado, ou com a rotação automática desligada, não tinha como pedir a tela
+/// larga. Um player que só obedece ao acelerômetro é um player que ignora o caso
+/// mais comum de assistir — na cama, com o aparelho de lado na mão.
+///
+/// ## O ícone mostra o **destino**, e não o estado
+///
+/// Deitado ele desenha uma tela em pé; em pé, uma deitada. É a mesma régua dos
+/// arcos de `10` e `30`, que dizem pra onde levam e não onde se está — botão que
+/// mostra o estado obriga a pessoa a deduzir o resto.
+///
+/// ## As duas escolhas de constante
+///
+/// `SENSOR_LANDSCAPE` pra deitar, e não `LANDSCAPE`: as duas deitadas servem, e
+/// travar numa só faz quem virou o aparelho pro outro lado ver o filme de cabeça
+/// pra baixo. `PORTRAIT` pra levantar, e não `SENSOR_PORTRAIT`: retrato invertido
+/// existe na API e não existe na vida de ninguém segurando um celular.
+///
+/// ⚠️ **Quem desfaz isto é o [ModoDeSala]**, ao sair do player. Sem aquele
+/// `onDispose` a trava vazaria pro app inteiro — a biblioteca ficaria deitada
+/// porque alguém quis ver um filme deitado, e a única saída seria fechar o app.
+@Composable
+private fun BotaoDeGirar() {
+    val contexto = LocalContext.current
+    val deitado = LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    AlvoDeToque(
+        rotulo = if (deitado) "girar pra vertical" else "girar pra horizontal",
+        aoTocar = {
+            contexto.acharAtividade()?.requestedOrientation = if (deitado) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+        },
+    ) { desenharGiro(paraVertical = deitado) }
+}
+
+/// A tela no formato de **destino**, com a seta girando por cima dela.
+///
+/// ⚠️ **A primeira versão pendurava um arco no canto de cima à direita**, e a
+/// foto ampliada mostrou o que isso vira em 22dp: um gancho solto saindo da
+/// moldura, que ninguém lê como rotação. Pior, a moldura sozinha ficava
+/// parecidíssima com a da janelinha ao lado — dois retângulos arredondados
+/// vizinhos, e a diferença sendo um risco de dois pixels.
+///
+/// Agora o arco passa **por cima** da tela, de ponta a ponta, com a seta na
+/// saída. É a mesma gramática do arco de `10` e `30` do transporte: uma volta
+/// desenhada, e a ponta dizendo o sentido. E resolve a confusão com a janelinha
+/// sem precisar mudar a moldura — o que distingue os dois passou a ser a metade
+/// de cima, que é onde o olho cai primeiro.
+private fun DrawScope.desenharGiro(paraVertical: Boolean) {
+    val traco = 1.8.dp.toPx()
+
+    val esquerda = if (paraVertical) size.width * 0.34f else size.width * 0.08f
+    val topo = if (paraVertical) size.height * 0.30f else size.height * 0.48f
+    val largura = if (paraVertical) size.width * 0.32f else size.width * 0.84f
+    val altura = if (paraVertical) size.height * 0.66f else size.height * 0.46f
+
+    drawRoundRect(
+        color = Cores.texto,
+        topLeft = Offset(esquerda, topo),
+        size = Size(largura, altura),
+        cornerRadius = CornerRadius(2.dp.toPx()),
+        style = Stroke(width = traco),
+    )
+
+    /// O arco nasce e morre na altura do topo da moldura — 140° é o que sobra de
+    /// meia volta depois de abrir espaço pra ponta não encostar na tela.
+    ///
+    /// ⚠️ **Com piso, e a foto é que cobrou.** Amarrado só à largura da moldura,
+    /// ele ficava largo no destino deitado e espremido no vertical, onde a
+    /// moldura tem um terço da largura — virava um gancho apertado em cima de um
+    /// retângulo estreito. O piso de 0,28 dá ao arco vertical um raio maior que a
+    /// própria moldura, que é o que faz ele voltar a parecer uma volta.
+    val centro = Offset(size.width / 2f, topo)
+    val raio = maxOf(largura / 2f + size.width * 0.06f, size.width * 0.28f)
+    drawArc(
+        color = Cores.texto,
+        startAngle = 200f,
+        sweepAngle = 140f,
+        useCenter = false,
+        topLeft = Offset(centro.x - raio, centro.y - raio),
+        size = Size(raio * 2, raio * 2),
+        style = Stroke(width = traco, cap = StrokeCap.Round),
+    )
+
+    /// A ponta, no fim do arco (340°), apontando pra onde ele ia. Duas retas e
+    /// não um triângulo cheio: em 22dp o preenchido vira um borrão.
+    val fim = Offset(
+        centro.x + raio * kotlin.math.cos(Math.toRadians(340.0)).toFloat(),
+        centro.y + raio * kotlin.math.sin(Math.toRadians(340.0)).toFloat(),
+    )
+    val aba = size.width * 0.13f
+    drawLine(
+        Cores.texto,
+        fim,
+        Offset(fim.x - aba * 0.95f, fim.y - aba * 0.35f),
+        strokeWidth = traco,
+        cap = StrokeCap.Round,
+    )
+    drawLine(
+        Cores.texto,
+        fim,
+        Offset(fim.x - aba * 0.15f, fim.y - aba * 1.0f),
+        strokeWidth = traco,
+        cap = StrokeCap.Round,
+    )
 }
 
 /// A lâmpada do plano.

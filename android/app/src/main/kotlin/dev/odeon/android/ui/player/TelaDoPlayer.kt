@@ -81,10 +81,61 @@ import kotlinx.coroutines.delay
 /// que nem sequer é o player não quebrou nada, trocar por um `CastPlayer` não
 /// vai quebrar também.
 @Composable
-fun TelaDoPlayer(modelo: ModeloDoPlayer, aoVoltar: () -> Unit) {
+fun TelaDoPlayer(modelo: ModeloDoPlayer, ondeParou: Double, aoVoltar: () -> Unit) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
+    /// ## ⚠️ As duas pontas do ciclo de vida da sessão moram aqui
+    ///
+    /// E moram aqui porque **o modelo vive mais que esta tela**: o
+    /// `viewModel(key = "player:…")` do `AppOdeon` é do escopo da atividade. Sem
+    /// estas duas linhas, voltar e entrar de novo reaproveita a sessão de HLS
+    /// anterior — que continuou sendo escrita — e o ExoPlayer cai na borda viva
+    /// dela, dez minutos à frente. Ver `ModeloDoPlayer.encerrar`, onde a medida
+    /// está.
+    ///
+    /// `ondeParou` chega **fresco da ficha** a cada entrada, e é ela quem aplica
+    /// o `ondeContinuar` — o que o modelo lembrava tem a idade da primeira vez.
+    DisposableEffect(Unit) {
+        modelo.garantirPreparado(ondeParou)
+        onDispose { modelo.encerrar() }
+    }
+
     ModoDeSala()
+
+    /// ## ⚠️ A cortina mora aqui, e não no [Reprodutor]
+    ///
+    /// > «pq no família de aluguel quando eu clico avanço na timeline o mesmo
+    /// > abre as cortinas novamente? no guns akimbo e em outros não aparece as
+    /// > cortinas, só avança»
+    ///
+    /// O comentário dela sempre disse a intenção certa — «acontece uma vez só na
+    /// vida desta tela» — mas o estado morava no `Reprodutor`, que é a vida da
+    /// **fonte**, não da tela. A distinção não custava nada enquanto a fonte
+    /// nunca trocava no meio de uma visita.
+    ///
+    /// Ela passou a trocar: salto pra fora da sessão de HLS refaz plano e sessão
+    /// (ver `saltarPara`), a `url` fica nula por um instante, o `Reprodutor` sai
+    /// de cena e volta — e levava o `remember` junto. Daí a cortina reabrir a
+    /// cada avanço, e **só** em filme transcodificado: em `direct_play` o salto é
+    /// um `seekTo` e nada é remontado. É a mesma raiz do «só no Família de
+    /// Aluguel».
+    ///
+    /// Aqui em cima ela sobrevive à troca de sessão e morre junto com a visita,
+    /// que é exatamente o tempo de vida que a cortina sempre quis ter.
+    var cortinaAberta by remember { mutableStateOf(false) }
+
+    /// ⚠️ **A legenda escolhida sobe pelo mesmo motivo, e é pior que a cortina.**
+    ///
+    /// Medido em 06/08/2026: com `PT-BR FULL` no ar, um salto pra fora da sessão
+    /// devolvia o menu com **`sem legenda`** marcado. Não era só o rótulo — a
+    /// faixa some de verdade, porque o `MediaItem` novo traz outros
+    /// `TrackGroup`s e o `TrackSelectionOverride` antigo não casa com nenhum.
+    ///
+    /// Cortina que reabre é feio; legenda que cai sozinha é a pessoa perdendo
+    /// uma escolha sem ninguém dizer nada. Guardada aqui, ela é **reaplicada**
+    /// quando as faixas da fonte nova aparecem — ver o `onTracksChanged` do
+    /// ouvinte no [Reprodutor].
+    var legendaEscolhida by remember { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
@@ -107,9 +158,67 @@ fun TelaDoPlayer(modelo: ModeloDoPlayer, aoVoltar: () -> Unit) {
                 TextButton(onClick = aoVoltar) { Text("voltar") }
             }
 
-            else -> Reprodutor(modelo = modelo, estado = estado, aoVoltar = aoVoltar)
+            else -> Reprodutor(
+                modelo = modelo,
+                estado = estado,
+                cortinaAberta = cortinaAberta,
+                aoAbrirCortina = { cortinaAberta = true },
+                legendaEscolhida = legendaEscolhida,
+                aoEscolherLegenda = { legendaEscolhida = it },
+                aoVoltar = aoVoltar,
+            )
         }
     }
+}
+
+/// Pula pra um instante do **filme**, decidindo se a sessão em vigor alcança.
+///
+/// ## ⚠️ A decisão que faltava: fora da sessão não é salto, é sessão nova
+///
+/// Em `direct_play` isto é sempre um `seekTo` — o arquivo inteiro está no
+/// aparelho, e todo instante existe.
+///
+/// Em HLS não. O `ffmpeg` escreve a playlist do começo ao fim, e ela só contém o
+/// trecho entre o `start` da sessão e o ponto a que a transcodificação chegou.
+/// Pedir fora disso não dá erro: o ExoPlayer **espera**. Medido em 06/08/2026,
+/// saltando de `47:20` pra `1:32:52`: `BUFFERING`, e ficou. Neste emulador
+/// destravou sozinho depois de ~15s, quando a transcodificação alcançou — o que
+/// é sorte, e não desenho. Num salto maior ou num servidor ocupado a espera é de
+/// minutos, e do lado de quem assiste isso é travar.
+///
+/// ⚠️ **E o mesmo vale pra trás.** Rebobinar antes do início da sessão parava no
+/// começo dela, porque aqueles segmentos nunca foram gerados. As duas pontas são
+/// o mesmo caso, e agora têm a mesma resposta.
+///
+/// ## Como se sabe o que a sessão tem
+///
+/// `Player.duration`, justamente o número que o `duracaoConhecidaMs` existe pra
+/// **não** usar na timeline: durante a transcodificação ele reporta só o que já
+/// foi escrito, e cresce. Inútil como denominador, exato como "até onde dá".
+///
+/// A margem de 10s é o último segmento, que pode estar pela metade — mirar na
+/// borda viva é pedir pra esperar de novo.
+///
+/// ⚠️ Duração desconhecida (`TIME_UNSET`, ou zero antes do primeiro segmento)
+/// cai no `seekTo` de sempre. Sem saber até onde a sessão vai, refazer a sessão a
+/// cada toque seria trocar uma espera por um ffmpeg novo — e o caso comum, o
+/// salto curto, funciona.
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun saltarPara(
+    alvoNoFilmeMs: Long,
+    player: Player?,
+    estado: EstadoDoPlayer,
+    modelo: ModeloDoPlayer,
+) {
+    val p = player ?: return
+    val alvo = alvoNoFilmeMs.coerceAtLeast(0)
+    val naSessao = tempoDeSessao(alvo, estado.deslocamentoMs)
+    val gerado = p.duration.takeIf { it > 0 }
+
+    val antesDoComeco = alvo < estado.deslocamentoMs
+    val depoisDoFim = gerado != null && naSessao > gerado - 10_000
+
+    if (estado.eHls && (antesDoComeco || depoisDoFim)) modelo.reabrirEm(alvo) else p.seekTo(naSessao)
 }
 
 /// Apaga as luzes da casa enquanto o filme está na tela.
@@ -136,11 +245,24 @@ fun TelaDoPlayer(modelo: ModeloDoPlayer, aoVoltar: () -> Unit) {
 /// ⚠️ **O `onDispose` devolve as barras**, e não é higiene: sem ele, sair do
 /// filme deixaria o app inteiro sem relógio e sem bateria, porque a janela é uma
 /// só e a configuração é dela, não desta tela.
+///
+/// ## E devolve a orientação, pelo mesmo motivo
+///
+/// O botão de girar do [CabecalhoDoPlayer] **trava** a atividade num eixo — é o
+/// que faz ele servir pra quem está deitado na cama com a rotação automática
+/// desligada. Só que `requestedOrientation` é da atividade, e a atividade é uma
+/// só: sem devolver aqui, a biblioteca ficaria deitada porque alguém quis ver um
+/// filme deitado, e a única saída seria fechar o app.
+///
+/// `UNSPECIFIED` e não `SENSOR`: devolver ao **não pedido** deixa valer o que o
+/// manifesto e o sistema decidem, inclusive a trava de rotação da pessoa. Pedir
+/// sensor seria trocar uma imposição por outra.
 @Composable
 private fun ModoDeSala() {
     val contexto = LocalContext.current
     DisposableEffect(contexto) {
-        val janela = (contexto.acharAtividade())?.window
+        val atividade = contexto.acharAtividade()
+        val janela = atividade?.window
         val controlador = janela?.let {
             androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
         }
@@ -149,13 +271,26 @@ private fun ModoDeSala() {
         controlador?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         onDispose {
             controlador?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            atividade?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar: () -> Unit) {
+private fun Reprodutor(
+    modelo: ModeloDoPlayer,
+    estado: EstadoDoPlayer,
+    /// Vem de cima porque precisa sobreviver à troca de sessão — ver
+    /// `TelaDoPlayer`.
+    cortinaAberta: Boolean,
+    aoAbrirCortina: () -> Unit,
+    /// Também de cima, e reaplicada a cada fonte nova — ver `TelaDoPlayer`.
+    legendaEscolhida: String?,
+    aoEscolherLegenda: (String?) -> Unit,
+    aoVoltar: () -> Unit,
+) {
     val contexto = LocalContext.current
     val app = contexto.applicationContext as dev.odeon.android.OdeonApp
 
@@ -220,6 +355,9 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
     LaunchedEffect(player) {
         while (true) {
             posicao = tempoDeFilme(player?.currentPosition ?: 0L, estado.deslocamentoMs)
+            /// A posição anotada no modelo é o que o `voltarPraFicha` leva como
+            /// dica — ver `ModeloDoPlayer.ultimaPosicaoNoFilmeMs`.
+            modelo.anotarPosicao(posicao)
             /// A conhecida ganha da do player, e o porquê está inteiro em
             /// `EstadoDoPlayer.duracaoConhecidaMs`: em HLS de transcodificação
             /// o player só enxerga os segmentos já gerados, e a linha do tempo
@@ -283,6 +421,23 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
 
             override fun onPlaybackStateChanged(estadoDoPlayer: Int) {
                 if (estadoDoPlayer == Player.STATE_READY) jaTentouLevantar = false
+            }
+
+            /// ## ⚠️ As escolhas de faixa são reaplicadas aqui, e só aqui
+            ///
+            /// `onTracksChanged` é o único momento em que dá pra fazer isso: um
+            /// `TrackSelectionOverride` aponta pra um `TrackGroup` **daquela**
+            /// fonte, e a fonte acabou de trocar. Tentar antes — logo depois do
+            /// `prepare`, num `LaunchedEffect` — não acha grupo nenhum e falha em
+            /// silêncio, que é o pior jeito de falhar.
+            ///
+            /// A legenda vem do estado guardado acima da troca de sessão. O áudio
+            /// só precisa disto em `direct_play`: em HLS a playlist já vem com a
+            /// faixa pedida e não há o que escolher.
+            override fun onTracksChanged(faixas: androidx.media3.common.Tracks) {
+                legendaEscolhida?.let { escolherLegenda(p, it) }
+                val audio = estado.faixaDeAudioEmUso
+                if (!estado.eHls && audio != null && audio > 0) escolherAudio(p, audio)
             }
         }
         p.addListener(ouvinte)
@@ -398,7 +553,6 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
     /// `pronto` é o player ter chegado a `STATE_READY` — o sinal de que há um
     /// primeiro quadro atrás do pano. É ele que faz a cortina **cortar** em vez
     /// de cumprir a coreografia inteira.
-    var cortinaAberta by remember { mutableStateOf(false) }
 
     /// Quem mais está neste filme agora. Vem do barramento, e o eco do próprio
     /// aparelho já foi descartado antes — ver `Barramento`.
@@ -432,7 +586,7 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
             CortinaDeAbertura(
                 titulo = estado.titulo,
                 pronto = player?.playbackState == androidx.media3.common.Player.STATE_READY,
-                aoTerminar = { cortinaAberta = true },
+                aoTerminar = aoAbrirCortina,
             )
         }
 
@@ -449,7 +603,10 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
             estado = estado,
             falhaDaJanelinha = falhaDaJanelinha,
             aoVoltar = aoVoltar,
+            legendaEscolhida = legendaEscolhida,
+            aoEscolherLegenda = aoEscolherLegenda,
             aoTrocarAudio = modelo::trocarFaixaDeAudio,
+            aoSaltar = { alvo -> saltarPara(alvo, player, estado, modelo) },
             aoEntrarNaJanelinha = { falhaDaJanelinha = entrarNaJanelinha(contexto) },
             aoMudarBrilho = { mudarBrilho(contexto, it) },
             aoMudarVolume = { mudarVolume(contexto, it, acumuladorDeVolume) },
@@ -617,10 +774,17 @@ private fun Controles(
     estado: EstadoDoPlayer,
     cast: EstadoDoCast,
     falhaDaJanelinha: String?,
+    /// A legenda no ar, e quem a troca. Vem de cima porque precisa sobreviver à
+    /// troca de sessão — ver `TelaDoPlayer`.
+    legendaEscolhida: String?,
+    aoEscolherLegenda: (String?) -> Unit,
     aoVoltar: () -> Unit,
     /// Trocar de faixa de áudio: o índice pedido e onde o filme está, em tempo
     /// de filme. Ver `ModeloDoPlayer.trocarFaixaDeAudio`.
     aoTrocarAudio: (indice: Int, posicaoDoFilmeMs: Long) -> Unit,
+    /// Pular pra um instante do **filme**. Quem recebe decide se o alvo cabe na
+    /// sessão em vigor ou se ela precisa ser refeita — ver `saltarPara`.
+    aoSaltar: (alvoNoFilmeMs: Long) -> Unit,
     aoEntrarNaJanelinha: () -> Unit,
     aoMudarBrilho: (Float) -> Unit,
     aoMudarVolume: (Float) -> Unit,
@@ -652,7 +816,6 @@ private fun Controles(
 
     /// Qual legenda está no ar. `null` é «sem legenda», que é o estado inicial do
     /// player — e é o que acende ou apaga o `cc`.
-    var legendaEscolhida by remember { mutableStateOf<String?>(null) }
 
     /// O menu aberto também segura os controles. Um menu que se fecha sozinho
     /// no meio da leitura é pior que não ter menu.
@@ -797,7 +960,7 @@ private fun Controles(
                             aoEscolher = { indice ->
                                 val rotulo = if (indice == 0) null else estado.legendas[indice - 1].rotulo
                                 escolherLegenda(player, rotulo)
-                                legendaEscolhida = rotulo
+                                aoEscolherLegenda(rotulo)
                                 menuDeLegendas = false
                             },
                         )
@@ -865,11 +1028,7 @@ private fun Controles(
                     /// sessão. Sem esta conversão, tocar em 20% da tira de um
                     /// filme retomado em 1h19 pedia o minuto 28 **da sessão**, e
                     /// levava pra 1h47 do filme. Ver `tempoDeSessao`.
-                    if (duracao > 0) {
-                        player?.seekTo(
-                            tempoDeSessao((posicaoDoArrasto * duracao).toLong(), estado.deslocamentoMs),
-                        )
-                    }
+                    if (duracao > 0) aoSaltar((posicaoDoArrasto * duracao).toLong())
                 },
             )
 
@@ -912,17 +1071,13 @@ private fun Controles(
                 /// posição da sessão e à do filme dá o mesmo pulo. Agora que a
                 /// `posicao` virou tempo de filme, eles precisam da volta —
                 /// senão passam a errar por exatamente o deslocamento.
-                BotaoDeSalto(segundos = 10, paraTras = true) {
-                    player?.seekTo(tempoDeSessao(posicao - 10_000, estado.deslocamentoMs))
-                }
+                BotaoDeSalto(segundos = 10, paraTras = true) { aoSaltar(posicao - 10_000) }
                 Box(Modifier.padding(horizontal = if (espremido) 12.dp else 18.dp)) {
                     BotaoDeTocar(tocando = tocando, compacto = espremido) {
                         if (tocando) player?.pause() else player?.play()
                     }
                 }
-                BotaoDeSalto(segundos = 30, paraTras = false) {
-                    player?.seekTo(tempoDeSessao(posicao + 30_000, estado.deslocamentoMs))
-                }
+                BotaoDeSalto(segundos = 30, paraTras = false) { aoSaltar(posicao + 30_000) }
                 /// ## ⚠️ As faixas ficam na ponta, e o transporte segue no meio
                 ///
                 /// A conta é de peso: os dois lados desta fileira têm
@@ -1357,7 +1512,7 @@ private fun escolherLegenda(player: Player?, rotulo: String?) {
 /// `contexto as? Activity`, o cast dava `null`, a função voltava calada, e o
 /// botão "janelinha" não fazia nada — o §8b em pessoa, e num botão que a espec
 /// tratou como razão pra fixar o `minSdk` inteiro.
-private tailrec fun android.content.Context.acharAtividade(): Activity? = when (this) {
+internal tailrec fun android.content.Context.acharAtividade(): Activity? = when (this) {
     is Activity -> this
     is android.content.ContextWrapper -> baseContext.acharAtividade()
     else -> null

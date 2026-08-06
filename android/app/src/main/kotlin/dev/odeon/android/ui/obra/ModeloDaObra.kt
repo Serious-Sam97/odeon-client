@@ -24,6 +24,18 @@ data class EstadoDaObra(
     /// `null` quando não há nada a dizer.
     val recadoDaLocadora: String? = null,
     val pegando: Boolean = false,
+    /// As cenas do filme, penduradas no varal — ver `Varal`.
+    ///
+    /// ## ⚠️ Elas chegam depois, e a tela não espera
+    ///
+    /// A rota custa **~3s medidos** na primeira visita de cada obra (decodifica
+    /// doze pontos do arquivo) e fica em cache pra sempre depois. Segurar a
+    /// ficha inteira por isso seria trocar três segundos de espera por uma
+    /// fileira de fotos — mau negócio.
+    ///
+    /// Então a ficha abre sem o varal e ele **desce** quando as cenas chegam. É
+    /// a mesma decisão que a tira do player tomou, e o mesmo motivo.
+    val cenas: List<dev.odeon.android.dados.Cena> = emptyList(),
 ) {
     /// Só há o que tocar se houver arquivo. Uma obra identificada sem arquivo
     /// existe no acervo — é linha de catálogo sem mídia — e não toca.
@@ -91,11 +103,29 @@ class ModeloDaObra(
                 }
 
                 if (arquivo != null) pedirPlano(arquivo)
+                pedirCenas()
             } catch (e: Exception) {
                 _estado.update {
                     it.copy(carregando = false, erro = e.message ?: "não deu pra abrir a ficha")
                 }
             }
+        }
+    }
+
+    /// As doze cenas, pro varal.
+    ///
+    /// ⚠️ **Falhar não aparece na tela**, e é decisão: sem cenas o varal não
+    /// nasce — nem o fio, nem os prendedores, nem um lugar vazio dizendo que
+    /// deveria haver fotos. É o §24 (linha vazia some) e o §53 juntos: um varal
+    /// vazio pendurado na marquise prometeria uma navegação que não existe.
+    ///
+    /// O `runCatching` já mora no repositório, que devolve lista vazia — então
+    /// servidor fora do ar e filme sem cenas dão no mesmo, que é o certo aqui:
+    /// nos dois casos não há foto pra pendurar.
+    private fun pedirCenas() {
+        viewModelScope.launch {
+            val cenas = odeon.cenasDoDisco(obraId)
+            _estado.update { it.copy(cenas = cenas) }
         }
     }
 

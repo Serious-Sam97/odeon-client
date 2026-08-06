@@ -814,6 +814,48 @@ private fun Controles(
     var menuDeLegendas by remember { mutableStateOf(false) }
     var menuDeAudio by remember { mutableStateOf(false) }
 
+    /// ## ⚠️ Os saltos se somam antes de virar um `seekTo` só
+    ///
+    /// > «os saltos de 10s não acumulam»
+    ///
+    /// **Medido em 06/08/2026:** trinta toques seguidos no `−10s` andaram **seis
+    /// segundos**. A causa é a leitura: a `posicao` vem de um relógio de 200ms
+    /// (ver o laço acima), então dois toques dentro da mesma batida calculam do
+    /// **mesmo** número e pedem o **mesmo** ponto — trinta pedidos idênticos são
+    /// um pedido. E em HLS cada `seekTo` ainda está bufferizando quando o próximo
+    /// chega, o que engole o resto.
+    ///
+    /// O conserto é o que todo player faz: o toque não pula, ele **soma**. O
+    /// número cresce na tela na hora — cinco toques mostram `−50s` imediatamente —
+    /// e um único `seekTo` sai quando a mão para.
+    ///
+    /// ⚠️ **A base é capturada no primeiro toque**, e não relida a cada um: com o
+    /// filme correndo durante a martelada, somar contra a posição de agora daria
+    /// `−50s` a partir de um lugar que já andou dois segundos. A conta que a
+    /// pessoa fez foi a partir de onde ela estava quando começou.
+    var saltoPendente by remember { mutableLongStateOf(0L) }
+    var baseDoSalto by remember { mutableLongStateOf(0L) }
+
+    /// 320ms sem toque novo é o que separa «ele está martelando» de «ele acabou».
+    /// Menos que isso volta a partir os saltos em dois; muito mais e o filme
+    /// demora a obedecer a um toque único, que é o caso comum.
+    LaunchedEffect(saltoPendente) {
+        if (saltoPendente == 0L) return@LaunchedEffect
+        delay(320)
+        aoSaltar(baseDoSalto + saltoPendente)
+        saltoPendente = 0L
+    }
+
+    /// O que o cromo desenha: o arrasto manda, depois o salto pendente, e só
+    /// então a posição real. É uma leitura só, usada pelo relógio, pelo «faltam» e
+    /// pela janela da tira — três lugares que **precisam** concordar, e que já
+    /// divergiram uma vez nesta tela.
+    val posicaoMostrada = when {
+        arrastando -> (posicaoDoArrasto * duracao).toLong()
+        saltoPendente != 0L -> (baseDoSalto + saltoPendente).coerceIn(0L, duracao)
+        else -> posicao
+    }
+
     /// Qual legenda está no ar. `null` é «sem legenda», que é o estado inicial do
     /// player — e é o que acende ou apaga o `cc`.
 
@@ -1008,8 +1050,7 @@ private fun Controles(
             }
 
             Tira(
-                fracao = if (arrastando) posicaoDoArrasto
-                else if (duracao > 0) posicao.toFloat() / duracao else 0f,
+                fracao = if (duracao > 0) posicaoMostrada.toFloat() / duracao else 0f,
                 folha = estado.folha,
                 urlDaFolha = estado.urlDaFolha,
                 cenas = estado.cenas,
@@ -1059,7 +1100,7 @@ private fun Controles(
                     if (espremido) {
                         Text(
                             text = relogio(
-                                if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao,
+                                posicaoMostrada,
                             ),
                             style = MaterialTheme.typography.labelSmall,
                             color = Cores.textoApagado,
@@ -1071,13 +1112,19 @@ private fun Controles(
                 /// posição da sessão e à do filme dá o mesmo pulo. Agora que a
                 /// `posicao` virou tempo de filme, eles precisam da volta —
                 /// senão passam a errar por exatamente o deslocamento.
-                BotaoDeSalto(segundos = 10, paraTras = true) { aoSaltar(posicao - 10_000) }
+                BotaoDeSalto(segundos = 10, paraTras = true) {
+                    if (saltoPendente == 0L) baseDoSalto = posicao
+                    saltoPendente -= 10_000
+                }
                 Box(Modifier.padding(horizontal = if (espremido) 12.dp else 18.dp)) {
                     BotaoDeTocar(tocando = tocando, compacto = espremido) {
                         if (tocando) player?.pause() else player?.play()
                     }
                 }
-                BotaoDeSalto(segundos = 30, paraTras = false) { aoSaltar(posicao + 30_000) }
+                BotaoDeSalto(segundos = 30, paraTras = false) {
+                    if (saltoPendente == 0L) baseDoSalto = posicao
+                    saltoPendente += 30_000
+                }
                 /// ## ⚠️ As faixas ficam na ponta, e o transporte segue no meio
                 ///
                 /// A conta é de peso: os dois lados desta fileira têm
@@ -1094,7 +1141,7 @@ private fun Controles(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (espremido && duracao > 0) {
-                        val agora = if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao
+                        val agora = posicaoMostrada
                         Text(
                             text = "faltam ${relogio(duracao - agora)}",
                             style = MaterialTheme.typography.labelSmall,
@@ -1138,7 +1185,7 @@ private fun Controles(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                val agora = if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao
+                val agora = posicaoMostrada
                 Text(
                     text = relogio(agora),
                     style = MaterialTheme.typography.labelSmall,

@@ -5,6 +5,7 @@ import android.app.PictureInPictureParams
 import android.os.Build
 import android.util.Rational
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -46,7 +47,9 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
@@ -81,6 +84,8 @@ import kotlinx.coroutines.delay
 fun TelaDoPlayer(modelo: ModeloDoPlayer, aoVoltar: () -> Unit) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
+    ModoDeSala()
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
             estado.preparando -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -103,6 +108,47 @@ fun TelaDoPlayer(modelo: ModeloDoPlayer, aoVoltar: () -> Unit) {
             }
 
             else -> Reprodutor(modelo = modelo, estado = estado, aoVoltar = aoVoltar)
+        }
+    }
+}
+
+/// Apaga as luzes da casa enquanto o filme está na tela.
+///
+/// ## O relógio e a bateria não são parte do filme
+///
+/// Até 06/08/2026 o player era a única tela do app que usava a tela inteira — e
+/// mesmo assim tinha, no alto, a hora, o sinal, o wi-fi e a bateria do sistema
+/// desenhados por cima da imagem. Está nas fotos de ontem: `11:40` e três ícones
+/// sobre o rosto de quem está no quadro.
+///
+/// Não é detalhe de acabamento. O app inteiro é a metáfora de uma sala de
+/// cinema, e a barra de status é a coisa mais oposta a isso que existe num
+/// celular: ela é o mundo lá fora pedindo atenção, no exato lugar onde a sala
+/// deveria estar escura.
+///
+/// ## `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`, e não esconder e pronto
+///
+/// Escondida pra sempre seria prender quem quer ver a hora ou responder uma
+/// notificação. Com este comportamento a barra volta com um arrasto da borda e
+/// some sozinha depois — o mesmo gesto que todo player de vídeo do sistema usa,
+/// então não há nada novo pra aprender.
+///
+/// ⚠️ **O `onDispose` devolve as barras**, e não é higiene: sem ele, sair do
+/// filme deixaria o app inteiro sem relógio e sem bateria, porque a janela é uma
+/// só e a configuração é dela, não desta tela.
+@Composable
+private fun ModoDeSala() {
+    val contexto = LocalContext.current
+    DisposableEffect(contexto) {
+        val janela = (contexto.acharAtividade())?.window
+        val controlador = janela?.let {
+            androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
+        }
+        controlador?.systemBarsBehavior =
+            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controlador?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            controlador?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         }
     }
 }
@@ -149,9 +195,9 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
     LaunchedEffect(perseguir) {
         val alvoEmSegundos = perseguir ?: return@LaunchedEffect
         val p = player ?: return@LaunchedEffect
-        val agoraEmSegundos = (estado.deslocamentoMs + p.currentPosition) / 1000.0
+        val agoraEmSegundos = tempoDeFilme(p.currentPosition, estado.deslocamentoMs) / 1000.0
         if (kotlin.math.abs(alvoEmSegundos - agoraEmSegundos) > 5.0) {
-            p.seekTo((alvoEmSegundos * 1000).toLong() - estado.deslocamentoMs)
+            p.seekTo(tempoDeSessao((alvoEmSegundos * 1000).toLong(), estado.deslocamentoMs))
         }
         modelo.jaPerseguiu()
     }
@@ -162,13 +208,18 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
     /// desenhar uma timeline que anda, alguém tem que perguntar; 200ms é o que
     /// faz o traço parecer contínuo sem acordar a composição sessenta vezes por
     /// segundo.
+    /// ⚠️ **`posicao` é tempo de filme, não tempo de sessão** — e a conversão
+    /// acontece aqui, na única linha que lê o player. Tudo abaixo (o relógio, o
+    /// «faltam», a fração da tira, o segundo da miniatura) fala a mesma língua
+    /// que a `duracao`, que sempre foi a do arquivo. Ver `tempoDeFilme`.
     var posicao by remember { mutableLongStateOf(0L) }
     var duracao by remember { mutableLongStateOf(0L) }
     var tocando by remember { mutableStateOf(true) }
 
+
     LaunchedEffect(player) {
         while (true) {
-            posicao = player?.currentPosition ?: 0L
+            posicao = tempoDeFilme(player?.currentPosition ?: 0L, estado.deslocamentoMs)
             /// A conhecida ganha da do player, e o porquê está inteiro em
             /// `EstadoDoPlayer.duracaoConhecidaMs`: em HLS de transcodificação
             /// o player só enxerga os segmentos já gerados, e a linha do tempo
@@ -193,15 +244,115 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
         }
     }
 
-    /// A marca do fim — e esta é a que importa de verdade.
+    /// ## ⚠️ O único lugar do app que escuta o player falhar
+    ///
+    /// Antes de 06/08/2026 não havia `Player.Listener` em lugar nenhum, e o
+    /// efeito está medido no `ModeloDoPlayer.falhouTocando`: a reprodução morria,
+    /// o play parava de funcionar, e a tela continuava desenhando um relógio que
+    /// andava.
+    ///
+    /// ## Uma tentativa calada, e só então a tela de erro
+    ///
+    /// `prepare()` é a recuperação que o Media3 documenta, e para uma piscada de
+    /// rede ela devolve o filme sem que ninguém veja nada além de um engasgo. Ir
+    /// direto pra tela de erro nesse caso seria trocar um segundo de buffer por
+    /// uma tela vermelha — pior do que o problema.
+    ///
+    /// ⚠️ **Mas só uma.** Se o segundo erro chegar, `prepare()` não é a resposta:
+    /// a sessão de HLS provavelmente morreu, e insistir nela é um laço que gasta
+    /// bateria mostrando a mesma tela preta. Aí sobe pro `falhouTocando`, que
+    /// refaz **plano e sessão** no ponto onde parou.
+    ///
+    /// O contador zera quando o filme volta a tocar — senão o primeiro erro da
+    /// sessão gastaria a única tentativa de todas as horas seguintes.
+    var jaTentouLevantar by remember { mutableStateOf(false) }
+    DisposableEffect(player) {
+        val p = player ?: return@DisposableEffect onDispose { }
+        val ouvinte = object : Player.Listener {
+            override fun onPlayerError(erro: androidx.media3.common.PlaybackException) {
+                if (!jaTentouLevantar) {
+                    jaTentouLevantar = true
+                    p.prepare()
+                    return
+                }
+                modelo.falhouTocando(
+                    mensagem = frasePraFalha(erro, eHls = estado.eHls),
+                    posicaoDoFilmeMs = tempoDeFilme(p.currentPosition, estado.deslocamentoMs),
+                )
+            }
+
+            override fun onPlaybackStateChanged(estadoDoPlayer: Int) {
+                if (estadoDoPlayer == Player.STATE_READY) jaTentouLevantar = false
+            }
+        }
+        p.addListener(ouvinte)
+        onDispose { p.removeListener(ouvinte) }
+    }
+
+    /// ## ⚠️ Em `direct_play`, a faixa escolhida precisa ser reaplicada aqui
+    ///
+    /// Pedir a faixa 1 num arquivo direto refaz o plano, e o plano devolve a
+    /// **mesma** URL — é o mesmo arquivo, com as duas faixas dentro. O player
+    /// recarrega e escolhe a primeira por conta própria, então sem isto o menu
+    /// mudaria o rótulo e não mudaria uma nota do que se ouve.
+    ///
+    /// Em HLS não faz nada, e é de propósito: lá a playlist tem uma faixa só, o
+    /// `getOrNull(indice)` não acha grupo nenhum e a função devolve sem tocar em
+    /// nada. Uma condição a menos pra alguém errar depois.
+    LaunchedEffect(player, estado.eHls, estado.faixaDeAudioEmUso) {
+        val indice = estado.faixaDeAudioEmUso ?: return@LaunchedEffect
+        if (!estado.eHls && indice > 0) escolherAudio(player, indice)
+    }
+
+    /// Se o filme está indo pra **TV** neste instante.
+    ///
+    /// Lido por `rememberUpdatedState` porque quem o consulta é o `onDispose`
+    /// abaixo, que roda muito depois de o efeito ter sido criado — capturar o
+    /// valor de então diria "não está na TV" pra quem mandou pra sala no meio do
+    /// filme.
+    val estaNaTv by androidx.compose.runtime.rememberUpdatedState(cast.conectado)
+
+    /// A marca do fim — e, desde 06/08/2026, **o fim do filme também**.
     ///
     /// Sair da tela é o momento em que a pessoa parou, e é o número que ela vai
     /// encontrar amanhã. As periódicas acima existem pro caso de o app morrer
     /// sem passar por aqui.
+    ///
+    /// ## ⚠️ E aqui o filme para de tocar, que é o que faltava
+    ///
+    /// O `ServicoDeMidia` foi escrito pra o player **sobreviver** à tela — é o
+    /// que faz a janelinha e os controles da tela de bloqueio existirem. Só que
+    /// "a tela saiu de cena" virou sinônimo de "continue tocando", e o efeito
+    /// era o que o dono viu: sai-se do filme com o `voltar`, volta-se pra ficha,
+    /// e o filme segue tocando por baixo do app inteiro.
+    ///
+    /// A distinção que faltava é **por que** a tela saiu:
+    ///
+    /// | | |
+    /// |---|---|
+    /// | janelinha, ou o app foi pro fundo | a tela **continua composta** — este bloco não roda, e o filme segue |
+    /// | `voltar`, ou o botão do sistema | a tela é destruída — e aqui o filme acaba |
+    ///
+    /// ⚠️ **Girar o aparelho não passa por aqui**, e é o `configChanges` do
+    /// manifesto que garante: sem ele a atividade seria recriada a cada giro, e
+    /// este `onDispose` mataria o filme toda vez que alguém deitasse o celular.
+    ///
+    /// ⚠️ **E quem está na TV não para.** Mandar pro Chromecast é justamente
+    /// dizer "não é mais este aparelho que toca" — desligar a sala porque alguém
+    /// fechou a tela do celular seria o oposto do que a §4c promete.
+    ///
+    /// `stop` antes de `clearMediaItems` porque é o `stop` que solta o
+    /// decodificador de hardware — o mesmo vazamento que o `ServicoDeMidia`
+    /// documenta em `onTaskRemoved`, e que aparece só no **próximo** filme.
     DisposableEffect(player) {
         onDispose {
             val p = player ?: return@onDispose
+            /// Antes de parar: parado, `currentPosition` deixa de valer.
             modelo.marcar(p.currentPosition, p.duration, "abandon")
+            if (!estaNaTv) {
+                p.stop()
+                p.clearMediaItems()
+            }
         }
     }
 
@@ -238,13 +389,59 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
         onDispose { atividade?.removeOnPictureInPictureModeChangedListener(ouvinte) }
     }
 
+    /// ## A cortina de abertura
+    ///
+    /// Ela vive **aqui**, e não dentro dos `Controles`: o cromo é uma camada que
+    /// aparece e some a cada toque, e a cortina acontece uma vez só na vida
+    /// desta tela. Pendurá-la no cromo a faria renascer a cada toque.
+    ///
+    /// `pronto` é o player ter chegado a `STATE_READY` — o sinal de que há um
+    /// primeiro quadro atrás do pano. É ele que faz a cortina **cortar** em vez
+    /// de cumprir a coreografia inteira.
+    var cortinaAberta by remember { mutableStateOf(false) }
+
+    /// Quem mais está neste filme agora. Vem do barramento, e o eco do próprio
+    /// aparelho já foi descartado antes — ver `Barramento`.
+    val naSala by modelo.naSala.collectAsStateWithLifecycle()
+
     Box(Modifier.fillMaxSize()) {
         Superficie(player)
 
+        /// O grão, sobre o filme inteiro e o tempo todo.
+        ///
+        /// ⚠️ Ele fica **fora** do `if (emJanelinha)`: na janelinha o quadro tem
+        /// 200dp, e grão desenhado nessa escala vira chuvisco. Ver a checagem
+        /// logo abaixo — a camada é emitida antes, mas a janelinha sai da função
+        /// antes dela.
+        if (!emJanelinha) {
+            dev.odeon.android.ui.Grao.Camada(Modifier.fillMaxSize())
+        }
+
         if (emJanelinha) return@Box
+
+        /// ⚠️ **O cromo não nasce enquanto a cortina está no ar.**
+        ///
+        /// A primeira versão desenhava os dois, e a foto mostrou o resultado:
+        /// título, selo do plano, `legendas · janelinha · voltar`, a timeline e
+        /// «faltam 1:37:48» flutuando por cima de um pano vermelho fechado. O
+        /// cromo estava anunciando um filme que ainda não tinha começado.
+        ///
+        /// A cortina tem o próprio toque-pra-pular, então nada fica inalcançável
+        /// no intervalo.
+        if (!cortinaAberta) {
+            CortinaDeAbertura(
+                titulo = estado.titulo,
+                pronto = player?.playbackState == androidx.media3.common.Player.STATE_READY,
+                aoTerminar = { cortinaAberta = true },
+            )
+        }
+
+        if (!cortinaAberta) return@Box
 
         Controles(
             player = player,
+            naSala = naSala,
+            arteDaCena = { modelo.arteDaCena(it) },
             cast = cast,
             posicao = posicao,
             duracao = duracao,
@@ -252,6 +449,7 @@ private fun Reprodutor(modelo: ModeloDoPlayer, estado: EstadoDoPlayer, aoVoltar:
             estado = estado,
             falhaDaJanelinha = falhaDaJanelinha,
             aoVoltar = aoVoltar,
+            aoTrocarAudio = modelo::trocarFaixaDeAudio,
             aoEntrarNaJanelinha = { falhaDaJanelinha = entrarNaJanelinha(contexto) },
             aoMudarBrilho = { mudarBrilho(contexto, it) },
             aoMudarVolume = { mudarVolume(contexto, it, acumuladorDeVolume) },
@@ -351,11 +549,38 @@ private fun lembrarControle(
                 )
                 .build()
 
-            c.setMediaItem(item)
-            /// Só salta quando há pra onde saltar. Em HLS o `comecarEm` vem
-            /// zerado de propósito — a sessão já começou no ponto pedido, e
-            /// somar de novo saltaria o dobro. Ver `ModeloDoPlayer`.
-            if (comecarEm > 0) c.seekTo(comecarEm)
+            /// ## ⚠️ A posição inicial vai **dentro** do `setMediaItem`
+            ///
+            /// Era `setMediaItem(item)`, depois `seekTo(comecarEm)`, depois
+            /// `prepare()` — três comandos. E o que está do outro lado não é o
+            /// player: é um `MediaController`, um controle remoto pra um player
+            /// que vive noutro processo. Cada chamada é uma mensagem, e
+            /// `setMediaItem` de um argumento **zera a posição** por definição.
+            /// Se ele chegar depois do `seekTo`, apaga o salto.
+            ///
+            /// **Medido em 06/08/2026**, *Armas em Jogo* em `direct_play`, marca
+            /// em `58:06` e botão dizendo `continuar`: o player abriu em **`0:09`**
+            /// e, na segunda tentativa, em **`0:10`**.
+            ///
+            /// ⚠️ **E não parava na tela.** A marca de progresso é escrita a cada
+            /// 10s de reprodução — então abrir o filme *apagava* de onde a pessoa
+            /// tinha parado. Numa base com três pessoas de verdade, é o defeito
+            /// mais caro que este arquivo já teve: os outros mostravam errado,
+            /// este **perdia**.
+            ///
+            /// `setMediaItem(item, startPositionMs)` é um comando só, e a posição
+            /// viaja junto com o item. Não há duas mensagens pra chegarem fora de
+            /// ordem.
+            ///
+            /// ## Por que ninguém tinha notado
+            ///
+            /// Em HLS quem retoma é o **servidor**: a sessão é aberta com
+            /// `start=N` (ver `ModeloDoPlayer.preparar`), e o player abre no zero
+            /// dela. Aí `comecarEm` vale zero de propósito e este caminho nunca é
+            /// exercitado. Metade do acervo vem por HLS — inclusive todo filme
+            /// com áudio ac3, que é o que este cliente não toca. Só `direct_play`
+            /// caía aqui.
+            c.setMediaItem(item, comecarEm)
             c.prepare()
             c.playWhenReady = true
             controle = c
@@ -382,6 +607,10 @@ private fun lembrarControle(
 @Composable
 private fun Controles(
     player: Player?,
+    /// Quem mais está neste filme agora — ver `ModeloDoPlayer.naSala`.
+    naSala: Map<String, NaSala>,
+    /// Monta a URL de uma imagem de cena, pras células da tira.
+    arteDaCena: (String) -> String?,
     posicao: Long,
     duracao: Long,
     tocando: Boolean,
@@ -389,6 +618,9 @@ private fun Controles(
     cast: EstadoDoCast,
     falhaDaJanelinha: String?,
     aoVoltar: () -> Unit,
+    /// Trocar de faixa de áudio: o índice pedido e onde o filme está, em tempo
+    /// de filme. Ver `ModeloDoPlayer.trocarFaixaDeAudio`.
+    aoTrocarAudio: (indice: Int, posicaoDoFilmeMs: Long) -> Unit,
     aoEntrarNaJanelinha: () -> Unit,
     aoMudarBrilho: (Float) -> Unit,
     aoMudarVolume: (Float) -> Unit,
@@ -399,14 +631,33 @@ private fun Controles(
     /// Um filme com barra permanente por cima é um filme com menos filme. Três
     /// segundos é o que dá pra achar o que se quer sem virar decoração.
     var visiveis by remember { mutableStateOf(true) }
+
+    /// ## Paisagem: a altura é o recurso escasso
+    ///
+    /// Deitado, a tela tem ~411dp de altura — e o cromo de baixo estava
+    /// empilhado em **três fileiras** (a tira, o transporte, os tempos), o que
+    /// o dono descreveu como «indo até a metade da tela».
+    ///
+    /// A mesma régua que o `EsqueletoComAbas` usa pra virar trilho: em altura
+    /// espremida a tira encolhe, o disco de play diminui, e os **tempos entram
+    /// na fileira do transporte** em vez de ocuparem uma própria. Três fileiras
+    /// viram duas.
+    val espremido = !androidx.compose.material3.adaptive.currentWindowAdaptiveInfo()
+        .windowSizeClass
+        .isHeightAtLeastBreakpoint(androidx.window.core.layout.WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     var arrastando by remember { mutableStateOf(false) }
     var posicaoDoArrasto by remember { mutableFloatStateOf(0f) }
     var menuDeLegendas by remember { mutableStateOf(false) }
+    var menuDeAudio by remember { mutableStateOf(false) }
+
+    /// Qual legenda está no ar. `null` é «sem legenda», que é o estado inicial do
+    /// player — e é o que acende ou apaga o `cc`.
+    var legendaEscolhida by remember { mutableStateOf<String?>(null) }
 
     /// O menu aberto também segura os controles. Um menu que se fecha sozinho
     /// no meio da leitura é pior que não ter menu.
-    LaunchedEffect(visiveis, tocando, arrastando, menuDeLegendas) {
-        if (visiveis && tocando && !arrastando && !menuDeLegendas) {
+    LaunchedEffect(visiveis, tocando, arrastando, menuDeLegendas, menuDeAudio) {
+        if (visiveis && tocando && !arrastando && !menuDeLegendas && !menuDeAudio) {
             delay(3_000)
             visiveis = false
         }
@@ -447,158 +698,129 @@ private fun Controles(
     ) {
         if (!visiveis) return@Box
 
-        /// ## As duas lavagens, e foi a paisagem que mandou pôr
+        /// ## ⚠️ As duas lavagens saíram, e no lugar entrou **profundidade**
         ///
-        /// Em pé, o filme é letterboxed: sobram tarjas pretas em cima e embaixo,
-        /// e o cromo caía justamente nelas — texto branco sobre preto, legível
-        /// por acidente de proporção.
+        /// Elas eram duas faixas de degradê, uma em cada ponta, postas na sétima
+        /// rodada quando a paisagem mostrou o cromo ilegível sobre um assoalho
+        /// claro. Consertaram o sintoma e cobraram um preço: escureciam o filme
+        /// nas duas pontas **o tempo todo em que o cromo estava aberto**.
         ///
-        /// **Deitado o vídeo ocupa a altura toda**, e o screenshot mostrou o
-        /// resultado: «−10s · pausar · +30s» sobre um assoalho de madeira clara,
-        /// e o timecode brigando com a cena. O controle sumia dentro do filme.
+        /// O conserto de raiz é físico, e não pictórico: quando o cromo aparece,
+        /// **o filme sai de foco** e os controles ficam no plano nítido. Você não
+        /// está olhando através de uma tarja — está olhando o vidro em vez da
+        /// tela. E nada precisa ser escurecido pra texto branco ser legível
+        /// sobre um borrão escuro.
         ///
-        /// Duas faixas de degradê, então — uma em cada ponta, onde o cromo mora.
-        /// Elas não escurecem o meio da imagem, que é onde o filme acontece.
+        /// ⚠️ **O borrão pede API 31**, e o `minSdk` daqui é 26. Abaixo disso o
+        /// `Modifier.blur` **não falha: ele não faz nada** — e um cromo branco
+        /// sobre um filme nítido seria ilegível justamente nos aparelhos mais
+        /// velhos. Por isso o véu uniforme continua existindo por baixo, fraco:
+        /// nos aparelhos novos ele é o toque de contraste que o borrão não dá;
+        /// nos velhos, ele é o conserto inteiro.
+        ///
+        /// O véu é **uniforme** e não degradê de propósito: degradê tem borda, e
+        /// borda dentro do quadro foi o defeito que a barra do facho levou três
+        /// rodadas pra perder.
         Box(
             Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(110.dp)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Black.copy(alpha = 0.62f), Color.Transparent),
-                    ),
-                ),
-        )
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(190.dp)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
-                    ),
-                ),
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f)),
         )
 
-        /// O selo do modo — decidido pra aparecer **nos dois** lugares, aqui e
-        /// na ficha. Aqui ele responde a pergunta que só nasce com o filme na
-        /// tela: "por que está ruim?". Sem ele, transcodificação a 720p parece
-        /// defeito de rede.
-        estado.plano?.let { plano ->
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Cores.fundoAfundado.copy(alpha = 0.75f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = when (plano.mode) {
-                        "direct_play" -> "direto"
-                        "direct_stream" -> "remux"
-                        "transcode" -> "transcodificando"
-                        else -> plano.mode
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (plano.eDireto) Cores.certo else Cores.destaque,
-                )
-                /// De **qual aparelho** o selo está falando.
-                ///
-                /// Durante um cast, `direto` e `transcodificando` são sobre a
-                /// TV, não sobre este celular — a §4c manda dizer isso, senão a
-                /// tela afirma sobre um aparelho uma coisa que é de outro, que é
-                /// o §18 por outro caminho.
-                if (estado.paraCast) {
-                    Text(
-                        text = cast.aparelho?.let { "na $it" } ?: "na TV",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Cores.textoApagado,
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            /// O botão de legenda só existe quando há legenda. Um "CC" apagado
-            /// num filme sem faixa nenhuma é o §53 outra vez — oferecer o que a
-            /// validação vai negar.
-            if (estado.legendas.isNotEmpty()) {
-                TextButton(onClick = { menuDeLegendas = !menuDeLegendas }) {
-                    Text("legendas", color = Cores.texto)
-                }
-            }
-            TextButton(onClick = aoEntrarNaJanelinha) { Text("janelinha", color = Cores.texto) }
-            TextButton(onClick = aoVoltar) { Text("voltar", color = Cores.texto) }
-        }
-
-        if (menuDeLegendas) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 56.dp, end = 12.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Cores.fundoAfundado.copy(alpha = 0.95f))
-                    .padding(4.dp),
-            ) {
-                TextButton(onClick = {
-                    escolherLegenda(player, null)
-                    menuDeLegendas = false
-                }) {
-                    Text("sem legenda", color = Cores.textoApagado)
-                }
-                estado.legendas.forEach { legenda ->
-                    TextButton(onClick = {
-                        escolherLegenda(player, legenda.rotulo)
-                        menuDeLegendas = false
-                    }) {
-                        Text(legenda.rotulo, color = Cores.texto)
-                    }
-                }
-            }
-        }
-
-        /// Por que não há Cast, quando não há.
+        /// ## O cabeçalho, refeito em 06/08/2026
         ///
-        /// Ela aparece **no lugar do botão**, e não como botão apagado: o §53
-        /// diz que o produto não oferece o que a validação vai negar, e o §8b
-        /// diz que negar calado é o defeito. A frase resolve os dois — e diz
-        /// **onde se resolve**, que é a régua do `acesso::negado()` do servidor.
-        cast.impedimento?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = Cores.textoApagado,
-                /// `end` também, e não só `start`: sem ele a frase encosta na
-                /// borda direita e some meia palavra. Visto no emulador — o
-                /// texto terminava em "com o" e o resto ficava fora da tela.
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
-            )
-        }
-
-        falhaDaJanelinha?.let {
-            Text(
-                text = "janelinha: $it",
-                style = MaterialTheme.typography.labelSmall,
-                color = Cores.perigo,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
-            )
-        }
+        /// Eram **quatro blocos** empilhados aqui — título, selo do plano, as
+        /// palavras `janelinha`/`voltar`, e noventa caracteres explicando o
+        /// Cast —, cada um com um tamanho e nenhuma margem em comum. Viraram uma
+        /// fileira só. O porquê de cada troca está no [CabecalhoDoPlayer]; o
+        /// resumo é que a ação mais usada da tela (`voltar`) era a palavra mais
+        /// apagada dela, e o dado que ninguém decide no meio do filme (o plano)
+        /// era o segundo elemento mais gritante.
+        CabecalhoDoPlayer(
+            titulo = estado.titulo,
+            plano = estado.plano?.let { plano ->
+                when (plano.mode) {
+                    "direct_play" -> "direto"
+                    "direct_stream" -> "remux"
+                    "transcode" -> "transcodificando"
+                    else -> plano.mode
+                }
+            },
+            planoEDireto = estado.plano?.eDireto == true,
+            /// Só durante um cast: fora dele, dizer "neste aparelho" seria
+            /// responder uma pergunta que ninguém fez.
+            aparelhoDoPlano = if (estado.paraCast) (cast.aparelho ?: "TV") else null,
+            impedimentoDoCast = cast.impedimento,
+            falhaDaJanelinha = falhaDaJanelinha,
+            aoVoltar = aoVoltar,
+            aoEntrarNaJanelinha = aoEntrarNaJanelinha,
+            modifier = Modifier.align(Alignment.TopStart),
+        )
 
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                /// ⚠️ **A tarja preta saiu daqui.**
+                ///
+                /// Havia um `Color.Black` a 55% por trás desta coluna inteira, e
+                /// ele ficou redundante quando o véu uniforme passou a cobrir a
+                /// tela toda: duas camadas escurecendo o mesmo lugar, e a de
+                /// baixo com borda visível. Em paisagem o resultado era o que o
+                /// dono viu — «uma barra preta indo até a metade da tela».
+                ///
+                /// O véu sozinho já dá contraste ao cromo, e sem aresta.
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = if (espremido) 6.dp else 12.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (espremido) 4.dp else 8.dp),
         ) {
+            /// ## Os menus de faixa, abertos acima da tira
+            ///
+            /// ⚠️ **Um por vez.** Abrir o áudio fecha a legenda e vice-versa: são
+            /// duas listas do mesmo tamanho no mesmo canto, e duas abertas ao
+            /// mesmo tempo cobririam a tira inteira — que é a peça que diz onde
+            /// se está.
+            if (menuDeLegendas || menuDeAudio) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    if (menuDeLegendas) {
+                        MenuDeFaixas(
+                            titulo = "legenda",
+                            /// «sem legenda» é item da lista, e não um botão à
+                            /// parte: desligar é uma escolha entre as outras, e
+                            /// não uma operação de outra natureza.
+                            itens = listOf("sem legenda" to (legendaEscolhida == null)) +
+                                estado.legendas.map { it.rotulo to (it.rotulo == legendaEscolhida) },
+                            aoEscolher = { indice ->
+                                val rotulo = if (indice == 0) null else estado.legendas[indice - 1].rotulo
+                                escolherLegenda(player, rotulo)
+                                legendaEscolhida = rotulo
+                                menuDeLegendas = false
+                            },
+                        )
+                    }
+                    if (menuDeAudio) {
+                        MenuDeFaixas(
+                            titulo = "áudio",
+                            itens = estado.faixasDeAudio.map {
+                                rotuloDaFaixa(it) to (it.index == estado.faixaDeAudioEmUso)
+                            },
+                            aoEscolher = { escolhida ->
+                                /// A posição em **tempo de filme**, que é o que o
+                                /// modelo não tem: lá dentro só existe a posição
+                                /// da sessão, e ela zera assim que a sessão é
+                                /// trocada. Ver `trocarFaixaDeAudio`.
+                                aoTrocarAudio(estado.faixasDeAudio[escolhida].index, posicao)
+                                menuDeAudio = false
+                            },
+                        )
+                    }
+                }
+            }
+
             /// A miniatura do ponto pra onde o dedo está indo.
             ///
             /// Ela só aparece durante o arrasto, e some quando o dedo levanta —
@@ -622,9 +844,15 @@ private fun Controles(
                 )
             }
 
-            Linha(
+            Tira(
                 fracao = if (arrastando) posicaoDoArrasto
                 else if (duracao > 0) posicao.toFloat() / duracao else 0f,
+                folha = estado.folha,
+                urlDaFolha = estado.urlDaFolha,
+                cenas = estado.cenas,
+                arteDaCena = arteDaCena,
+                emPaisagem = espremido,
+                naSala = naSala,
                 /// O detente da R8: um tique a cada **10 minutos de filme**
                 /// arrastados. Ver o comentário em `Linha`.
                 duracaoMs = duracao,
@@ -632,31 +860,142 @@ private fun Controles(
                 aoArrastar = { posicaoDoArrasto = it },
                 aoSoltar = {
                     arrastando = false
-                    if (duracao > 0) player?.seekTo((posicaoDoArrasto * duracao).toLong())
+                    /// A fração é da película inteira, então `fração × duração` é
+                    /// tempo de **filme** — e o player só entende tempo de
+                    /// sessão. Sem esta conversão, tocar em 20% da tira de um
+                    /// filme retomado em 1h19 pedia o minuto 28 **da sessão**, e
+                    /// levava pra 1h47 do filme. Ver `tempoDeSessao`.
+                    if (duracao > 0) {
+                        player?.seekTo(
+                            tempoDeSessao((posicaoDoArrasto * duracao).toLong(), estado.deslocamentoMs),
+                        )
+                    }
                 },
             )
 
+            /// ## ⚠️ O transporte, **centrado** e com alvo de gente
+            ///
+            /// Ele era `−10s · pausar · +30s` em `TextButton`, amontoado no
+            /// canto inferior esquerdo — e a foto de uma tela deitada de 2.400px
+            /// mostrou o que isso é: três palavrinhas num canto de uma tela
+            /// enorme, com o meio vazio.
+            ///
+            /// Agora vai no centro, que é onde o polegar de quem segura o
+            /// aparelho com as duas mãos alcança nas duas orientações. E o play
+            /// é um disco de 56dp: ele é o único controle que se usa sem olhar,
+            /// e era o mesmo tamanho de texto que os outros dois.
+            ///
+            /// ⚠️ **Os saltos continuam sendo texto**, e é decisão: `−10s` e
+            /// `+30s` dizem **quanto** saltam. Trocá-los por setas com um número
+            /// dentro seria desenhar o que a palavra já diz, e este app não tem
+            /// jogo de ícones próprio — os cinco que existem são das abas.
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = if (espremido) 0.dp else 2.dp),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = { player?.seekTo((posicao - 10_000).coerceAtLeast(0)) }) {
-                    Text("−10s", color = Cores.texto)
+                /// Em paisagem o tempo decorrido entra **aqui**, à esquerda do
+                /// transporte, e não numa fileira própria.
+                Box(Modifier.weight(1f)) {
+                    if (espremido) {
+                        Text(
+                            text = relogio(
+                                if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Cores.textoApagado,
+                        )
+                    }
                 }
-                TextButton(onClick = {
-                    if (tocando) player?.pause() else player?.play()
-                }) {
-                    Text(if (tocando) "pausar" else "tocar", color = Cores.destaque)
+                /// Os dois saltos são **relativos**, e por isso eram os únicos
+                /// controles que já acertavam antes desta rodada: somar 30s à
+                /// posição da sessão e à do filme dá o mesmo pulo. Agora que a
+                /// `posicao` virou tempo de filme, eles precisam da volta —
+                /// senão passam a errar por exatamente o deslocamento.
+                BotaoDeSalto(segundos = 10, paraTras = true) {
+                    player?.seekTo(tempoDeSessao(posicao - 10_000, estado.deslocamentoMs))
                 }
-                TextButton(onClick = { player?.seekTo(posicao + 30_000) }) {
-                    Text("+30s", color = Cores.texto)
+                Box(Modifier.padding(horizontal = if (espremido) 12.dp else 18.dp)) {
+                    BotaoDeTocar(tocando = tocando, compacto = espremido) {
+                        if (tocando) player?.pause() else player?.play()
+                    }
                 }
+                BotaoDeSalto(segundos = 30, paraTras = false) {
+                    player?.seekTo(tempoDeSessao(posicao + 30_000, estado.deslocamentoMs))
+                }
+                /// ## ⚠️ As faixas ficam na ponta, e o transporte segue no meio
+                ///
+                /// A conta é de peso: os dois lados desta fileira têm
+                /// `weight(1f)`, então o `−10 · play · +30` continua centrado na
+                /// tela **mesmo com os ícones só de um lado**. Pendurá-los sem
+                /// peso empurraria o play pra esquerda, e ele é o único controle
+                /// que se usa sem olhar.
+                ///
+                /// Deitado o «faltam» divide esta ponta com eles; em pé ele mora
+                /// na fileira de baixo e a ponta é só das faixas.
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (espremido && duracao > 0) {
+                        val agora = if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao
+                        Text(
+                            text = "faltam ${relogio(duracao - agora)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Cores.textoApagado,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
+                    /// Os dois só nascem quando há o que escolher — §53. Um `cc`
+                    /// apagado num filme sem faixa nenhuma, ou um alto-falante
+                    /// num filme de áudio único, é oferecer o que a validação vai
+                    /// negar.
+                    if (estado.legendas.isNotEmpty()) {
+                        BotaoDeLegenda(ligado = legendaEscolhida != null) {
+                            menuDeAudio = false
+                            menuDeLegendas = !menuDeLegendas
+                        }
+                    }
+                    /// ⚠️ A lista vem do **plano**, e não do player. Perguntar ao
+                    /// player responde «uma» em toda transcodificação, porque ele
+                    /// só enxerga o que está na playlist — foi assim que o dual
+                    /// audio de *Família de Aluguel* sumiu na medida de
+                    /// 06/08/2026. Ver `dados.FaixaDeAudio`.
+                    if (estado.faixasDeAudio.size > 1) {
+                        BotaoDeAudio {
+                            menuDeLegendas = false
+                            menuDeAudio = !menuDeAudio
+                        }
+                    }
+                }
+            }
+
+            if (espremido) return@Column
+
+            /// Os tempos ladeando a tira: onde você está, e **quanto falta**.
+            ///
+            /// ⚠️ «faltam 1h29» e não «0:35 / 1:37:48». A fração obriga quem lê
+            /// a fazer a subtração, e o que a pessoa quer saber é se dá tempo. É
+            /// também a palavra que a ficha e a fileira de continuar já usam — o
+            /// player era o único lugar do app falando em fração.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                val agora = if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao
                 Text(
-                    text = "${relogio(if (arrastando) (posicaoDoArrasto * duracao).toLong() else posicao)} / ${relogio(duracao)}",
+                    text = relogio(agora),
                     style = MaterialTheme.typography.labelSmall,
                     color = Cores.textoApagado,
                 )
+                if (duracao > 0) {
+                    Text(
+                        text = "faltam ${relogio(duracao - agora)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Cores.textoApagado,
+                    )
+                }
             }
         }
     }
@@ -843,7 +1182,44 @@ private fun Superficie(player: Player?) {
                 setBackgroundColor(android.graphics.Color.BLACK)
             }
         },
-        update = { it.player = player },
+        update = { vista ->
+            vista.player = player
+
+            /// ## ⚠️ O borrão foi tentado aqui, e **não funciona** — 05/08/2026
+            ///
+            /// O «foco» do desenho aprovado era: com o cromo aberto, o filme sai
+            /// de foco e os controles ficam no plano nítido. Duas tentativas, e
+            /// as duas morrem no mesmo lugar.
+            ///
+            /// **`Modifier.blur` do Compose não alcança o vídeo.** Ele age na
+            /// camada de composição, e quem desenha pixel de filme é o
+            /// `SurfaceView` do `PlayerView` — que o sistema compõe **fora** da
+            /// janela do app. O borrão pegaria tudo em volta do vídeo e deixaria
+            /// o vídeo nítido: o contrário do desejado.
+            ///
+            /// **`View.setRenderEffect` também não.** Ele existe desde a API 31 e
+            /// foi o que ficou escrito aqui por uma rodada. **Medido no aparelho,
+            /// com API 37: o código roda e o filme continua nítido.** Pelo mesmo
+            /// motivo — o efeito é da `View`, e a superfície do vídeo é composta
+            /// pelo SurfaceFlinger num plano separado.
+            ///
+            /// ## O que faria funcionar, e por que não foi feito
+            ///
+            /// Trocar o `surface_type` do `PlayerView` pra `texture_view`. Um
+            /// `TextureView` compõe **dentro** da hierarquia e aceita efeito.
+            ///
+            /// O preço é real e é de vídeo: some a camada de overlay de
+            /// hardware, cada quadro passa a ser copiado pra uma textura, e num
+            /// HEVC 4K em Direct Play — que é metade do que este acervo tem — a
+            /// conta aparece em bateria e em quadros perdidos. Gastar isso por um
+            /// efeito de cromo que aparece três segundos por vez não se paga.
+            ///
+            /// **É decisão do dono**, e está anotada como tal no
+            /// `PARIDADE-ANDROID.md`. Enquanto isso o véu uniforme dos
+            /// `Controles` faz o trabalho de legibilidade sozinho — e ele nunca
+            /// foi plano B: mesmo com o borrão ele continuaria existindo pros
+            /// aparelhos abaixo da API 31.
+        },
     )
 }
 

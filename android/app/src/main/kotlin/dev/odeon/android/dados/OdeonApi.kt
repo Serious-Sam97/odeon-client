@@ -121,6 +121,10 @@ interface OdeonApi {
         @Query("video_codecs") codecsDeVideo: String,
         @Query("audio_codecs") codecsDeAudio: String,
         @Query("supports_hls") suportaHls: String = "true",
+        /// Qual faixa de áudio o plano deve considerar. `null` não entra na query
+        /// — Retrofit omite —, e aí o servidor usa a 0. Ver
+        /// `PlanoDeReproducao.faixaDeAudio`.
+        @Query("audio_track") faixaDeAudio: Int? = null,
     ): PlanoDeReproducao
 
     /// Abre a sessão de HLS. Só quando o plano **não** for `direct_play`.
@@ -132,6 +136,10 @@ interface OdeonApi {
         @Query("audio_codecs") codecsDeAudio: String,
         @Query("supports_hls") suportaHls: String = "true",
         @Query("start") comecandoEm: Int = 0,
+        /// ⚠️ Trocar de faixa **exige sessão nova**, como o `start`: a playlist
+        /// já foi escrita com a faixa anterior, e o `ffmpeg` daquela sessão não
+        /// muda de ideia no meio.
+        @Query("audio_track") faixaDeAudio: Int? = null,
     ): SessaoDeTranscodificacao
 
     // ----------------------------------------------------------------- fase 7

@@ -1145,6 +1145,406 @@ sub-tela aparecer. Agora o esqueleto desenha e não decide.
 **Verificado no aparelho:** a pastilha abre baixados e a barra passa a `baixados`;
 tocar nela devolve a grade com `60 de 8.316` e a barra volta a `biblioteca`.
 
+### A oitava rodada: o player, e a cortina que abre a sessão
+
+> «bora fazer o redesign do player, eu quero uma experiência» — e depois: «as
+> luzes piscam revelando as cortinas fechadas e aí tu anima pra abrir, mas coisa
+> de segundos, não podemos ser tão lerdos pra abrir o filme em si»
+
+**O diagnóstico**, medido em foto deitado: o player tinha as peças mais completas
+do app — plano, sprites, gestos, PiP, Cast, legendas — e a apresentação de uma
+camada de depuração. `−10s pausar +30s 0:35 / 1:37:48` em texto cru amontoado no
+canto inferior esquerdo de uma tela de 2.400px; a timeline um fio de 2px; **sem
+título**; e a frase de impedimento do Cast, com 90 caracteres, atravessada no meio
+do filme por cima do logo da distribuidora.
+
+E o de fundo: **o app inteiro é cinema** — o facho, as caixas de VHS, o menu de
+disco, o balcão — e o player, a única tela onde se assiste a um filme, era a menos
+cinematográfica de todas.
+
+#### A cortina — e a regra que a impede de ser lerdeza
+
+Ela **veste uma espera que já existe**: pedir o plano, montar a URL, encher o
+buffer. Esse tempo existe hoje e o que ele mostra é tela preta.
+
+| | |
+|---|---|
+| lâmpadas | 0 → 320ms, fora de fase, revelando o pano do escuro |
+| pano visível | até 520ms, com o letreiro |
+| abre | até ~950ms |
+| **filme pronto antes** | a cortina **corta** |
+| **filme demorou** | segura, teto de **1,2s**, e depois abre mesmo assim |
+| **qualquer toque** | pula — precedente da vinheta do menu de disco |
+
+⚠️ Passado o teto, a cortina abre **sobre um filme que ainda não começou**. Um
+pano parado finge que está acontecendo alguma coisa; um buffer visível diz a
+verdade.
+
+⚠️ **Sem animação no sistema, sem cortina.** O §15 manda, e isso obrigou a
+separar duas coisas que pareciam uma: `tween` dentro de `animateTo` **já é
+descontado** pelo `MotionDurationScale`; `delay` de corrotina **não é**.
+Multiplicar o `tween` aplicaria o desconto duas vezes. A `ui/Animacao.kt` nasceu
+pra escrever essa distinção uma vez só.
+
+#### O que mais entrou
+
+| | |
+|---|---|
+| **o título** | não existia. Um player sem o nome do que toca só serve a quem lembra o que abriu — e este app tem PiP, sessão de mídia e Cast, três caminhos de voltar sem ter escolhido |
+| **o transporte** | centrado, com o play num disco de 56dp. Era texto de 12sp num canto |
+| **«faltam 1:37»** | no lugar de `0:35 / 1:37:48`. A fração obriga quem lê a subtrair, e é a palavra que a ficha e o continuar já usavam |
+| **o impedimento do Cast** | subiu pro alto, com duas linhas — saiu do meio do filme |
+| **o grão** | o `Grao.Camada` já existia e nunca tinha sido usado no player |
+| **a tira de filme** | a timeline como película: perfurações, os fotogramas da folha de sprites, e a lente como cabeçote |
+
+#### Quatro defeitos, e a foto pegou todos
+
+1. **A cortina cobria só 75% da tela.** Num `Row`, `fillMaxWidth(0.5f)` mede sobre
+   o **espaço que sobrou**: a primeira metade comia 50% e a segunda 50% dos 50%
+   restantes. Virou `weight(1f)`.
+2. **O cromo desenhava por cima do pano fechado** — título, selo, `voltar` e
+   «faltam 1:37:48» anunciando um filme que não tinha começado. O cromo passou a
+   não nascer enquanto a cortina está no ar.
+3. **O pano nascia aceso.** As lâmpadas só somavam brilho a um vermelho que já
+   estava lá — o pedido era o contrário. Entrou um véu de breu que a luz **tira**.
+4. **As lâmpadas não apareciam.** Estavam declaradas antes do pano, e num `Box`
+   quem vem depois fica por cima: eram pintadas e cobertas no mesmo quadro. A
+   ordem certa também é a física — a marquise fica na frente do pano.
+
+#### ⚠️ A cortina cortava cedo, e por isso «não havia luzes»
+
+O dono disse duas vezes que as luzes não existiam. Elas existiam — e o defeito
+não era o desenho delas, era **a regra de tempo**.
+
+A primeira versão cortava a coreografia assim que o player chegasse a `READY`,
+pra nunca atrasar o filme. Num Direct Play local isso acontece **logo depois da
+piscada**: a marquise acendia e a cortina já abria por cima. Duravam um piscar de
+olhos, e a conclusão de quem viu foi a certa.
+
+Ele então afrouxou a própria restrição: «não precisa ser voando o início, pode
+levar uns 2 segundos a mais».
+
+| | antes | agora |
+|---|---|---|
+| a piscada | rampa linear de 320ms | **900ms de lâmpada de arco**, com quedas e picos |
+| o pano no ar | até 520ms | até **1.500ms** |
+| abre | 430ms | **700ms** |
+| total | 950ms | **2,2s** |
+| filme pronto antes | **cortava** | não corta mais — a coreografia tem tempo próprio |
+| teto | 1,2s | **4s**, e ele agora só responde ao filme lento |
+
+⚠️ **A piscada deixou de ser rampa e virou `keyframes`**, e é o que mais mudou a
+leitura: uma subida lisa é um *fade*, e ninguém chama fade de «as luzes piscam».
+A curva agora cai e passa do ponto antes de assentar — é a mesma família da
+piscada do `BarraDoFacho`, que já existia por esse motivo.
+
+#### Os botões, e as luzes que «não existiam»
+
+> «dar mais vida aos botões de pause, avançar e retroceder» · «As luzes (VOCÊ
+> ESQUECEU DAS LUZES)»
+
+**As luzes existiam** — e estavam invisíveis, que dá no mesmo. Seis pontos de 6dp
+ocupando 42% da largura. Viraram **doze bulbos de 10dp, na largura inteira, com
+halo radial**: o derrame é o que separa uma lâmpada de um adesivo amarelo.
+
+⚠️ A primeira correção pôs **16**, e a foto mostrou a última cortada: 16 caixas de
+33dp dão 528dp numa tela de 411. Doze caixas de 28dp dão 336, e sobram 35 pro
+`SpaceBetween`.
+
+**Os botões deixaram de ser texto.** `−10s` e `+30s` eram `TextButton` de 12sp;
+agora são arcos desenhados com o número dentro, que **giram no sentido do salto**
+ao serem tocados. O play virou um disco de 60dp com degradê e **o facho por trás**
+— a mesma luz da barra de navegação, aqui dizendo qual é o botão principal sem
+precisar ser maior que os outros.
+
+Desenhados à mão, e não de biblioteca: os cinco ícones das abas já são vetores
+escritos aqui, e o §15 chama isso de «zero bytes». Além disso o salto **precisa
+dizer quantos segundos** — desenhando, o número é parte da forma.
+
+⚠️ **As duas setas nasceram trocadas**, e só a foto pegou: o `10` apontava pra
+frente e o `30` pra trás. A primeira versão espelhava o **arco** e deixava a ponta
+seguir junto. A régua que resolveu: o arco é **o mesmo** nos dois; o que muda é de
+que lado da abertura a ponta mora e pra onde ela olha.
+
+#### ⚠️ A tira ganhou imagem **sem depender de job nenhum** — e eu tinha errado a análise
+
+> «por que o web consegue ter os capítulos e você não?»
+
+A pergunta do dono desmontou uma conclusão minha. Eu havia tratado a folha de
+sprites e as cenas como **alternativas** e concluído que, sem a folha, não havia
+imagem possível — foi isso que deixou a tira cinza e me fez pedir uma varredura do
+acervo inteiro.
+
+São dois mecanismos, e **o segundo não precisa de varredura**:
+
+| | folha de sprites | cenas |
+|---|---|---|
+| rota | `GET /api/media/{arquivo}/scrub` | `GET /api/works/{obra}/cenas` |
+| quando | trabalho em lote, uma vez por arquivo | **sob demanda** |
+| quantas | uma a cada `interval_seconds` | **doze** |
+| custo | decodifica o arquivo inteiro | **~3s, medido** |
+
+Doze pontos são pouco pra preview de arrasto — e é exatamente a conta certa pra
+tira, que mostra **11 ou 12 células** num celular. Cada célula pega a cena mais
+próxima do instante que representa (mais próxima, e não a anterior: com ~11min por
+cena, pegar a anterior mostraria imagem de onze minutos atrás).
+
+A folha continua tendo precedência quando existe — ela dá o quadro **daquele**
+instante, e não o mais próximo.
+
+**Medido no aparelho:** 12 cenas em 3s para *007: A Serviço Secreto*, e a tira
+desenhando os quadros de verdade, com o trecho visto revelado contra o resto
+apagado.
+
+⚠️ **E isto cancela o pedido de varredura.** O `POST /api/scrub` continua sendo o
+que dá resolução fina ao arrasto — mas a tira **não depende mais dele** pra ter
+imagem. O status do job, para registro: rodou uma vez em 01/08, fez **63 de
+16.836** em três minutos e parou.
+
+#### ⚠️ Paisagem: a tarja preta que comia meia tela
+
+> «no modo horizontal essa barra preta com os itens está muito grande, indo até a
+> metade da tela»
+
+Duas causas, e a primeira eu tinha criado sem perceber.
+
+**A tarja era literal.** Havia um `Color.Black` a **55%** por trás da coluna do
+cromo de baixo — e ele ficou redundante quando o «foco» trouxe um véu uniforme
+sobre a tela inteira. Duas camadas escurecendo o mesmo lugar, e a de baixo com
+aresta visível. Em pé passava; deitado, onde a altura é escassa, virava uma faixa.
+Saiu: o véu sozinho dá o contraste, e sem borda.
+
+**E o cromo estava em três fileiras** — a tira, o transporte, os tempos. Deitado a
+tela tem ~411dp de altura, e três fileiras empilhadas comem quase metade.
+
+| | em pé | deitado |
+|---|---|---|
+| a tira | 30dp | **48dp** — ver abaixo |
+| o disco de play | 60dp | **46dp** |
+| os tempos | fileira própria | **na fileira do transporte**, nas duas pontas |
+| respiro | 12dp / 8dp | **6dp / 4dp** |
+| fileiras | 3 | **2** |
+
+A régua é a mesma que o `EsqueletoComAbas` usa pra virar trilho —
+`isHeightAtLeastBreakpoint(HEIGHT_DP_MEDIUM_LOWER_BOUND)` —, e usá-la aqui também
+é o que garante que as duas peças concordem sobre o que é «espremido».
+
+**Medido no aparelho, deitado:** os tempos e o transporte na mesma faixa
+(y 917–959 de 1080), e a tarja preta fora — o filme aparece por trás do cromo.
+
+#### ⚠️ E a tira, deitada, **cresce** — a primeira reação estava errada
+
+A resposta inicial a «o cromo come metade da tela» foi encolher tudo, tira
+inclusive, pra 22dp. O dono corrigiu: «aumente o tamanho da timeline, está muito
+pequeno».
+
+Ele está certo pela forma da tela. Deitado sobra **largura** (914dp contra 411) e
+falta altura; a tira é a única peça do cromo que usa a largura inteira, então é a
+que mais ganha e a que menos custa em altura por pixel de informação. Quem
+devolveu o espaço foram **a tarja que saiu e as três fileiras que viraram duas** —
+não o encolhimento da película.
+
+| | em pé | deitado |
+|---|---|---|
+| altura da tira | 30dp | **48dp** |
+| largura do quadro | 34dp | **62dp** |
+| a janela | 40dp | **70dp** |
+
+⚠️ **Altura e largura crescem juntas.** Subir só a altura deixaria a célula quase
+quadrada, e recortar um quadro 16:9 num quadrado joga fora metade da cena. 62 por
+38 (a altura menos o respiro das perfurações) dá **1,63** — perto o bastante de
+16:9 pra o recorte tirar só as beiradas.
+
+**Fotografado**, depois de reiniciar o emulador: a tira ocupa a largura inteira
+com ~15 células de cena em cor, a janela do projetor emoldura o quadro atual com o
+halo e a lente, e o transporte fica numa fileira só com os tempos nas pontas — com
+o filme aparecendo por trás de tudo.
+
+⚠️ **E o renderizador morreu pela segunda vez no mesmo dia**, no meio desta
+verificação: `screencap` a 18 KB, `screenrecord` a 24 KB, e o dono vendo tela
+preta. O teste continua valendo — a árvore de acessibilidade respondia — e o
+conserto também: `adb emu kill`, esperar o processo morrer, subir de novo. **Duas
+vezes em um dia sugere que reiniciar o emulador vire rotina de sessão longa**, e
+não remédio de emergência.
+
+#### A cor dos quadros, e a janela do projetor
+
+O dono mandou uma referência com a tira colorida. A tentação é sortear uma paleta
+por célula — e isso seria a tela afirmando cor de cena que ela não conhece (§18).
+
+**Não precisa: a cor já estava lá.** Os quadros são fotogramas do filme; estavam
+apagados porque a célula por ver desenhava a 34% de alfa sobre fundo escuro. Subir
+pra **70%** e saturar em **1,45** mostra a cor que já está no arquivo. É revelar, e
+não pintar.
+
+Três intensidades foram propostas e a escolhida foi a média. A forte (88% e 1,8)
+ficava bonita e **matava a função primária**: com tudo brilhando, a lavagem quente
+do trecho visto some no meio da cor e a tira deixa de responder «onde eu estou».
+
+⚠️ **O efeito depende do filme, e isso não é defeito.** *007* de 1969 tem paleta
+lavada e satura menos vistoso que um filme moderno. A referência tinha cores muito
+separadas porque eram cenas de **filmes diferentes**; num filme só a tira é mais
+harmônica, que é o correto.
+
+**E o cabeçote virou janela.** Era um traço de 2dp; agora é uma moldura acesa em
+volta do quadro atual, com halo e a lente no pé. A mudança não é decorativa: um
+traço marca *uma posição*; uma janela com o quadro dentro diz que a película
+**está passando por ali**.
+
+⚠️ **Dois defeitos de posicionamento, os dois pegos por foto:**
+
+1. A janela desenhava como dois traços finos. A primeira versão aninhava uma caixa
+   de largura fracionária com um `offset` — e fração encadeada com deslocamento é
+   o mesmo defeito que a cortina já tinha cobrado. Com a largura na mão
+   (`BoxWithConstraints`), a conta é uma linha.
+2. O halo e a lente foram parar na ponta esquerda enquanto a moldura estava no
+   meio: **`offset` antes de `align`** desloca e *depois* alinha, e o alinhamento
+   come o deslocamento. `align` primeiro faz o `x` ser absoluto.
+
+#### A tira: tocar pra pular, e o cinza que não dizia nada
+
+Duas queixas do dono ao usar, e as duas eram defeito:
+
+**«não consigo clicar pra avançar».** A tira só escutava arrasto, e
+`detectHorizontalDragGestures` **não dispara em toque parado** — o dedo tem que
+andar. Encostar num ponto da timeline não fazia nada. ⚠️ E o buraco **não era
+novo**: a `Linha` que ela substituiu tinha o mesmo desde sempre, e ninguém tinha
+percebido porque ninguém tinha tentado.
+
+O conserto são dois `pointerInput` e não um: toque e arrasto são detectores
+diferentes, e empilhá-los no mesmo bloco faz um engolir o outro.
+
+**«a timeline é um negócio só cinza».** Com a folha de sprites ausente, as células
+são todas escuras — e a lavagem do trecho visto estava em 0,06→0,22 de alfa, fraca
+demais pra separar o que passou do que falta. A tira inteira lia como uma barra
+cinza.
+
+A função primária de uma timeline é **dizer onde você está**, e isso tem que
+sobreviver à ausência dos quadros. A lavagem subiu pra 0,20→0,52 e as células por
+ver escureceram. **Medido no aparelho:** tocando a 60% da tira, o filme foi de
+`faltam 1:36:30` pra `faltam 38:13`, e a tira mostra o trecho visto em âmbar
+contra o resto escuro.
+
+#### ⚠️ Perseguir só a si mesmo — um defeito que o campo novo revelou
+
+Com o `user_id` no ar, apareceu um erro que existia calado: **o player perseguia a
+posição de qualquer pessoa**. Medido no aparelho, com o filme aos 2min e um
+progresso de outro aparelho aos 1h25: **o filme pulou pra 1h25**.
+
+Enquanto o evento não dizia de quem era, isso estava certo — a única leitura
+possível era «outro aparelho seu». Agora a regra separa:
+
+| de quem | o que fazer |
+|---|---|
+| **de outro aparelho seu** | perseguir — é o «parou na TV, continua no ônibus» |
+| **de outra pessoa** | **marcar na tira**, e não tocar no seu filme |
+
+Sem saber quem se é, vale o comportamento antigo: `meuUsuarioId` nulo só acontece
+enquanto o `auth/me` não respondeu, e nesse instante perseguir é o que o app fazia
+ontem.
+
+⚠️ **Nenhum dos dois foi verificado**, e o motivo está abaixo.
+
+#### ⚠️ Eu derrubei o barramento do próprio app, com a armadilha documentada
+
+Pra ler o evento cru eu mintei um token de mídia com `curl`. O §43 avisa: **emitir
+um token novo aposenta o anterior**. E o `garantirTokenDeMidia` só pede um token
+quando **não há nenhum guardado** — ou seja, o app seguiu usando o token morto,
+tomou 401, tentou cinco vezes e desistiu. Nenhum evento chega desde então.
+
+Caí na armadilha exatamente pra testar a coisa que ela quebra.
+
+⚠️ **E há um defeito de produto aqui, independente do meu erro:** o app **não se
+recupera** de um token de mídia aposentado. Qualquer coisa que emita um token novo
+pra a mesma conta — o web abrindo, outro aparelho entrando — mata o barramento
+deste até a sessão ser refeita. E mata **em silêncio**.
+
+O conserto certo é o barramento pedir um token novo ao tomar 401, **uma vez**,
+antes de desistir. Isso não viola o §43: renovar quando o antigo comprovadamente
+morreu é diferente de renovar no meio de um filme. **Não foi feito** — é decisão
+do dono, e não era o pedido desta rodada.
+
+#### ⚠️ O borrão não funciona, e é limitação de plataforma
+
+O «foco» — o filme sair de foco com o cromo aberto — **foi tentado e falha**, por
+dois caminhos:
+
+- `Modifier.blur` age na camada de composição, e o vídeo não está nela.
+- `View.setRenderEffect` (API 31+) **também não**: medido no aparelho com **API
+  37**, o código roda e o filme continua nítido. O `SurfaceView` é composto pelo
+  SurfaceFlinger num plano separado, fora do alcance de efeito da hierarquia.
+
+O que faria funcionar é `surface_type=texture_view`, e o preço é de vídeo: some o
+overlay de hardware e cada quadro passa a ser copiado pra uma textura — num HEVC
+4K em Direct Play, que é metade deste acervo, isso aparece em bateria e quadro
+perdido. **Fica como decisão do dono.** O código morto foi apagado; o véu uniforme
+faz a legibilidade sozinho, e ele nunca foi plano B — existiria de qualquer jeito
+pros aparelhos abaixo da API 31.
+
+#### ⚠️ A tira caía numa barra fina, e o erro era de projeto
+
+> «meu, você não fez quase nada do que eu pediu» — e ele estava certo.
+
+A primeira versão fazia a tira **depender** da folha de sprites: sem folha, ela
+colapsava numa barra de 3px. Como **nenhum arquivo deste acervo tem folha
+gerada**, o redesenho inteiro desaparecia no aparelho.
+
+O erro não foi o 404 — foi ter amarrado a forma ao conteúdo. **Uma tira de filme
+sem os fotogramas revelados continua sendo uma tira de filme**: tem perfuração,
+tem célula, tem a janela do projetor passando por ela. O que falta é a imagem, e
+ela chega quando o servidor gerar, sem esta tela mudar de forma.
+
+E não é inventar dado (§18): célula escura é película **não revelada**, que é
+literalmente o estado do arquivo. Desenhar retângulos coloridos no lugar dos
+quadros, aí sim, seria afirmar cena que não se sabe.
+
+**Visto no aparelho:** a tira desenha as perfurações nas duas bordas, as células e
+a lente, com os quadros vazios. Os fotogramas continuam pendentes do servidor. Testado em *Armas em Jogo* e em *Juno*: a rota devolve 404
+nos dois, e o `erroDaFolha` fica nulo, que é o caso documentado de «o servidor
+ainda não gerou».
+
+#### ⚠️ E não era pedido de servidor — era um botão que já existe
+
+Esta rodada registrou aqui um pedido pro `serious-server` pedindo que ele
+«gerasse as folhas de sprites». **Estava errado, e quem corrigiu foi o dono**, com
+uma pergunta: «mas não fazemos algo assim quando selecionamos capítulos no menu de
+DVD? no web já é assim, dá uma olhada».
+
+Dando: o web tem uma tela de servidor (`Servidor.tsx`) com uma operação chamada
+**Sprites**, ao lado de «Identificar» e «Embeddings». A descrição é dela:
+
+> «Folha de miniaturas pro preview de seek. Decodifica o arquivo inteiro, então é
+> a mais demorada — uma vez por arquivo, e fica em cache pra sempre.»
+
+O botão chama `POST /api/scrub`, e há `GET /api/scrub/status` devolvendo
+`running · current · total · done · failed · errors`. **É operação, não código.**
+O 404 nunca foi pendência de implementação: é uma tarefa de manutenção que ninguém
+disparou neste acervo.
+
+E o `scrub_finished` que o barramento já emite é o aviso de que terminou — o app
+passa a preencher a tira sozinho, sem release novo.
+
+⚠️ **E as cenas do menu de disco não são a mesma coisa**, que era a outra metade
+da pergunta:
+
+| | folha de sprites | cenas do menu |
+|---|---|---|
+| rota | `GET /api/media/{arquivo}/scrub` | `GET /api/works/{obra}/cenas` |
+| o que é | **uma imagem** com o filme inteiro em grade | **doze imagens** avulsas |
+| quando | lote, uma vez por arquivo, cache pra sempre | sob demanda |
+| custo | decodifica o arquivo inteiro | ~4s na primeira vez |
+
+O comentário do `api.ts` do web confirma o porquê da separação: a grade de cenas é
+pedida **ao entrar na tela de cenas, nunca ao abrir o menu**. Doze pontos não
+cobrem 1h37, e pedir uma extração por posição arrastada seria uma requisição por
+pixel — que é exatamente o problema que a folha existe pra resolver.
+
+**O pedido que sobra pro servidor** é só o `quem_nome` no evento `progress` do
+barramento, pras marcas de onde a casa parou. Esse sim é campo novo.
+
+⚠️ **Escrito no acervo:** o progresso de *Armas em Jogo* e de *Juno* na conta do
+`sam`, das verificações. Os dois ficaram perto do início.
+
 ### ⚠️ O `screencap` preto tem conserto, e não era a tela
 
 O `PARIDADE` dizia que o `screencap` devolve quadro preto «no palco e no menu de

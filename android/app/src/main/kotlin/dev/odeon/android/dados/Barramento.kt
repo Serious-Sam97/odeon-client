@@ -162,6 +162,11 @@ class Barramento(
             "progress" -> EventoDoServidor.Progresso(
                 obraId = texto("work_id") ?: return,
                 posicaoEmSegundos = numero("position_seconds") ?: 0.0,
+                /// Quem e de qual conta — **campos novos**, pedidos ao servidor
+                /// em 05/08/2026 e confirmados no ar no mesmo dia. Ver o
+                /// `Progresso` pra o que eles habilitam.
+                userId = texto("user_id"),
+                quemNome = texto("quem_nome"),
             )
             "locadora" -> EventoDoServidor.NaLocadora(
                 oQue = texto("o_que") ?: "",
@@ -188,7 +193,31 @@ class Barramento(
 /// O que o servidor manda pelo barramento.
 sealed interface EventoDoServidor {
     /// Alguém — **noutro aparelho** — mexeu no progresso de uma obra.
-    data class Progresso(val obraId: String, val posicaoEmSegundos: Double) : EventoDoServidor
+    /// Alguém mexeu na posição de uma obra.
+    ///
+    /// ## ⚠️ Ele é **presença**, e não histórico
+    ///
+    /// A distinção decide o que dá pra desenhar com ele. O evento só nasce
+    /// quando alguém **mexe agora**: o stream não tem passado. Abrir um filme
+    /// hoje não traz nada sobre quem o assistiu ontem.
+    ///
+    /// Então a marca que ele alimenta é «o rudney **está** aos 42min», e não «o
+    /// rudney **parou** aos 42min». A segunda pediria uma consulta — uma rota
+    /// que devolvesse a posição de todo mundo numa obra —, e ela não existe.
+    ///
+    /// [userId] e [quemNome] são campos novos de 05/08/2026. Antes deles o
+    /// evento dizia que **alguém** tinha mexido, e o player usava isso só pra
+    /// corrigir a própria posição — não dava pra dizer de quem era.
+    ///
+    /// ⚠️ O eco do próprio aparelho já foi descartado antes daqui, pelo
+    /// `device_id`. Mas **outro aparelho seu** chega: sair da TV e pegar o
+    /// celular é uma marca legítima, com o seu próprio nome.
+    data class Progresso(
+        val obraId: String,
+        val posicaoEmSegundos: Double,
+        val userId: String? = null,
+        val quemNome: String? = null,
+    ) : EventoDoServidor
 
     /// A locadora mudou: `pegou` · `devolveu` · `pediu` · `venceu`.
     data class NaLocadora(val oQue: String, val titulo: String?, val quem: String?) : EventoDoServidor {

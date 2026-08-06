@@ -198,7 +198,11 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// que a TV não abre, e o defeito apareceria como tela preta na sala. Ver
     /// `PerfilDeCast`, e a §4c da espec — que registra que isto **não custa
     /// backend**, porque a rota já aceita a lista como parâmetro.
-    suspend fun plano(arquivoId: String, paraCast: Boolean = false): PlanoDeReproducao = withContext(Dispatchers.IO) {
+    suspend fun plano(
+        arquivoId: String,
+        paraCast: Boolean = false,
+        faixaDeAudio: Int? = null,
+    ): PlanoDeReproducao = withContext(Dispatchers.IO) {
         /// As capacidades vão pro log porque **elas decidem o modo**, e o modo
         /// mudou entre duas execuções do mesmo arquivo sem ninguém mexer em
         /// nada: uma vez `direto`, outra `transcodificando — o cliente não toca
@@ -214,6 +218,7 @@ class RepositorioOdeon(private val cofre: Cofre) {
             containers = if (paraCast) PerfilDeCast.CONTAINERS else CapacidadesDoAparelho.containers,
             codecsDeVideo = if (paraCast) PerfilDeCast.VIDEO else CapacidadesDoAparelho.codecsDeVideo,
             codecsDeAudio = if (paraCast) PerfilDeCast.AUDIO else CapacidadesDoAparelho.codecsDeAudio,
+            faixaDeAudio = faixaDeAudio,
         )
     }
 
@@ -221,6 +226,7 @@ class RepositorioOdeon(private val cofre: Cofre) {
         arquivoId: String,
         comecandoEm: Int,
         paraCast: Boolean = false,
+        faixaDeAudio: Int? = null,
     ): SessaoDeTranscodificacao =
         withContext(Dispatchers.IO) {
             exigirApi().abrirSessao(
@@ -229,6 +235,7 @@ class RepositorioOdeon(private val cofre: Cofre) {
                 codecsDeVideo = if (paraCast) PerfilDeCast.VIDEO else CapacidadesDoAparelho.codecsDeVideo,
                 codecsDeAudio = if (paraCast) PerfilDeCast.AUDIO else CapacidadesDoAparelho.codecsDeAudio,
                 comecandoEm = comecandoEm,
+                faixaDeAudio = faixaDeAudio,
             )
         }
 

@@ -292,6 +292,59 @@ data class ObraDetalhada(
     val tags: List<Etiqueta> = emptyList(),
 )
 
+/// De onde continuar — ou **zero**, quando não há de onde.
+///
+/// ## ⚠️ O defeito que ela conserta deixava o filme impossível de reabrir
+///
+/// > «tentei começar o família de aluguel que tu tinha terminado, o filme abre
+/// > no final dele e dps aparece essa mensagem»
+///
+/// `position_seconds` de um filme visto até o fim **é** o fim, e o app retomava
+/// lá. Em `direct_play` isso já era esquisito — dois segundos de crédito e
+/// acabou. Em HLS era impeditivo: a sessão nascia com quase nada pela frente, e
+/// o primeiro segmento faltando derrubava a reprodução com «este trecho não está
+/// na sessão de transcodificação». Um filme terminado ficava, na prática,
+/// impossível de reassistir.
+///
+/// ## As três condições são da web, e não foram inventadas aqui
+///
+/// O `Details.tsx` tem a mesma linha, com o mesmo comentário sobre o piso:
+///
+/// ```js
+/// const retomando = work.position_seconds > 30 && !work.finished && restam > 60;
+/// ```
+///
+/// | | por quê |
+/// |---|---|
+/// | `> 30` | é o piso que o `/api/continue` usa pra decidir o que "começou" |
+/// | `!finished` | o veredito é do **servidor**, e é o mesmo que tira a obra da fileira de continuar |
+/// | `restam > 60` | pega o filme parado a 99% que o servidor ainda não marcou |
+///
+/// A terceira é a que resolve o caso de borda sem inventar limiar novo: mesmo
+/// que `finished` não venha, um minuto de filme pela frente é pouco pra chamar
+/// de "continuar" — e é pouco demais pra uma sessão de transcodificação existir.
+///
+/// ⚠️ **Escrever aqui um limiar próprio seria a terceira redação da mesma regra**
+/// entre web, Android e servidor. É a mesma armadilha do `label` das legendas e
+/// do `reasons` do plano, e por isso os dois números vêm de lá.
+fun ondeContinuar(ondeParou: Double, duracaoEmSegundos: Double?, finished: Boolean): Double {
+    if (finished) return 0.0
+    if (ondeParou <= 30) return 0.0
+    /// Sem duração não dá pra saber quanto falta — e aí a decisão é retomar, que
+    /// é o que o app fazia antes desta função existir. Recusar por falta de
+    /// informação jogaria fora a posição de quem está no meio de um filme cuja
+    /// duração o servidor não mediu.
+    ///
+    /// ⚠️ **E `0` conta como ausente**, o que o teste cobrou: `duration_seconds`
+    /// chega zerado em arquivo sem probe guardada, e sem o `takeIf` a conta vira
+    /// `0 − 3401 ≤ 60` — verdadeira — mandando pro começo **todo** filme de
+    /// arquivo não medido. É a mesma leitura que o `duracaoConhecidaMs` do player
+    /// já faz: zero ali é "o servidor não sabe", nunca "o filme dura zero".
+    val total = duracaoEmSegundos?.takeIf { it > 0 } ?: return ondeParou
+    if (total - ondeParou <= 60) return 0.0
+    return ondeParou
+}
+
 /// Uma etiqueta da obra — `WorkTag` na web.
 ///
 /// ## `namespace` e `value` são coisas diferentes, e a tela mostra o segundo
@@ -413,6 +466,43 @@ data class FaixaDeLegenda(
 /// pergunta "por que está transcodificando?". Ele existe porque a resposta
 /// depende do que **este** aparelho declarou saber tocar, e sem isso o selo
 /// viraria adivinhação.
+/// Uma faixa de áudio que o **arquivo** tem — e não necessariamente a playlist.
+///
+/// ## ⚠️ Ela existe porque perguntar ao player sempre responde «uma»
+///
+/// O app tentou primeiro ler as faixas do `Player.currentTracks`, e a medida de
+/// 06/08/2026 mostrou por que isso não serve: em *Família de Aluguel*
+/// (`ac3:por | aac:eng`) o menu abria com **uma** faixa, `pt`. O player oferece o
+/// que está na playlist, e em transcodificação o `ffmpeg` do servidor põe uma só.
+///
+/// Ou seja: o dual audio sumia exatamente nos arquivos que o têm — porque o
+/// PT-BR ser ac3/eac3 é o que **força** a transcodificação neste cliente. O
+/// servidor mediu **3.469 arquivos** do acervo com duas ou mais faixas, e o
+/// formato recorrente é esse.
+///
+/// Agora a lista vem do `plan`, tirada da probe do arquivo. É a única fonte que
+/// sabe o que existe antes de alguém decidir o que entra na playlist.
+///
+/// O `label` vem **pronto do servidor**, pela mesma regra do `FaixaDeLegenda` e
+/// do `reasons`: montar «Português - AC3 5.1» aqui seria a terceira redação da
+/// mesma frase entre web, Android e servidor.
+@Serializable
+data class FaixaDeAudio(
+    /// Relativo ao **áudio**, não ao arquivo: é o `N` de `-map 0:a:N`. Índice
+    /// inválido o servidor recusa com 400, e é decisão registrada dele — uma
+    /// sessão muda seria errada e invisível ao mesmo tempo.
+    val index: Int,
+    val codec: String = "",
+    val language: String? = null,
+    val title: String? = null,
+    val channels: Int? = null,
+    /// ⚠️ Tem `""` como padrão de propósito, e não é frouxidão: se o servidor
+    /// mudar o nome deste campo, o plano continua parseando e a tela cai no
+    /// rótulo posicional. A alternativa — campo obrigatório — transformaria uma
+    /// renomeação de JSON em **filme que não abre**.
+    val label: String = "",
+)
+
 @Serializable
 data class PlanoDeReproducao(
     val mode: String,
@@ -424,6 +514,18 @@ data class PlanoDeReproducao(
     /// quem abre a sessão é o `POST …/session`.
     @SerialName("direct_url") val urlDireta: String? = null,
     val subtitles: List<FaixaDeLegenda> = emptyList(),
+    /// Todas as faixas de áudio do arquivo. Vazia em arquivo sem probe guardada
+    /// — e o servidor trata esse caso caindo pro codec do banco, com teste.
+    @SerialName("audio_tracks") val faixasDeAudio: List<FaixaDeAudio> = emptyList(),
+    /// **Qual** faixa este plano está falando. Sem pedido, o servidor usa a 0 —
+    /// e não a marcada `default`, que mudaria em silêncio o que toca em milhares
+    /// de arquivos que ninguém pediu pra mudar.
+    ///
+    /// ⚠️ E é isto que faz o selo não mentir: o `mode` passou a ser decidido pelo
+    /// codec **da faixa escolhida**, não pelo primeiro áudio do arquivo. Num
+    /// `ac3:por | aac:eng`, pedir a faixa 1 remove o único motivo de
+    /// transcodificar — e o veredito vira `direct_play` de verdade.
+    @SerialName("audio_track") val faixaDeAudio: Int? = null,
 ) {
     val eDireto: Boolean get() = mode == "direct_play"
 }

@@ -44,6 +44,23 @@ object Cores {
     val destaqueApagado = Color(0xFF8A6A3A)
     val perigo = Color(0xFFFF6B6B)
     val certo = Color(0xFF4ADE80)
+
+    /// ⚠️ **O vermelho da cortina é matéria, não significado.**
+    ///
+    /// O app já tem um vermelho — o `perigo` —, e ele é **semântico**: quer
+    /// dizer «isto deu errado» ou «isto vence». O pano do cinema é a primeira
+    /// cor deste app que não quer dizer nada: ela é a cor de uma coisa, como a
+    /// madeira da prateleira da locadora.
+    ///
+    /// Por isso são dois nomes próprios e não um `perigo.copy(...)`: no dia em
+    /// que alguém mexer no vermelho de erro, a cortina não pode mudar de tom
+    /// junto. E no dia em que alguém procurar «que vermelho é este», o nome
+    /// responde.
+    ///
+    /// Os dois tons são a prega: o claro é onde a luz da marquise bate, o fundo
+    /// é a dobra. Pano de uma cor só lê como retângulo.
+    val cortina = Color(0xFF84252A)
+    val cortinaFunda = Color(0xFF4A1114)
 }
 
 /// A serifada de display, e por que ela viaja dentro do APK.

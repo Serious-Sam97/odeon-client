@@ -139,9 +139,20 @@ class ModeloDosBaixados(
     /// A viagem acontece **depois do toque** e antes de o player montar. Ela
     /// custa uma ida ao servidor de casa no caminho de abrir um filme — o mesmo
     /// que a ficha já paga —, e falhar não bloqueia nada.
+    /// ⚠️ **Terminado volta a zero**, pela mesma regra da ficha: o `finished` é do
+    /// servidor, e sem honrá-lo aqui um filme baixado e já visto abriria nos
+    /// créditos finais. Ver `TelaDaObra` — o defeito foi visto pelo dono num
+    /// filme transcodificado, onde ele nem chegava a tocar.
     fun tocar(item: Baixado, aoAbrir: (ondeParou: Double) -> Unit) {
         viewModelScope.launch {
-            val posicao = runCatching { odeon.obra(item.ficha.obraId).ondeParou }.getOrDefault(0.0)
+            val posicao = runCatching {
+                val obra = odeon.obra(item.ficha.obraId)
+                dev.odeon.android.dados.ondeContinuar(
+                    ondeParou = obra.ondeParou,
+                    duracaoEmSegundos = obra.duracaoEmSegundos,
+                    finished = obra.finished,
+                )
+            }.getOrDefault(0.0)
             aoAbrir(posicao)
         }
     }

@@ -296,7 +296,14 @@ fun TelaDaObra(
                 aoTocar(
                     arquivo.id,
                     obra.title,
-                    obra.ondeParou,
+                    /// ⚠️ **Não é `obra.ondeParou` cru** — filme terminado
+                    /// recomeça do zero, e as três condições são da web. Ver
+                    /// `dados.ondeContinuar`.
+                    dev.odeon.android.dados.ondeContinuar(
+                        ondeParou = obra.ondeParou,
+                        duracaoEmSegundos = arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
+                        finished = obra.finished,
+                    ),
                     arquivo.duracaoEmSegundos ?: obra.duracaoEmSegundos,
                     /// A capa viaja daqui pro controle de mídia — R9.
                     ///
@@ -454,7 +461,19 @@ private fun Reproduzir(estado: EstadoDaObra, aoTocar: (ArquivoDeMidia) -> Unit) 
                     ambientColor = Cores.destaque,
                 ),
         ) {
-            Text(if (estado.obra?.ondeParou?.let { it > 1 } == true) "continuar" else "assistir")
+            /// ⚠️ O rótulo sai da **mesma** função que decide a posição, e não de
+            /// uma condição parecida escrita ao lado. Prometer «continuar» e
+            /// começar do zero é o §8b visto do outro lado — e duas regras que
+            /// deveriam concordar divergem no dia em que alguém mexer numa só.
+            val obra = estado.obra
+            val de = obra?.let {
+                dev.odeon.android.dados.ondeContinuar(
+                    ondeParou = it.ondeParou,
+                    duracaoEmSegundos = arquivo?.duracaoEmSegundos ?: it.duracaoEmSegundos,
+                    finished = it.finished,
+                )
+            } ?: 0.0
+            Text(if (de > 0) "continuar" else "assistir")
         }
     }
 }

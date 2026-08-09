@@ -110,6 +110,13 @@ export interface AuthUser {
 /// número é uma cópia da regra dele, não a regra.
 export const SENHA_MINIMA = 8;
 
+/// O máximo que o nome aceita (o `CHECK` da migração 0038).
+///
+/// Mesma natureza da `SENHA_MINIMA`: cópia da regra do servidor, pra tela poder
+/// cortar no `maxLength` em vez de deixar digitar 200 caracteres e devolver um
+/// 400 depois do clique.
+export const NOME_MAXIMO = 40;
+
 /// O que volta de `POST /api/auth/password`.
 ///
 /// A `note` é do servidor, e ela diz que "as outras sessões foram encerradas" —
@@ -1633,7 +1640,10 @@ export const api = {
     password: string;
     role: "admin" | "user";
   }) => json<ContaUsuario>("/api/auth/users", { method: "POST", body: JSON.stringify(body) }),
-  mudarUsuario: (id: string, body: { role?: "admin" | "user"; is_active?: boolean }) =>
+  mudarUsuario: (
+    id: string,
+    body: { role?: "admin" | "user"; is_active?: boolean; display_name?: string },
+  ) =>
     json<{ ok: boolean }>(`/api/auth/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
@@ -1960,6 +1970,10 @@ export const api = {
     avatar?: string | null;
     capa?: string | null;
     moldura?: string | null;
+    /// O nome que aparece em toda tela. Omitir é "não mexe" — o servidor só
+    /// escreve o que veio, e o campo mora no `app_user`, fora da tabela do
+    /// perfil.
+    display_name?: string;
   }) => json<{ ok: boolean }>("/api/perfil", { method: "PUT", body: JSON.stringify(p) }),
 
   // --- R23: a nota e a resenha ---

@@ -444,6 +444,32 @@ function Pessoas({
                       >
                         {u.role === "admin" ? "rebaixar" : "promover"}
                       </button>
+                      {/* Renomear existe porque o nome errado costuma ser erro
+                          DESTE painel: é aqui e no convite que o admin digita o
+                          nome de outra pessoa. Quem errou era o único que não
+                          tinha como consertar.
+
+                          Só o `display_name` — o `username` é a identidade de
+                          entrada e o endereço `/p/<nome>` que o perfil
+                          distribui. Um `prompt` e não um campo na linha pela
+                          mesma razão do `confirm` do "remover" logo abaixo:
+                          esta tabela é utilitária, e uma edição inline aqui
+                          custaria mais estado do que o gesto vale. */}
+                      <button
+                        className="mini"
+                        onClick={proteger(async () => {
+                          const novo = window.prompt(
+                            `novo nome de ${u.username}:`,
+                            u.display_name,
+                          );
+                          // Cancelar devolve `null`, e o mesmo nome de volta não
+                          // é uma mudança — nenhum dos dois merece uma escrita.
+                          if (novo === null || novo.trim() === u.display_name) return;
+                          await api.mudarUsuario(u.id, { display_name: novo.trim() });
+                        })}
+                      >
+                        renomear
+                      </button>
                       <button
                         className="mini"
                         onClick={proteger(() =>

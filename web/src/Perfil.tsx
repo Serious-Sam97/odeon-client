@@ -6,6 +6,7 @@ import Retrospectiva from "./Retrospectiva";
 import {
   api,
   auth,
+  NOME_MAXIMO,
   PERFIL_MUDOU,
   SENHA_MINIMA,
   type CamadaDaConquista,
@@ -288,6 +289,7 @@ export default function Perfil({ quem }: { quem?: string }) {
 /// escolhendo de um menu que o produto mostrou seria o produto mentindo pra si
 /// mesmo.
 function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
+  const [nome, setNome] = useState(p.display_name);
   const [titulo, setTitulo] = useState(p.titulo ?? "");
   const [tags, setTags] = useState<string[]>(p.tags);
   const [bio, setBio] = useState(p.bio ?? "");
@@ -306,10 +308,18 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
     );
 
   const salvar = async () => {
+    // O nome é o único campo aqui que não pode ficar vazio: dá pra não ter
+    // título, nem tag, nem bio, nem rosto — não dá pra não ter nome. A recusa
+    // acontece antes da ida ao servidor porque ela não depende dele.
+    if (!nome.trim()) {
+      setErro("o nome não pode ficar vazio");
+      return;
+    }
     setSalvando(true);
     setErro(null);
     try {
       await api.salvarPerfil({
+        display_name: nome.trim(),
         titulo: titulo || null,
         tags,
         bio: bio.trim() || null,
@@ -333,6 +343,25 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
   return (
     <div className="perfil-editor">
       {erro && <p className="error">{erro}</p>}
+
+      {/* O NOME vem primeiro porque é o campo mais forte da tela: ele aparece
+          no cabeçalho, no mural, no feed, no placar e em toda linha que cita
+          gente. Título e tags enfeitam o nome; eles não fazem sentido acima
+          dele. */}
+      <label className="editor-campo">
+        <span>Nome</span>
+        <input
+          value={nome}
+          maxLength={NOME_MAXIMO}
+          onChange={(e) => setNome(e.target.value)}
+          required
+        />
+        {/* Só pra quem não escolheu rosto: pra essa pessoa o nome não é só um
+            rótulo, é o desenho — a marca sai de um hash dele (R42). Trocar o
+            nome troca a cara, e descobrir isso depois de salvar seria uma
+            surpresa que a tela podia ter evitado. */}
+        {!p.avatar && <i>sem rosto escolhido, a marca do perfil é desenhada a partir do nome</i>}
+      </label>
 
       <label className="editor-campo">
         <span>Título</span>

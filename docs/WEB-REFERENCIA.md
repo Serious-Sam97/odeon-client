@@ -669,7 +669,7 @@ oferecer o botão pra quem vai levar recusa é o produto mentindo pra si mesmo.
 
 ## 10. Perfil — `/perfil` e `/p/<quem>`
 
-`Perfil.tsx` · 774 linhas (+ `Desafios.tsx` 93 + `Retrospectiva.tsx` 98 +
+`Perfil.tsx` · 803 linhas (+ `Desafios.tsx` 93 + `Retrospectiva.tsx` 98 +
 `Avatar.tsx` 82).
 
 Ir pro perfil **pela barra** é sempre ir pro seu. `/p/<username-ou-id>` abre o de
@@ -689,14 +689,22 @@ O perfil inteiro é tingido pela **moldura** escolhida, por variável CSS.
 
 | campo | regra |
 |---|---|
+| **Nome** | o `display_name`, até 40 caracteres (o `CHECK` da 0038); **o único campo que não pode ficar vazio** |
 | **Título** | `<select>` só com o que foi desbloqueado |
 | **Tags** | até 5, das desbloqueadas |
 | **Rosto · Capa · Cor** | três galerias; o **trancado aparece** (não é clicável) com `abre com a conquista "X"` — um rosto secreto é um rosto que ninguém persegue |
 | **Vitrine** | até 6 obras, **e a ordem é o conteúdo**; setas ‹ › movem, ✕ tira, e uma busca acrescenta |
 | **Uma linha sua** | bio de até 140 caracteres |
 
-Salvar dispara o evento `PERFIL_MUDOU`, que faz o cabeçalho reler o rosto e a
-moldura sem F5.
+Salvar dispara o evento `PERFIL_MUDOU`, que faz o cabeçalho reler o nome, o rosto
+e a moldura sem F5.
+
+O nome é o `display_name`, e **não** o `username`: aquele aparece em toda tela,
+este é a identidade de entrada e o endereço `/p/<nome>`. Trocar o primeiro não
+mexe no segundo, e o link que o botão `copiar link` distribui continua valendo.
+Pra quem não escolheu rosto o nome também **é o desenho** — a marca do
+`Avatar.tsx` sai de um hash dele (§10.6) —, e o editor avisa isso na hora, e não
+depois de salvar.
 
 `copiar link · /p/<nome>` copia **o endereço da barra**, não uma URL inventada
 de compartilhamento.
@@ -878,8 +886,14 @@ emprestado continua exclusivo até voltar.
 ### 13.3 Pessoas
 
 Tabela com nome, papel, ativo, último login. Ações: **promover/rebaixar**,
-**desativar/reativar**, **remover** (com `confirm`). Na sua própria linha não há
-botão nenhum — só a palavra `você`.
+**renomear** (com `prompt`), **desativar/reativar**, **remover** (com `confirm`).
+Na sua própria linha não há botão nenhum — só a palavra `você`.
+
+`renomear` troca **só o `display_name`**, nunca o `username`: o segundo é a
+identidade de entrada e o endereço `/p/<nome>` que o próprio perfil distribui.
+Existe porque o nome errado costuma ser erro deste painel — é aqui e no convite
+que o admin digita o nome de outra pessoa, e quem errou era o único que não tinha
+como consertar. Pra si mesmo o caminho é o editor do perfil (§10.2).
 
 `+ criar conta` cria um **morador** (vê e assiste tudo) ou um administrador, com
 a senha definida ali. O nome do botão é deliberado: o convite, logo abaixo, cria

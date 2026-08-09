@@ -5,7 +5,9 @@ import Desafios from "./Desafios";
 import Retrospectiva from "./Retrospectiva";
 import {
   api,
+  auth,
   PERFIL_MUDOU,
+  SENHA_MINIMA,
   type CamadaDaConquista,
   type ConquistaNaTela,
   type EnfeiteNaTela,
@@ -54,7 +56,10 @@ const ORDEM: CamadaDaConquista[] = ["facil", "media", "saga", "dificil", "imposs
 export default function Perfil({ quem }: { quem?: string }) {
   const [p, setP] = useState<PerfilCompleto | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [editando, setEditando] = useState(false);
+  /// Um painel de cada vez. São dois assuntos diferentes — como você aparece e
+  /// como você entra — e abrir os dois empilhados só faria a página crescer sem
+  /// que ninguém estivesse lendo as duas coisas ao mesmo tempo.
+  const [painel, setPainel] = useState<"nenhum" | "editor" | "senha">("nenhum");
   const navegar = useNavigate();
 
   const carregar = useCallback(() => {
@@ -152,14 +157,29 @@ export default function Perfil({ quem }: { quem?: string }) {
 
       {p.meu && (
         <div className="perfil-acoes">
-          <button className="perfil-editar" onClick={() => setEditando((e) => !e)}>
-            {editando ? "fechar" : "editar perfil"}
+          <button
+            className="perfil-editar"
+            onClick={() => setPainel((a) => (a === "editor" ? "nenhum" : "editor"))}
+          >
+            {painel === "editor" ? "fechar" : "editar perfil"}
+          </button>
+          {/* A troca de senha mora aqui, e não no admin: o admin é do dono do
+              servidor, e a senha é de cada um. */}
+          <button
+            className="perfil-editar"
+            onClick={() => setPainel((a) => (a === "senha" ? "nenhum" : "senha"))}
+          >
+            {painel === "senha" ? "fechar" : "trocar senha"}
           </button>
           <Link username={p.username} />
         </div>
       )}
 
-      {editando && p.meu && <Editor p={p} aoSalvar={() => (setEditando(false), carregar())} />}
+      {painel === "editor" && p.meu && (
+        <Editor p={p} aoSalvar={() => (setPainel("nenhum"), carregar())} />
+      )}
+
+      {painel === "senha" && p.meu && <Senha username={p.username} />}
 
       {/* R35: OS DESAFIOS. Moram no perfil porque são individuais — o §2.4
           separa o coletivo (guia, eventos) do individual (desafios, XP,
@@ -392,6 +412,146 @@ function Editor({ p, aoSalvar }: { p: PerfilCompleto; aoSalvar: () => void }) {
         {salvando ? "salvando…" : "salvar"}
       </button>
     </div>
+  );
+}
+
+/// A troca de senha.
+///
+/// A rota existe no servidor desde o M4 e **nunca teve cliente** — era
+/// alcançável só por `curl`, como as sete da R16. Uma senha que não se troca
+/// pela tela é uma senha que ninguém troca.
+///
+/// ## As três recusas que a tela faz sozinha
+///
+/// Mínimo de caracteres, confirmação que não bate, e senha nova igual à velha.
+/// Nenhuma delas precisa do servidor pra ser sabida, e mandar assim mesmo
+/// gastaria uma volta pra ouvir de longe o que já dava pra dizer aqui. A regra
+/// continua sendo do servidor — a `SENHA_MINIMA` é cópia dela, e o 400 dele
+/// passa inteiro pra tela.
+///
+/// ## E a que só o servidor sabe
+///
+/// Se a senha atual está certa. Ela volta em 401, e por isso esta tela não usa
+/// o caminho comum do `api.ts`: lá, 401 quer dizer "a sessão acabou" e limpa o
+/// token. Aqui quer dizer "você errou a senha antiga" — e errar a senha antiga
+/// não pode custar a sessão.
+function Senha({ username }: { username: string }) {
+  const [atual, setAtual] = useState("");
+  const [nova, setNova] = useState("");
+  const [confirma, setConfirma] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [pronto, setPronto] = useState(false);
+
+  const trocar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro(null);
+
+    if (nova.length < SENHA_MINIMA) {
+      return setErro(`a senha nova precisa de pelo menos ${SENHA_MINIMA} caracteres`);
+    }
+    if (nova !== confirma) return setErro("as senhas não conferem");
+    if (nova === atual) return setErro("a senha nova é igual à atual");
+
+    setSalvando(true);
+    // A troca já aconteceu do lado do servidor? A pergunta importa: depois dela
+    // não existe mais "voltar pro formulário", porque o token desta aba morreu
+    // junto com as outras sessões.
+    let trocada = false;
+    try {
+      await api.trocarSenha(atual, nova);
+      trocada = true;
+      // O servidor apaga TODAS as sessões do usuário, inclusive esta — a nota
+      // que ele devolve diz "as outras", mas o `DELETE` não poupa ninguém.
+      // Entrar de novo aqui, na hora, é o que faz a frase virar verdade: os
+      // outros aparelhos saíram, este ficou. Sem isto, trocar a senha seria se
+      // deslogar de tudo, inclusive de onde você está.
+      const entrada = await api.login(username, nova);
+      auth.setToken(entrada.token);
+      setPronto(true);
+    } catch (e) {
+      // Se a senha já mudou e foi a reentrada que falhou, não há formulário pra
+      // onde voltar: o token no bolso não abre mais nada. O login é o único
+      // lugar honesto pra essa aba, e é pra lá que ela vai.
+      if (trocada) {
+        auth.clear();
+        window.location.reload();
+        return;
+      }
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (pronto) {
+    return (
+      <div className="perfil-editor perfil-senha">
+        <p className="perfil-senha-ok">
+          senha trocada · <b>os outros aparelhos foram desconectados</b>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    /* Um `<form>` de verdade, e não uma pilha de `<input>` com um botão: é o
+       que faz o Enter enviar e o gerenciador de senhas entender que esta é a
+       tela de trocar — os `autoComplete` abaixo são metade do trabalho, e a
+       outra metade é o formulário existir. */
+    <form className="perfil-editor perfil-senha" onSubmit={(e) => void trocar(e)}>
+      {erro && <p className="error">{erro}</p>}
+
+      {/* O campo de usuário é escondido e só serve ao gerenciador de senhas:
+          sem ele, ele não sabe de QUAL conta é a senha que acabou de mudar. */}
+      <input type="text" name="username" value={username} autoComplete="username" readOnly hidden />
+
+      <label className="editor-campo">
+        <span>Senha atual</span>
+        <input
+          type="password"
+          value={atual}
+          onChange={(e) => setAtual(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+
+      <label className="editor-campo">
+        <span>Senha nova</span>
+        <input
+          type="password"
+          value={nova}
+          onChange={(e) => setNova(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        <i>mínimo de {SENHA_MINIMA} caracteres · cifrada com Argon2id</i>
+      </label>
+
+      <label className="editor-campo">
+        <span>Repita a nova</span>
+        <input
+          type="password"
+          value={confirma}
+          onChange={(e) => setConfirma(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+      </label>
+
+      {/* Dito ANTES de trocar, e não depois. Derrubar a TV e o celular é o
+          efeito principal do gesto pra quem tem mais de um aparelho — descobrir
+          isso na tela de sucesso seria descobrir tarde. */}
+      <p className="muted small">
+        Trocar a senha desconecta os seus <b>outros aparelhos</b>. Este continua
+        entrando.
+      </p>
+
+      <button className="perfil-salvar" type="submit" disabled={salvando}>
+        {salvando ? "trocando…" : "trocar senha"}
+      </button>
+    </form>
   );
 }
 

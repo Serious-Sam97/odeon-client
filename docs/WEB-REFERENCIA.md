@@ -669,7 +669,7 @@ oferecer o botão pra quem vai levar recusa é o produto mentindo pra si mesmo.
 
 ## 10. Perfil — `/perfil` e `/p/<quem>`
 
-`Perfil.tsx` · 614 linhas (+ `Desafios.tsx` 93 + `Retrospectiva.tsx` 98 +
+`Perfil.tsx` · 774 linhas (+ `Desafios.tsx` 93 + `Retrospectiva.tsx` 98 +
 `Avatar.tsx` 82).
 
 Ir pro perfil **pela barra** é sempre ir pro seu. `/p/<username-ou-id>` abre o de
@@ -736,6 +736,40 @@ de deixar a pessoa concluir que o Odeon não sabe nada dela.
 quatro figuras + a inicial — quando não há rosto escolhido. Zero bytes, escala em
 qualquer tamanho, e é **o padrão de quem não escolheu**, não um buraco. Um anel
 marca quem está assistindo alguma coisa.
+
+### 10.7 A senha (só no seu)
+
+`POST /api/auth/password` — a rota existia desde o M4 e **não tinha cliente
+nenhum**: nem web, nem Android. Era alcançável só por `curl`, como as sete da
+R16.
+
+`trocar senha` fica ao lado de `editar perfil`, e abre um painel — um de cada
+vez, porque são dois assuntos (como você aparece, como você entra) e ninguém lê
+os dois ao mesmo tempo. Três campos: senha atual, senha nova, repita a nova.
+
+| recusa | quem decide |
+|---|---|
+| menos de **8 caracteres** | a tela, por cópia (`SENHA_MINIMA`) — o servidor continua sendo a regra |
+| confirmação não bate | a tela |
+| nova igual à atual | a tela |
+| **senha atual errada** | o servidor, em `401` |
+
+Aquele `401` é a razão de esta ser **a única rota que não passa pelo `json()`**
+do `api.ts`: lá, 401 quer dizer *"a sessão acabou"* e limpa o token. Aqui quer
+dizer *"você errou a senha antiga"* — e errar a senha antiga não pode custar a
+sessão. Pelo caminho comum, um dedo trocado na senha atual jogaria a pessoa na
+tela de entrada.
+
+**A troca derruba todos os aparelhos, inclusive este.** O `DELETE` do servidor
+não poupa a sessão de quem pediu, embora a nota que ele devolve diga *"as outras
+sessões foram encerradas"*. Quem faz a frase virar verdade é o cliente: no
+sucesso ele entra de novo, na hora, com a senha nova, e guarda o token novo — os
+outros aparelhos saem, este fica. Se essa reentrada falhar, a aba cai no login,
+que é o único lugar honesto pra quem ficou sem sessão.
+
+O aviso — *"desconecta os seus outros aparelhos"* — é dito **antes** de trocar.
+Pra quem tem TV e celular ligados, esse é o efeito principal do gesto, e
+descobri-lo na tela de sucesso seria descobrir tarde.
 
 ---
 
@@ -1061,7 +1095,7 @@ de leitura, não como ordem de implementação — a sequência decidida está e
 | 19 | ao vivo: pistas, grade, zapear, lembretes | `live/*` | pós-v1 |
 | 20 | mural, conversas, amizades, presença | `feed` `posts` `comentarios` `mensagens` `amigos` `pessoas` `presenca` | pós-v1 |
 | 21 | assistir junto | `junto/*` | pós-v1 |
-| 22 | perfil, enfeites, vitrine, conquistas, retrospectiva | `perfil` `retrospectiva` | pós-v1 |
+| 22 | perfil, enfeites, vitrine, conquistas, retrospectiva, **trocar senha** | `perfil` `retrospectiva` `auth/password` | pós-v1 |
 | 23 | revisão por pasta e por arquivo | `review` `review/scopes` `scopes/*` `works/{id}/search|match|parse|reset` | pós-v1 |
 | 24 | bibliotecas e navegador de pastas | `libraries` `browse` | pós-v1 |
 | 25 | admin: saúde, pessoas, convites, aparelhos, trabalhos, manutenção | `diagnostico` `auth/users` `auth/sessions` `convites` `jobs` `maintenance/*` `locadora/opcoes` | pós-v1 |

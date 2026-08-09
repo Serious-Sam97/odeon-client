@@ -9875,6 +9875,19 @@ a.cur-fonte:focus-visible {
   max-width: 44ch;
 }
 
+/* A troca de senha usa o mesmo painel do editor, e só encolhe: três campos
+   curtos espalhados na largura do perfil leem como uma tela de configuração;
+   dentro de uma coluna, leem como um formulário. */
+.perfil-senha {
+  max-width: min(100%, 52ch);
+}
+
+.perfil-senha-ok {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+
 .editor-tags {
   display: flex;
   flex-wrap: wrap;

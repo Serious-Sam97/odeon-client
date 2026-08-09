@@ -103,6 +103,23 @@ export interface AuthUser {
   last_login_at: string | null;
 }
 
+/// O mínimo que o servidor aceita (`MIN_PASSWORD_LEN`, no `auth/mod.rs`).
+///
+/// A tela usa isto pra não gastar uma ida ao servidor com uma senha que ela já
+/// sabe que vai voltar recusada. O servidor continua sendo quem decide — este
+/// número é uma cópia da regra dele, não a regra.
+export const SENHA_MINIMA = 8;
+
+/// O que volta de `POST /api/auth/password`.
+///
+/// A `note` é do servidor, e ela diz que "as outras sessões foram encerradas" —
+/// mas o `DELETE` de lá não poupa a de quem pediu. Quem faz a frase virar
+/// verdade é o cliente, entrando de novo com a senha nova logo depois.
+export interface TrocaDeSenha {
+  ok: boolean;
+  note?: string;
+}
+
 /** Sessão morreu (expirou ou foi revogada): a UI volta pro login. */
 export class Unauthorized extends Error {
   constructor() {
@@ -1769,6 +1786,31 @@ export const api = {
     }),
 
   logout: () => json<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
+  /// Trocar a senha. **Não passa pelo `json`** — e a exceção é o ponto.
+  ///
+  /// Esta é a única rota em que um 401 não quer dizer "a sessão morreu": quer
+  /// dizer "a senha atual que você digitou está errada". Pelo caminho comum,
+  /// errar a senha antiga por um dedo limparia o token e jogaria a pessoa na
+  /// tela de entrada — o produto punindo com logout quem tentou se proteger.
+  ///
+  /// O 400 vem com a mensagem do servidor (o mínimo de caracteres é dele, não
+  /// nosso) e é repassado inteiro: reescrevê-lo aqui daria duas verdades sobre
+  /// a mesma regra.
+  trocarSenha: async (atual: string, nova: string): Promise<TrocaDeSenha> => {
+    const token = auth.token();
+    const res = await fetch(`${API}/api/auth/password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ current_password: atual, new_password: nova }),
+    });
+    if (res.status === 401) throw new Error("senha atual incorreta");
+    if (!res.ok) throw new Error((await res.text()) || `erro ${res.status}`);
+    return res.json() as Promise<TrocaDeSenha>;
+  },
 
   // --- R19: a locadora, e R28: o estoque é do servidor ---
 

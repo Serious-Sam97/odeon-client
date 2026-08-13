@@ -2070,3 +2070,70 @@ grade — grade quer altura igual. Quem sabe qual é o caso é quem chama.
 **Conferido na TCL:** as lâmpadas acesas, `para você` em serifada, as três pílulas
 de tempo focáveis no alto com `qualquer` ligada, e o motivo inteiro embaixo de
 cada cartaz.
+
+## 15. Os canais de fora — o caminho existe, a porta ainda responde 401
+
+O «este canal ainda não toca na sala» saiu da tela. O que estava por trás dele
+eram **três** coisas, e nenhuma era a que o recado sugeria.
+
+### 15.1 Faltava a dependência, não o código
+
+⚠️ O `:tv` nasceu **sem `media3-exoplayer-hls`**. O `:app` sempre teve. Metade da
+sintonia ficou decorativa por falta de uma linha no `build.gradle.kts` — e
+ninguém notou porque os canais do Odeon tocam pelo caminho direto, com arquivo.
+
+### 15.2 A tela é separada, e é decisão
+
+O `TelaDoPlayerDaTv` é a tela de assistir um **filme**: negocia plano de
+transcodificação, marca posição, monta a tira de miniaturas, escolhe legenda e
+faixa de áudio, sabe voltar dez segundos. Um canal de M3U externo não tem obra,
+arquivo, duração nem onde parar — ele já está no meio quando você chega e
+continua depois que você sai.
+
+Enfiar isso no `ModeloDoPlayer` significaria costurar «e se não houver obra» em
+cada um daqueles caminhos, e cada costura dessas é um lugar onde o filme normal
+pode quebrar depois. Então nasceu o `TelaDoCanalAoVivoDaTv`: playlist, tarja com
+o nome, e `voltar`.
+
+⚠️ **Sem barra de progresso, e é o §24.** Uma barra precisa de um fim; uma
+transmissão não tem. Vazia diria «isto está no começo», que é falso; cheia diria
+«acabou», que é pior.
+
+### 15.3 `playlist_url` é um caminho, não uma URL
+
+Primeira tentativa na TCL:
+
+```
+FileNotFoundException: /api/hls/5793acb4-…/index.m3u8:
+  open failed: ENOENT (No such file or directory)
+    at androidx.media3.datasource.FileDataSource.openLocalFile
+```
+
+⚠️ `FileDataSource` na pilha é a assinatura do defeito: sem esquema e sem host,
+`/api/hls/…` não é «relativo ao servidor» para o ExoPlayer — é um **caminho de
+arquivo local**, e ele foi procurar no cartão de memória.
+
+A `urlDeMidia` do `:core` resolve base e token de uma vez, e é a mesma que o
+player de filme usa pra sua própria playlist (`ModeloDoPlayer:814`).
+
+### 15.4 ⚠️ E aí veio 401 — pendência, não conclusão
+
+Com a URL absoluta o pedido chega ao servidor e volta:
+
+```
+HttpDataSource$InvalidResponseCodeException: Response code: 401
+```
+
+O formato está certo — é HTTP, é o host da casa, e leva o mesmo token que o
+player de filme leva. O que não sei é **por que esta rota não o aceita**. Pode
+ser escopo de token, pode ser que `/api/hls/<sessão>` de canal autentique
+diferente de `/api/hls/<sessão>` de filme. É pergunta pro servidor, não pro app,
+e fica registrada como pergunta.
+
+⚠️ **Possível parentesco, e é hipótese:** o `o servidor não entregou o arquivo`
+da foto do dono é da mesma família (4xx numa mídia). Não afirmo ligação — só
+anoto que valeria olhar as duas juntas.
+
+**O que está feito e conferido:** a dependência, a tela, o caminho da sintonia
+até a playlist, a URL absoluta com token, e as duas telas de falha. O que falta é
+uma resposta 200.

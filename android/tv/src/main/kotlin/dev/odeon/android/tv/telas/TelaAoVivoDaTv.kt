@@ -83,6 +83,9 @@ import kotlinx.coroutines.delay
 fun TelaAoVivoDaTv(
     modelo: ModeloAoVivo,
     aoTocar: (obraId: String, arquivoId: String, titulo: String, comecarEm: Double, capa: String?, canalId: String?) -> Unit,
+    /// ⚠️ Canal **sem obra** — o de M3U externo. Ele não abre um filme, abre
+    /// uma transmissão, e por isso tem porta própria (ver `TelaDoCanalAoVivoDaTv`).
+    aoSintonizarDeFora: (canalId: String, nome: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     saidaEsquerda: FocusRequester? = null,
 ) {
@@ -148,7 +151,7 @@ fun TelaAoVivoDaTv(
                 }
             },
     ) {
-        item { NoAr(estado.agoraMs, noAr, estado.canais, estado.escolhido, modelo, aoTocar) }
+        item { NoAr(estado.agoraMs, noAr, estado.canais, estado.escolhido, modelo, aoTocar, aoSintonizarDeFora) }
 
         if (estado.canais.isNotEmpty() || noAr.isNotEmpty()) {
             item {
@@ -182,7 +185,9 @@ fun TelaAoVivoDaTv(
                             aoEscolher = {
                                 val obra = quadro.obraId
                                 val arquivo = quadro.arquivoId
-                                if (obra != null && arquivo != null) {
+                                if (obra == null || arquivo == null) {
+                                    aoSintonizarDeFora(quadro.canalId, quadro.canalNome)
+                                } else {
                                     aoTocar(
                                         obra,
                                         arquivo,
@@ -263,6 +268,7 @@ private fun NoAr(
     escolhido: String?,
     modelo: ModeloAoVivo,
     aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoSintonizarDeFora: (String, String) -> Unit,
 ) {
     val quadro = noAr.firstOrNull { it.canalId == escolhido } ?: noAr.firstOrNull()
 
@@ -405,13 +411,17 @@ private fun NoAr(
                         },
                     )
                 } else {
-                    /// ⚠️ Canal sem arquivo **não ganha botão** (§53). É o caso
-                    /// dos canais de M3U externo, que hoje não têm por onde
-                    /// tocar aqui — ver o README.
-                    Text(
-                        text = "este canal ainda não toca na sala",
-                        style = CorpoMiudo,
-                        color = Cores.textoApagado,
+                    /// ⚠️ **Canal sem obra agora toca**, e a frase «este canal
+                    /// ainda não toca na sala» saiu daqui.
+                    ///
+                    /// Ela era honesta enquanto era verdade: o `:tv` nasceu sem a
+                    /// dependência de HLS, e `sintonizar` devolve exatamente uma
+                    /// playlist. Metade da sintonia ficou decorativa por falta de
+                    /// uma linha no `build.gradle.kts` — não de código.
+                    BotaoDaSala(
+                        rotulo = "▸ sintonizar",
+                        principal = true,
+                        aoEscolher = { aoSintonizarDeFora(quadro.canalId, quadro.canalNome) },
                     )
                 }
             }

@@ -146,6 +146,15 @@ dependencies {
     /// O player. `media3-ui` traz o `PlayerView`, que é a superfície de vídeo —
     /// disso o Compose não tem equivalente, nem no celular nem aqui.
     implementation(libs.media3.exoplayer)
+    /// ⚠️ **O HLS é o que faz os canais de fora existirem.**
+    ///
+    /// Sem esta linha o `:tv` sabe abrir arquivo e não sabe abrir playlist, e
+    /// `sintonizar` devolve exatamente uma playlist (`playlist_url`). Metade da
+    /// sintonia ficava decorativa por falta de uma dependência — não de código.
+    ///
+    /// O `:app` já a tinha; o `:tv` nasceu sem, e ninguém notou porque os canais
+    /// do Odeon tocam pelo caminho direto, com arquivo.
+    implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
 

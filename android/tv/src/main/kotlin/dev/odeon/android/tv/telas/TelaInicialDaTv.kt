@@ -62,6 +62,7 @@ fun TelaInicialDaTv(
     /// Tocar direto, sem passar pela ficha — é o que o ao vivo faz ao
     /// sintonizar: ele já sabe a obra, o arquivo e onde a transmissão está.
     aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoSintonizarDeFora: (String, String) -> Unit,
     destinoInicial: Destino = Destino.BIBLIOTECA,
     aoAbrirObra: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -200,6 +201,7 @@ fun TelaInicialDaTv(
                 perfil = perfil,
                 aoVivo = aoVivo,
                 aoTocar = aoTocar,
+                aoSintonizarDeFora = aoSintonizarDeFora,
                 aoAbrirObra = aoAbrirObra,
                 saidaEsquerda = focoDoTrilho,
             )
@@ -307,6 +309,7 @@ private fun ConteudoDoDestino(
     perfil: ModeloDoPerfil,
     aoVivo: ModeloAoVivo,
     aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoSintonizarDeFora: (String, String) -> Unit,
     aoAbrirObra: (String) -> Unit,
     saidaEsquerda: FocusRequester,
 ) {
@@ -327,6 +330,7 @@ private fun ConteudoDoDestino(
         Destino.AO_VIVO -> TelaAoVivoDaTv(
             modelo = aoVivo,
             aoTocar = aoTocar,
+            aoSintonizarDeFora = aoSintonizarDeFora,
             saidaEsquerda = saidaEsquerda,
         )
     }

@@ -21,6 +21,7 @@ import dev.odeon.android.tv.player.TelaDoPlayerDaTv
 import dev.odeon.android.tv.telas.TelaDeLoginDaTv
 import dev.odeon.android.tv.telas.TelaDaObraDaTv
 import dev.odeon.android.tv.telas.Destino
+import dev.odeon.android.tv.telas.TelaDoCanalAoVivoDaTv
 import dev.odeon.android.tv.telas.TelaInicialDaTv
 import dev.odeon.android.tv.ui.TemaDaSala
 import dev.odeon.android.ui.Cores
@@ -61,6 +62,13 @@ private sealed interface Onde {
     /// `noAoVivo` é o único jeito de a casa abrir fora da biblioteca, e existe
     /// pro caso do vão entre dois programas — ver o `aoAcabar` lá embaixo.
     data class Casa(val noAoVivo: Boolean = false) : Onde
+
+    /// Um canal **de fora**, tocando a playlist do servidor.
+    ///
+    /// ⚠️ Ele não é um `Filme` com outros campos: não tem obra, arquivo, duração
+    /// nem onde parar. Fingir que é obrigaria o player de filme a aceitar nulos
+    /// em tudo que ele usa pra existir.
+    data class CanalDeFora(val canalId: String, val nome: String) : Onde
     data class Ficha(val obraId: String) : Onde
     data class Filme(
         val obraId: String,
@@ -184,6 +192,9 @@ class AtividadeDaTv : ComponentActivity() {
                     aoTocar = { obraId, arquivoId, titulo, comecarEm, capa, canalId ->
                         onde = Onde.Filme(obraId, arquivoId, titulo, comecarEm, capa, canalId)
                     },
+                    aoSintonizarDeFora = { canalId, nome ->
+                        onde = Onde.CanalDeFora(canalId, nome)
+                    },
                     aoAbrirObra = { onde = Onde.Ficha(it) },
                     destinoInicial = if (agora.noAoVivo) Destino.AO_VIVO else Destino.BIBLIOTECA,
                 )
@@ -203,6 +214,15 @@ class AtividadeDaTv : ComponentActivity() {
                         },
                     )
                 }
+
+                is Onde.CanalDeFora -> TelaDoCanalAoVivoDaTv(
+                    canalId = agora.canalId,
+                    nome = agora.nome,
+                    modelo = lembrarModelo("aovivo") { dev.odeon.android.ui.aovivo.ModeloAoVivo(app.odeon) },
+                    /// Sair de um canal devolve à sintonia, não à biblioteca:
+                    /// quem estava num canal ainda está no ao vivo.
+                    aoSair = { onde = Onde.Casa(noAoVivo = true) },
+                )
 
                 is Onde.Filme -> {
                     val modelo = lembrarModelo("filme:${agora.arquivoId}:${agora.comecarEm}") {

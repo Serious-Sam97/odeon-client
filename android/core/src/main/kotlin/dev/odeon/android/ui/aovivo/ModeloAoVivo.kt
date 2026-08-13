@@ -115,6 +115,30 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
 
     fun arte(caminho: String?): String? = odeon.urlDaArte(caminho)
 
+    /// A playlist de um canal externo, **absoluta e com token**.
+    ///
+    /// ## ⚠️ O `playlist_url` que o servidor manda é um caminho, não uma URL
+    ///
+    /// Ele vem como `/api/hls/<sessão>/index.m3u8`. Entregue assim ao ExoPlayer,
+    /// isso não é «relativo ao servidor» — é um **caminho de arquivo local**, e
+    /// foi exatamente o que aconteceu na TCL:
+    ///
+    /// ```
+    /// FileNotFoundException: /api/hls/5793acb4-…/index.m3u8:
+    ///   open failed: ENOENT (No such file or directory)
+    ///     at androidx.media3.datasource.FileDataSource.openLocalFile
+    /// ```
+    ///
+    /// `FileDataSource` na pilha é a assinatura do defeito: o player foi procurar
+    /// no cartão de memória. Sem esquema e sem host, ninguém tem como saber que
+    /// aquilo era pra ser HTTP.
+    ///
+    /// ⚠️ E o token vai junto porque o HLS **não passa pelo Retrofit**: quem baixa
+    /// a playlist e os segmentos é o ExoPlayer, com o próprio cliente HTTP, sem os
+    /// cabeçalhos que o interceptor da casa adiciona. A `urlDeMidia` resolve os
+    /// dois de uma vez — é a mesma que o player de filme usa.
+    fun playlist(caminho: String?): String? = odeon.urlDeMidia(caminho)
+
     private fun primeiroNoAr(canais: List<CanalNoAr>, doOdeon: GradeDoOdeon?): String? =
         canais.firstOrNull { it.titulo != null }?.id
             ?: canais.firstOrNull()?.id

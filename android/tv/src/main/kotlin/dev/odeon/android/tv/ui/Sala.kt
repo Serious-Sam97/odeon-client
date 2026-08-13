@@ -54,7 +54,17 @@ object Sala {
     /// facho do player vão borda a borda; o que respeita o overscan é texto,
     /// cartaz e qualquer coisa que se possa perder. Empurrar o fundo pra dentro
     /// deixaria uma tarja preta em volta do app.
-    val overscanH = 48.dp
+    /// ⚠️ Caiu de 48dp pra 24dp, e a diferença voltou **só do lado direito**.
+    ///
+    /// 48dp é a regra dos 5% de overscan, e ela vale pra borda da tela. À
+    /// esquerda não há borda: há o trilho, que já é margem — somar os dois punha
+    /// 88dp entre a tela e a primeira coisa visível, e foi a segunda vez que o
+    /// dono reclamou do mesmo espaço.
+    ///
+    /// Quem devolve os 24dp que faltam à direita é o `TelaInicialDaTv`, num lugar
+    /// só. Trocar isto nas trinta e seis chamadas espalhadas seria trinta e seis
+    /// chances de errar uma.
+    val overscanH = 24.dp
     val overscanV = 27.dp
 
     /// O quanto um cartaz cresce ao receber o foco.

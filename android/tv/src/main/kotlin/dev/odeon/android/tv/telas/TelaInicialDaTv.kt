@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
+import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
 import dev.odeon.android.ui.guia.ModeloDoGuia
@@ -208,6 +209,9 @@ fun TelaInicialDaTv(
         @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
         Box(
             Modifier
+                /// ⚠️ O lado direito recupera os 24dp que o `overscanH` perdeu: lá
+                /// existe borda de tela, e a regra dos 5% continua valendo.
+                .padding(end = Sala.overscanH)
                 .focusGroup()
                 .focusProperties {
                     exit = { direcao ->
@@ -317,7 +321,14 @@ private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
 ///
 /// Este número existe pra ser mexido **depois de ver na TV**, e é por isso que
 /// ele tem nome em vez de estar escrito no meio da conta.
-private const val FORCA_DO_FEIXE = 0.34f
+/// ⚠️ Subiu de 0,34 pra 0,55 a pedido do dono: «as luzes não estão legais como eu
+/// fiz no Android». A piscada de dez quadros já era a mesma — o que faltava era
+/// **força**, e num facho fraco a coreografia acontece sem ninguém ver.
+///
+/// O pico dos quadros é 1,35, então o brilho real chega a ~0,74 no primeiro
+/// estalo e assenta em 0,55. É o que faz a troca de destino parecer uma lâmpada
+/// **ligando**, e não um degradê trocando de lugar.
+private const val FORCA_DO_FEIXE = 0.55f
 
 /// A tela do destino escolhido.
 ///

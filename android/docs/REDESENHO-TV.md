@@ -2223,3 +2223,42 @@ divisória, e **nenhum ícone** — recortados por excesso de largura.
 
 **Conferido na TCL:** fechado com sete ícones num vão de 40dp e o facho no
 escolhido; aberto com os rótulos inteiros num painel opaco de 220dp.
+
+### 16.4 A luz mais forte, e a margem pela segunda vez
+
+«As luzes devem parecer que estão saindo de onde tu escolheu, e ao escolher um
+novo, piscar de leve como se estivessem ligando, igual faço no Android.»
+
+⚠️ **A piscada já era a mesma.** O `brilhoDoArco` do `:cenario` tem os dez quadros
+do celular, digito por digito, e o `FeixeDaCabine` os refaz a cada troca de
+destino. O que faltava era **força**: com `FORCA_DO_FEIXE = 0.34` a coreografia
+acontecia e ninguém via. Subiu pra `0.55` — o pico dos quadros é 1,35, então o
+primeiro estalo chega a ~0,74 e assenta em 0,55.
+
+E a lente do item foi de `5.5×` pra `12×` a largura da fresta. É este cone curto
+que faz a luz parecer **sair do item**: com 16dp de halo, menor que o próprio
+ícone, o olho lia enfeite, não fonte.
+
+Medido nas fotos, no calor médio (r−b) da faixa ao lado do trilho: **27,9 → 35,5**.
+
+⚠️ **Não consegui fotografar a piscada.** O `screencap` leva uns 300ms e a
+coreografia inteira dura 1200ms com picos aos 90 e aos 200 — a rajada de cinco
+quadros pegou a lente já assentada, com brilho constante (176,8 · 176,8 · 177,3).
+O mecanismo está no código e é o mesmo do celular; a coreografia em si fica
+conferida a olho, não por medida.
+
+#### A margem, pela segunda vez
+
+O dono reclamou do mesmo espaço duas vezes, e da segunda estava certo de novo:
+depois de o trilho encolher pra 40dp, o conteúdo ainda começava em 88dp, porque
+somava `overscanH = 48dp` por cima.
+
+⚠️ 48dp é a regra dos 5% de overscan, e ela vale pra **borda da tela**. À esquerda
+não há borda: há o trilho, que já é margem. O `overscanH` caiu pra 24dp e o
+`TelaInicialDaTv` devolve os 24 que faltam **só à direita**, onde a borda existe.
+
+Um número e uma linha, em vez de trocar as trinta e seis chamadas espalhadas —
+que seriam trinta e seis chances de errar uma.
+
+Medido com `uiautomator`: o primeiro cartaz foi de **x=280px** (antes de tudo)
+para **x=176px** (trilho magro) e agora para **x=128px**.

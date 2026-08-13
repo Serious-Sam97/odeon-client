@@ -331,7 +331,11 @@ private fun RetratoDoTrilho(
                 if (escolhido) {
                     Canvas(Modifier.matchParentSize()) {
                         val centro = Offset(size.width / 2f, size.height / 2f)
-                        desenhaOCone(centro = centro, raio = size.width * 5.5f, forca = brilho)
+                        /// ⚠️ **12×, e não 5,5×.** É este cone curtinho que faz a luz parecer
+                        /// **sair do item escolhido** em vez de aparecer do lado dele. Com
+                        /// 5,5× de uma fresta de 3dp o halo tinha 16dp — menor que o próprio
+                        /// ícone, e o olho lia como um enfeite, não como uma fonte.
+                        desenhaOCone(centro = centro, raio = size.width * 12f, forca = brilho)
                         desenhaALente(
                             centro = centro,
                             forca = brilho,

@@ -2734,3 +2734,59 @@ SCREEN_BRIGHT_WAKE_LOCK 'WindowManager/displayId:0'
 ⚠️ É a segunda vez nesta doc que uma medida ruim quase virou conclusão — a outra
 foi o calor do facho (§16.4). O padrão é o mesmo: um número que **sempre** dá a
 resposta que se queria não está medindo o que se pensa.
+
+## 22. A ficha — primeira passada, e o que ela ainda não é
+
+«A tela que mostra descrição, imagens etc — a que temos hoje é muito feia e sem
+graça.»
+
+⚠️ A §7 desta doc dizia «está perto». Estava errada, e quem viu rodando manda.
+
+### 22.1 As imagens existiam e estavam fora da tela
+
+O varal de cenas está na ficha da TV **desde sempre** — como o **último** item da
+coluna, depois do título, da sinopse, das etiquetas, dos botões e do recado da
+locadora.
+
+Numa TV isso quer dizer *fora da tela*. Uma fileira de fotos que só aparece pra
+quem rola até o fim é uma fileira que ninguém vê — e a pessoa conclui, com toda a
+razão, que a tela não tem imagem nenhuma.
+
+Subiram pra logo depois dos botões. O recado da locadora desceu: ele é raro e é
+aviso, e aviso não disputa espaço com o que a tela existe pra mostrar.
+
+### 22.2 `800p · h264` saiu da linha do título
+
+Eles estavam logo abaixo do nome do filme — o lugar mais valioso da tela — e **não
+é assim que alguém escolhe um filme**. Resolução e codec respondem «vai tocar
+bem?», que é pergunta de quem já decidiu; ano e duração respondem «é este que eu
+quero?», que é a de quem está olhando.
+
+### 22.3 Seis pílulas viraram quatro
+
+Eram `Estados Unidos`, `Reino Unido`, `filme`, `Ação`, `Aventura`, `Thriller`.
+Metade não ajuda a escolher: `filme` numa tela de filme é ruído, e o país
+raramente é o critério de quem decide o que ver hoje à noite. Seis pílulas iguais
+também achatam o valor de cada uma — quando tudo é etiqueta, nenhuma é destaque.
+
+⚠️ O filtro é por `namespace` e é **tolerante**: um nome que o servidor não use
+não casa, e a etiqueta continua aparecendo. Errar aqui mostra demais, nunca de
+menos.
+
+### 22.4 ⚠️ Isto é uma passada, não o redesenho
+
+Mover três coisas não deixa uma tela bonita. O que ficou **por fazer**, e que é o
+que de fato responderia «sem graça»:
+
+- **o fundo em movimento** — a mesma prévia em vídeo do herói da biblioteca, que
+  o dono aprovou. A peça existe, mas está privada dentro do `HeroiDaSala` e
+  precisa sair de lá antes de ser reusada
+- **a caixa 3D** no lugar do pôster plano. Ela existe no `:cenario` e é a peça com
+  mais identidade da casa — e é também a que a §10.1 mediu como cara. Uma só, sem
+  animação, pode caber
+- **o `logo` da obra** no lugar do título em texto, quando o `artwork` tiver um
+- **elenco e direção**, que a ficha não mostra e o acervo tem em `tags`
+
+⚠️ E não foi vista rodando: a navegação por `adb` caiu na tela do guia, e eu
+preferi parar a insistir. O que está aqui é legível no código e passou no portão —
+mas «passou no portão» não é «ficou bonito», e a segunda coisa só o dono decide.

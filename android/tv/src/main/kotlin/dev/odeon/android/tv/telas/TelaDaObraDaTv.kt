@@ -285,7 +285,20 @@ fun TelaDaObraDaTv(
                     ///
                     /// O `take(6)` vem depois do filtro de propósito: com ele
                     /// antes, uma etiqueta vazia gastaria uma das seis vagas.
-                    obra.tags.filter { it.value.isNotBlank() }.take(6).forEach { etiqueta ->
+                    /// ⚠️ **Gênero, e não país nem «filme».**
+                    ///
+                    /// Eram seis pílulas: `Estados Unidos`, `Reino Unido`,
+                    /// `filme`, `Ação`, `Aventura`, `Thriller`. Metade delas não
+                    /// ajuda a escolher — `filme` numa tela de filme é ruído, e o
+                    /// país raramente é o critério de quem está decidindo o que
+                    /// ver hoje à noite.
+                    ///
+                    /// Seis pílulas iguais também achatam o valor de cada uma:
+                    /// quando tudo é etiqueta, nenhuma é destaque.
+                    obra.tags
+                        .filter { it.value.isNotBlank() && it.namespace !in ETIQUETAS_MUDAS }
+                        .take(4)
+                        .forEach { etiqueta ->
                         Pilula(
                             texto = etiqueta.value,
                             cor = corDeHex(etiqueta.color) ?: Cores.destaqueApagado,
@@ -361,15 +374,20 @@ fun TelaDaObraDaTv(
                 BotaoDaSala("voltar", aoVoltar)
             }
 
-            /// O recado da locadora — «pegando…», ou o que aconteceu.
-            estado.recadoDaLocadora?.let {
-                Spacer(Modifier.height(18.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Cores.destaqueQuente,
-                )
-            }
+            /// ## ⚠️ As cenas subiram, e é o conserto do relato
+            ///
+            /// «A tela é muito feia e sem graça (…) descrição, imagens.» As
+            /// imagens **existiam** — o varal de cenas estava lá desde sempre,
+            /// como **último** item da coluna, depois do título, da sinopse, das
+            /// etiquetas, dos botões e do recado da locadora.
+            ///
+            /// Numa TV isso quer dizer fora da tela. Uma fileira de fotos que só
+            /// aparece pra quem rola até o fim de uma ficha é uma fileira que
+            /// ninguém vê — e a pessoa conclui, com razão, que a tela não tem
+            /// imagem nenhuma.
+            ///
+            /// Agora vêm logo depois dos botões: acima do recado da locadora, que
+            /// é raro, e acima do que é do arquivo, que é de máquina.
 
             /// ## As cenas descem depois, e a ficha não espera por elas
             ///
@@ -396,7 +414,21 @@ fun TelaDaObraDaTv(
                             )
                         }
                     }
+
                 }
+            }
+
+            /// O recado da locadora vem **depois** das cenas: ele é raro e é
+            /// aviso, e aviso não disputa espaço com o que a tela existe pra
+            /// mostrar.
+            /// O recado da locadora — «pegando…», ou o que aconteceu.
+            estado.recadoDaLocadora?.let {
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Cores.destaqueQuente,
+                )
             }
         }
     }
@@ -420,11 +452,19 @@ private fun LinhaDeFicha(
     ano: Int?,
     duracao: Double?,
 ) {
+    /// ## ⚠️ `800p` e `h264` saíram daqui
+    ///
+    /// Eles estavam na linha logo abaixo do título — o lugar mais valioso da
+    /// tela — e **não é assim que alguém escolhe um filme**. Resolução e codec
+    /// são resposta a «vai tocar bem?», que é uma pergunta de quem já decidiu
+    /// assistir; ano e duração respondem «é este que eu quero?», que é a
+    /// pergunta de quem está olhando.
+    ///
+    /// Eles não sumiram: desceram pro pé da ficha, junto do resto do que é do
+    /// arquivo e não da obra.
     val pedacos = buildList {
         ano?.let { add(it.toString()) }
         duracao?.takeIf { it > 0 }?.let { add(duracaoCompacta(it)) }
-        estado.arquivo?.height?.let { add("${it}p") }
-        estado.arquivo?.codecDeVideo?.let { add(it) }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -446,3 +486,15 @@ private fun LinhaDeFicha(
         }
     }
 }
+
+
+/// As etiquetas que **não** ajudam a escolher um filme.
+///
+/// ⚠️ Elas continuam existindo e continuam servindo pra filtrar o acervo — o que
+/// muda é que não ocupam mais a ficha. `filme` numa tela de filme é ruído, e o
+/// país raramente é o critério de quem está decidindo o que ver hoje à noite.
+///
+/// ⚠️ A lista é por `namespace` e é **tolerante**: um nome que o servidor não use
+/// simplesmente não casa, e a etiqueta continua aparecendo. Errar aqui mostra
+/// demais, nunca de menos — que é o lado certo pra errar.
+private val ETIQUETAS_MUDAS = setOf("country", "pais", "format", "kind", "tipo", "type")

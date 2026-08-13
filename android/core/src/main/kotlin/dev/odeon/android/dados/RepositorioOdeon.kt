@@ -574,7 +574,9 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// não está é pior que um que não se marcou — o primeiro faz alguém perder o
     /// programa confiando no app.
     suspend fun marcarLembrete(programaId: Int): Boolean = withContext(Dispatchers.IO) {
-        runCatching { exigirApi().marcarLembrete(programaId).ok }.getOrDefault(false)
+        runCatching { exigirApi().marcarLembrete(programaId).ok }
+            .onFailure { android.util.Log.w("Odeon", "lembrete $programaId não marcou: $it") }
+            .getOrDefault(false)
     }
 
     suspend fun desmarcarLembrete(programaId: Int): Boolean = withContext(Dispatchers.IO) {

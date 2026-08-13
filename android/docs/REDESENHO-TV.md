@@ -2586,3 +2586,40 @@ O motivo é raso e vale registrar: a navegação por `adb` me levou três vezes
 seguidas pra telas erradas (biblioteca, perfil, guia), e o consentimento do Gemini
 apareceu no meio. Insistir custaria mais do que vale — o dono está na frente da
 TV.
+
+### 19.7 Quatro relatos depois de rodar
+
+**«A timeline tá fixa, não consigo ir além dos horários já mostrados.»**
+
+⚠️ A rolagem horizontal existia — e não tinha para onde rolar. Seis horas a 1,6dp
+por minuto dão **576dp** numa janela de ~800dp: o conteúdo cabia inteiro. E o dado
+nem chegava a tanto (`guiaAoVivo` pedia 4h, `gradeDoOdeon` 5h).
+
+Agora são **doze horas** nos dois pedidos e na largura: 1152dp, mais largo que a
+tela — que é a condição pra existir «pra frente». Conferido: a régua vai de 17:00
+a 00:00 e continua.
+
+**«A modal que abre é feia.»**
+
+Ela era feia por **falta de assunto**: um retângulo escuro com texto. Um programa
+é um filme, e um filme tem cara — e o guia já mandava `arte` quando o casamento
+com o acervo foi seguro, que estava sendo jogada fora.
+
+Agora a arte sangra pela direita com degradê horizontal, o título é serifado, e a
+sinopse cabe inteira. É o mesmo desenho do herói do ao vivo, e a repetição é de
+propósito: as duas telas falam do mesmo tipo de coisa.
+
+**«Voltar de um canal me leva pra ficha do filme e depois pra home.»**
+
+⚠️ O canal do Odeon abre o **player de filme** — é um arquivo do acervo, afinal —
+e o `voltar` dele leva à ficha da obra. Isso é certo pra quem escolheu um filme e
+errado pra quem escolheu um canal: esse não pediu o filme, pediu o canal.
+
+O `canalId` já viajava com o filme desde o conserto da virada de programa. Aqui
+ele responde a segunda pergunta: **de onde essa pessoa veio**.
+
+⚠️ **O lembrete não foi confirmado.** Apertei `☆ me avise` e o botão continuou em
+`☆ me avise` — o estado não virou. Pode ser o servidor recusando a rota, pode ser
+que o aperto não tenha chegado ao botão (a navegação por `adb` estava me levando
+pra telas erradas na mesma rodada). Instrumentei a falha com log e não consegui
+uma captura limpa. Fica como **não conferido**, não como pronto.

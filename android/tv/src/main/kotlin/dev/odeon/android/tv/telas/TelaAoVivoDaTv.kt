@@ -284,6 +284,7 @@ fun TelaAoVivoDaTv(
     blocoAberto?.let { bloco ->
         FichaDoBloco(
             bloco = bloco,
+            arte = bloco.arte?.let { modelo.arte(it) },
             lembrado = bloco.programaId != null && bloco.programaId in estado.lembretes,
             aoAlternarLembrete = { bloco.programaId?.let { modelo.alternarLembrete(it) } },
             aoFechar = { blocoAberto = null },
@@ -722,6 +723,7 @@ private fun LinhaDoTempoAoVivo(
                             descricao = p.description,
                             ano = p.year,
                             categoria = p.categoria,
+                            arte = p.arte,
                         )
                     }
                 },
@@ -756,7 +758,7 @@ private fun LinhaDoTempoAoVivo(
             /// diz **que horas** são aqui — e é isso que transforma a faixa numa
             /// grade de programação em vez de um gráfico.
             Row(Modifier.padding(start = LARGURA_DO_ROTULO + 10.dp).horizontalScroll(rolagemDaGrade)) {
-                repeat(6) { i ->
+                repeat(HORAS_DA_GRADE) { i ->
                     Box(Modifier.width((60f * LARGURA_DO_MINUTO).dp)) {
                         Text(
                             text = hora(inicio + i * 3_600_000L),
@@ -929,6 +931,8 @@ private data class BlocoDaGrade(
     val descricao: String? = null,
     val ano: Int? = null,
     val categoria: String? = null,
+    /// A arte da obra, quando o casamento com o acervo foi seguro.
+    val arte: String? = null,
 )
 
 
@@ -968,7 +972,11 @@ private val CorpoMiudo = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
 /// partir da hora cheia, e uma caixa que só medisse o visível cortaria tudo o que
 /// vem depois — que é exatamente o «e hoje à noite?» que a grade existe pra
 /// responder.
-private val LARGURA_DA_GRADE_INTEIRA = (6 * 60 * LARGURA_DO_MINUTO).dp
+/// ⚠️ Doze horas, e ela tem de ser **maior que a tela** — é isso que faz existir
+/// «pra frente». Com seis horas ela dava 576dp numa janela de ~800dp: a rolagem
+/// existia e não tinha para onde rolar.
+private const val HORAS_DA_GRADE = 12
+private val LARGURA_DA_GRADE_INTEIRA = (HORAS_DA_GRADE * 60 * LARGURA_DO_MINUTO).dp
 
 /// Um programa na grade — focável, e por isso um destino.
 @Composable
@@ -1062,67 +1070,111 @@ private fun BlocoDaFaixa(
 @Composable
 private fun FichaDoBloco(
     bloco: BlocoDaGrade,
+    arte: String?,
     lembrado: Boolean,
     aoAlternarLembrete: () -> Unit,
     aoFechar: () -> Unit,
 ) {
     BackHandler { aoFechar() }
     Box(
-        Modifier
-            .fillMaxSize()
-            .background(Cores.fundo.copy(alpha = 0.88f)),
+        Modifier.fillMaxSize().background(Cores.fundo.copy(alpha = 0.92f)),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
+        Box(
             Modifier
-                .width(700.dp)
-                .background(Cores.fundoElevado, RoundedCornerShape(12.dp))
-                .padding(36.dp),
+                .width(980.dp)
+                .height(420.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Cores.fundoElevado),
         ) {
-            Text(
-                text = listOfNotNull(hora(bloco.comecaMs), bloco.categoria, bloco.ano?.toString())
-                    .joinToString(" · ")
-                    .uppercase(),
-                style = RotuloMiudo,
-                color = Cores.destaque,
-            )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = bloco.titulo,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = Serifada,
-                    fontSize = 34.sp,
-                    color = Cores.texto,
-                ),
-            )
-            /// ⚠️ A sinopse **só quando existe** — e o guia externo quase sempre
-            /// manda vazio. Um parágrafo em branco reservado «pro caso de vir»
-            /// é buraco desenhado (§24).
-            bloco.descricao?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = it,
-                    style = CorpoMiudo,
-                    color = Cores.textoApagado,
-                    maxLines = 5,
-                    overflow = TextOverflow.Ellipsis,
+            /// ## ⚠️ A arte sangra pela direita, como no herói
+            ///
+            /// A primeira ficha era uma caixa de texto num retângulo escuro, e o
+            /// dono foi direto: «a modal que abre é feia». Ela era feia por
+            /// **falta de assunto** — um programa é um filme, e um filme tem
+            /// cara. O guia já manda a arte quando o casamento com o acervo foi
+            /// seguro, e ela estava sendo jogada fora.
+            ///
+            /// O degradê horizontal é o que faz a foto e o texto caberem sem uma
+            /// caixa em volta do texto: a capa **vira** fundo em vez de ser
+            /// cortada por uma borda. É o mesmo desenho do herói do ao vivo, e a
+            /// repetição aqui é de propósito — as duas telas falam do mesmo tipo
+            /// de coisa.
+            if (arte != null) {
+                AsyncImage(
+                    model = arte,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.horizontalGradient(
+                            0f to Cores.fundoElevado,
+                            0.46f to Cores.fundoElevado.copy(alpha = 0.94f),
+                            1f to Cores.fundoElevado.copy(alpha = 0.25f),
+                        ),
+                    ),
                 )
             }
 
-            Spacer(Modifier.height(26.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                /// ⚠️ Canal do Odeon não tem `programme_id`, e por isso não tem
-                /// lembrete: não há programa no guia externo a que se agarrar.
-                /// A ficha continua útil — ela mostra o que vai passar — e o
-                /// botão simplesmente não aparece.
-                if (bloco.programaId != null) {
-                    BotaoDaSala(
-                        rotulo = if (lembrado) "★ não me avise mais" else "☆ me avise",
-                        principal = !lembrado,
-                        aoEscolher = aoAlternarLembrete,
+            Column(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .width(560.dp)
+                    .padding(horizontal = 40.dp),
+            ) {
+                Text(
+                    text = listOfNotNull(
+                        "${hora(bloco.comecaMs)} — ${hora(bloco.terminaMs)}",
+                        bloco.categoria,
+                        bloco.ano?.toString(),
+                    ).joinToString(" · ").uppercase(),
+                    style = RotuloMiudo,
+                    color = Cores.destaque,
+                )
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = bloco.titulo,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontFamily = Serifada,
+                        fontSize = 38.sp,
+                        lineHeight = 44.sp,
+                        color = Cores.texto,
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                /// ⚠️ A sinopse **só quando existe** — o guia externo quase sempre
+                /// manda vazio, e um parágrafo em branco reservado «pro caso de
+                /// vir» é buraco desenhado (§24).
+                bloco.descricao?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = it,
+                        style = CorpoMiudo,
+                        color = Cores.textoApagado,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                BotaoDaSala("fechar", aoFechar)
+
+                Spacer(Modifier.height(28.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    /// ⚠️ Canal do Odeon não tem `programme_id`, e por isso não
+                    /// tem lembrete: não há programa no guia externo a que se
+                    /// agarrar. A ficha continua útil — ela diz o que vai passar —
+                    /// e o botão simplesmente não aparece (§53).
+                    if (bloco.programaId != null) {
+                        BotaoDaSala(
+                            rotulo = if (lembrado) "★ não me avise" else "☆ me avise",
+                            principal = !lembrado,
+                            aoEscolher = aoAlternarLembrete,
+                        )
+                    }
+                    BotaoDaSala("fechar", aoFechar)
+                }
             }
         }
     }

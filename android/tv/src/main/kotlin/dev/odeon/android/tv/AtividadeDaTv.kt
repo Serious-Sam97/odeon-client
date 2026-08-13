@@ -241,7 +241,27 @@ class AtividadeDaTv : ComponentActivity() {
                         modelo = modelo,
                         ondeParou = agora.comecarEm,
                         aoSair = {
-                            onde = Onde.Ficha(agora.obraId)
+                            /// ## ⚠️ Sair de um **canal** volta pra sintonia
+                            ///
+                            /// Relatado pelo dono: «quando entro pra assistir um
+                            /// canal, ao voltar ele vai pra tela de descrição do
+                            /// filme e depois pra home».
+                            ///
+                            /// O canal do Odeon abre o **player de filme** — é um
+                            /// arquivo do acervo, afinal —, e o `voltar` dele leva
+                            /// à ficha da obra, que é o certo pra quem escolheu um
+                            /// filme. Não é o certo pra quem escolheu um canal:
+                            /// esse não pediu o filme, pediu o canal, e o lugar de
+                            /// onde ele veio é a sintonia.
+                            ///
+                            /// O `canalId` já viajava com o filme desde o conserto
+                            /// da virada de programa; aqui ele responde a segunda
+                            /// pergunta: **de onde essa pessoa veio**.
+                            onde = if (agora.canalId != null) {
+                                Onde.Casa(noAoVivo = true)
+                            } else {
+                                Onde.Ficha(agora.obraId)
+                            }
                             /// Sair do filme é o momento em que a home da TV
                             /// ficou desatualizada: a posição mudou, e talvez o
                             /// filme tenha acabado. Republicar aqui é o que faz

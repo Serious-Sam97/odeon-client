@@ -75,8 +75,19 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
         _estado.update { it.copy(carregando = true, erro = null) }
         viewModelScope.launch {
             val canais = odeon.canaisAoVivo()
-            val guia = odeon.guiaAoVivo()
-            val doOdeon = odeon.gradeDoOdeon()
+            /// ⚠️ **Doze horas, e não as quatro/cinco de antes.**
+            ///
+            /// A grade não rolava, e o dono viu: «a timeline tá fixa, eu não
+            /// consigo ir além dos horários já mostrados». A rolagem horizontal
+            /// estava lá — mas seis horas a 1,6dp por minuto dão 576dp, e a
+            /// janela tem ~800dp. **Não havia o que rolar**: o conteúdo cabia
+            /// inteiro, e o dado nem chegava a tanto.
+            ///
+            /// Doze horas dão 1152dp — mais largo que a tela, que é a condição
+            /// pra existir «pra frente». E é o horizonte certo pra pergunta que a
+            /// grade responde: «o que passa hoje à noite?»
+            val guia = odeon.guiaAoVivo(horas = 12)
+            val doOdeon = odeon.gradeDoOdeon(horas = 12)
             /// ⚠️ Os lembretes vêm junto e não numa segunda ida: a grade sem
             /// eles é uma grade que mente por omissão — mostra o programa e
             /// esconde que você já pediu pra ser avisado dele.

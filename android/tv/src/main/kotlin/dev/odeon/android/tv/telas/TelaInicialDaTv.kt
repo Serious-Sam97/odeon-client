@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import dev.odeon.android.tv.ui.Sala
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.mutableIntStateOf
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
 import dev.odeon.android.ui.guia.ModeloDoGuia
@@ -131,6 +132,19 @@ fun TelaInicialDaTv(
     /// A altura da lente, em pixels da janela. A `Trilho` reporta; o feixe usa.
     var alturaDaLente by remember { mutableFloatStateOf(0f) }
 
+    /// Um contador, e não um booleano: escolher **o mesmo** destino duas vezes
+    /// tem de fechar o menu as duas vezes, e um booleano que já está `true` não
+    /// dispara efeito nenhum.
+    var pediramSair by remember { mutableIntStateOf(0) }
+    val gerenteDeFoco = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(pediramSair) {
+        if (pediramSair == 0) return@LaunchedEffect
+        /// Espera o conteúdo do novo destino existir antes de mandar o foco pra
+        /// ele. Sem a folga, `moveFocus` não acha alvo e o menu fica aberto.
+        kotlinx.coroutines.delay(80)
+        gerenteDeFoco.moveFocus(FocusDirection.Right)
+    }
+
 
     /// ⚠️ **O fundo saiu da `Row` e veio pro `Box`** — T1.
     ///
@@ -168,7 +182,19 @@ fun TelaInicialDaTv(
         Row(Modifier.fillMaxSize()) {
         Trilho(
             atual = destino,
-            aoTrocar = { destino = it },
+            /// ⚠️ **Escolher fecha o menu**, e o fechamento é uma consequência
+            /// e não um comando: o trilho abre quando tem foco, então devolver o
+            /// foco ao conteúdo é o que o fecha.
+            ///
+            /// Sem isso, apertar `OK` num destino trocava a tela e **deixava o
+            /// painel aberto por cima dela** — a pessoa escolhia um lugar e
+            /// continuava no menu, tendo que apertar ▶ pra ver o que pediu.
+            ///
+            /// ⚠️ O pedido não pode ser feito aqui, na hora do clique: a tela
+            /// nova ainda não foi composta, e não há para onde mandar o foco.
+            /// Por isso ele vira um recado que o `LaunchedEffect` abaixo entrega
+            /// no quadro seguinte.
+            aoTrocar = { destino = it; pediramSair = pediramSair + 1 },
             nome = doPerfil.perfil?.let { it.nome.ifBlank { it.username } } ?: "",
             rosto = perfil.arte(doPerfil.perfil?.avatar?.arte),
             nivel = doPerfil.perfil?.progresso?.nivel,

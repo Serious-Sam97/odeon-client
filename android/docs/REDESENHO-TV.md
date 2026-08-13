@@ -2286,3 +2286,51 @@ que seriam trinta e seis chances de errar uma.
 
 Medido com `uiautomator`: o primeiro cartaz foi de **x=280px** (antes de tudo)
 para **x=176px** (trilho magro) e agora para **x=128px**.
+
+### 16.5 Três da foto do dono: o rosto oval, a pastilha branca, e o menu que ficava aberto
+
+#### «A foto de perfil tá casada»
+
+⚠️ Estava oval, e a causa é a lição que esta casa já pagou uma vez: **`size` é
+preferência, não ordem.**
+
+A conta do trilho fechado é apertada por construção. Com `Focavel` a 2dp, `Row` a
+2dp, lente de 3, vão de 8 e insígnia de 26, dão **45dp querendo caber em 40**.
+Quando não cabe, o que acontece **não é corte**: o pai reduz a largura, mantém a
+altura, e o rosto redondo vira elipse — em silêncio.
+
+Consertado nos dois lados. A aritmética (o vão caiu pra 3dp e o `Row` perdeu o
+padding horizontal: 2+3+3+26+2 = 36) e uma trava: a insígnia passou a usar
+`requiredSize`. Com ela, um erro futuro **transborda** em vez de deformar.
+Defeito visível se conserta; defeito silencioso vira característica.
+
+#### «A luz tá estranha»
+
+⚠️ Era uma **pastilha branca chapada** ao lado do item escolhido, e a culpa é do
+`12×` que eu tinha acabado de pôr.
+
+`desenhaOCone` pinta um `drawRect` no `DrawScope` **daquela caixa** — 3×20dp. O
+radial nunca vaza pra fora dela. Com raio de 36dp a caixa inteira fica no topo do
+gradiente e satura. Eu tinha subido o número achando que a luz ia «sair do item»,
+sem notar que ela não tem por onde sair.
+
+Quem ilumina a sala é o `FeixeDaCabine`, em tela cheia. A lente do item é só o
+ponto quente da fonte, e precisa de queda **dentro dos próprios 20dp** pra
+parecer um ponto. Voltou pra `5.5×`.
+
+#### «Ao selecionar uma opção do menu, fazer ele fechar»
+
+O trilho abre quando tem foco — então fechar não é um comando, é uma
+consequência: devolver o foco ao conteúdo. Sem isso, apertar `OK` trocava a tela
+e **deixava o painel aberto por cima dela**.
+
+⚠️ O pedido não pode ser feito na hora do clique: a tela nova ainda não foi
+composta e não há para onde mandar o foco. Vira um recado que um `LaunchedEffect`
+entrega 80ms depois.
+
+⚠️ E é um **contador**, não um booleano: escolher o mesmo destino duas vezes tem
+de fechar o menu as duas vezes, e um booleano que já está `true` não dispara
+efeito nenhum.
+
+**Conferido na TCL:** rosto redondo, lente com queda em vez de pastilha, e o
+`OK` fechando o trilho com o foco no primeiro cartaz.

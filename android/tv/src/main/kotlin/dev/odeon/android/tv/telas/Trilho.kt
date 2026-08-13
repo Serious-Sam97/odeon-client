@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -303,7 +304,7 @@ private fun RetratoDoTrilho(
     val brilho = brilhoDoArco(escolhido)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = Modifier.padding(horizontal = 4.dp),
+        modifier = Modifier.padding(horizontal = 2.dp),
         forma = forma,
         anel = false,
     ) { focado ->
@@ -314,7 +315,7 @@ private fun RetratoDoTrilho(
         /// facho — a luz do projetor, um item por vez; quem marca o **focado** é
         /// o ícone dourado. Duas coisas diferentes, dois sinais diferentes.
         Row(
-            Modifier.padding(horizontal = 2.dp, vertical = 9.dp),
+            Modifier.padding(vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// A mesma lente dos destinos, no mesmo lugar da fileira — o retrato
@@ -331,11 +332,19 @@ private fun RetratoDoTrilho(
                 if (escolhido) {
                     Canvas(Modifier.matchParentSize()) {
                         val centro = Offset(size.width / 2f, size.height / 2f)
-                        /// ⚠️ **12×, e não 5,5×.** É este cone curtinho que faz a luz parecer
-                        /// **sair do item escolhido** em vez de aparecer do lado dele. Com
-                        /// 5,5× de uma fresta de 3dp o halo tinha 16dp — menor que o próprio
-                        /// ícone, e o olho lia como um enfeite, não como uma fonte.
-                        desenhaOCone(centro = centro, raio = size.width * 12f, forca = brilho)
+                        /// ⚠️ **5,5× de volta, e o 12× foi um erro de leitura meu.**
+                        ///
+                        /// Eu subi pra 12× querendo que a luz «saísse do item». Mas
+                        /// `desenhaOCone` pinta um `drawRect` no `DrawScope` **desta
+                        /// caixa**, que tem 3×20dp — o radial nunca vaza pra fora
+                        /// dela. Com raio de 36dp a caixa inteira fica no topo do
+                        /// gradiente e vira uma **pastilha branca chapada**, que foi
+                        /// o «a luz tá estranha» do dono.
+                        ///
+                        /// Quem ilumina a sala é o `FeixeDaCabine`, em tela cheia.
+                        /// Aqui é só o ponto quente da fonte, e ele precisa de queda
+                        /// dentro dos próprios 20dp pra parecer um ponto.
+                        desenhaOCone(centro = centro, raio = size.width * 5.5f, forca = brilho)
                         desenhaALente(
                             centro = centro,
                             forca = brilho,
@@ -345,11 +354,23 @@ private fun RetratoDoTrilho(
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(3.dp))
             /// ⚠️ **44dp, e o celular usa 36.** É o mesmo argumento do
             /// `TipoDaSala`: o desenho é o mesmo, a escala é a daqui. Um retrato
             /// de 36dp a três metros é uma mancha colorida.
+            /// ⚠️ **`requiredSize`, e não `size`** — a trava contra o defeito que
+            /// o dono viu: «a foto de perfil tá casada».
+            ///
+            /// A conta do trilho fechado é apertada por construção (2 + 3 + 3 +
+            /// 26 + 2 = 36 dentro de 40), e quando ela estoura o que acontece não
+            /// é corte: `size` é **preferência**, o pai reduz a largura, mantém a
+            /// altura, e o rosto redondo vira elipse — em silêncio.
+            ///
+            /// Com `requiredSize` o erro passa a **transbordar**, que é feio e é
+            /// visível. Defeito visível se conserta; defeito silencioso vira
+            /// característica.
             Insignia(
+                modifier = Modifier.requiredSize(26.dp),
                 nome = nome,
                 rosto = rosto,
                 nivel = nivel,
@@ -390,13 +411,13 @@ private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
     val forma = RoundedCornerShape(10.dp)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = Modifier.padding(horizontal = 4.dp),
+        modifier = Modifier.padding(horizontal = 2.dp),
         forma = forma,
         anel = false,
     ) { focado ->
         Row(
             Modifier
-                .padding(horizontal = 2.dp, vertical = 10.dp),
+                .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// O vão de 3dp da barra de "você está aqui" dos destinos, vazio:
@@ -441,13 +462,13 @@ private fun ItemDoTrilho(
     val brilho = brilhoDoArco(escolhido)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = modifier.padding(horizontal = 4.dp),
+        modifier = modifier.padding(horizontal = 2.dp),
         forma = forma,
         anel = false,
     ) { focado ->
         Row(
             Modifier
-                .padding(horizontal = 2.dp, vertical = 10.dp),
+                .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// ## A barra de "você está aqui" virou **a lente** — T1

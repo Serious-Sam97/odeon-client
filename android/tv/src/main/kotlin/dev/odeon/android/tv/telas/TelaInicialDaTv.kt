@@ -21,6 +21,10 @@ import androidx.compose.ui.focus.focusProperties
 import dev.odeon.android.dados.Barramento
 import dev.odeon.android.dados.RepositorioOdeon
 import dev.odeon.android.tv.lembrarModelo
+import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
 import dev.odeon.android.ui.guia.ModeloDoGuia
@@ -125,6 +129,7 @@ fun TelaInicialDaTv(
     /// A altura da lente, em pixels da janela. A `Trilho` reporta; o feixe usa.
     var alturaDaLente by remember { mutableFloatStateOf(0f) }
 
+
     /// ⚠️ **O fundo saiu da `Row` e veio pro `Box`** — T1.
     ///
     /// Enquanto o `Cores.fundo` era da `Row`, ele era pintado **por cima** de
@@ -139,6 +144,25 @@ fun TelaInicialDaTv(
             FeixeDaCabine(alturaDaLente = alturaDaLente, chave = destino)
         }
 
+        /// ## ⚠️ A sobreposição **não sobreviveu ao D-pad** — visto na TCL
+        ///
+        /// O trilho chegou a flutuar por cima do conteúdo, com o conteúdo parado
+        /// atrás. Desenhava bonito e **parou de colapsar**: o ▶ não devolvia o
+        /// foco, e o menu ficava aberto pra sempre.
+        ///
+        /// A causa é geométrica e não tem conserto barato: a busca direcional do
+        /// Compose procura um alvo **naquela direção**, e com o painel de 240dp
+        /// por cima, tudo o que estava à direita estava *debaixo* dele. Foco de
+        /// D-pad não entende profundidade — ele entende posição.
+        ///
+        /// Por isso TV empurra em vez de sobrepor, e não é falta de imaginação:
+        /// é a única topologia em que «à direita» quer dizer a mesma coisa pro
+        /// olho e pro foco.
+        ///
+        /// ⚠️ O que **sobrou** da ideia é o que importava: fechado ele é um vão
+        /// de [LARGURA_FECHADO], contra os 96dp de antes. O empurrão só acontece
+        /// enquanto o menu está aberto, que é o instante em que a pessoa está
+        /// olhando pro menu e não pra grade.
         Row(Modifier.fillMaxSize()) {
         Trilho(
             atual = destino,
@@ -154,6 +178,7 @@ fun TelaInicialDaTv(
             cabineApagada = destino == Destino.LOCADORA,
             foco = focoDoTrilho,
         )
+
 
         /// ## ⚠️ Sem este bloco o trilho é **inalcançável** — visto na TCL em
         /// 12/08/2026
@@ -207,6 +232,8 @@ fun TelaInicialDaTv(
             )
         }
         }
+
+
     }
 }
 

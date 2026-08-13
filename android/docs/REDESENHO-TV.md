@@ -2160,3 +2160,66 @@ notou porque nesta casa quase tudo toca **direto**.
 Não mexi: o player de filme monta o `ExoPlayer` por outro caminho (sessão de
 mídia), e trocar a fonte dele sem ter um caso que reproduza seria consertar no
 escuro. Fica anotado como o próximo lugar a olhar.
+
+## 16. O trilho — a grossura, a caixa e a sobreposição que não sobreviveu
+
+«Hoje ele tá feio pra caralho (…) ocupa um puta espaço que a maior parte é
+inútil, principalmente de grossura.» Estava certo, e a conta é curta.
+
+### 16.1 Os 96dp eram 44 de insígnia e 52 de padding
+
+`horizontal = 20dp` no `Focavel` mais `11dp` (ou `14dp`) no `Row`, dos dois
+lados. O conteúdo ainda pedia `overscanH = 48dp` por cima, então nada aparecia
+antes de **144dp** numa tela de 960.
+
+Agora: ícone de 20dp num vão de **40dp**, e o conteúdo começa em 88dp. Medido com
+`uiautomator`: o primeiro cartaz saiu de x=280px para **x=176px**.
+
+⚠️ **A caixa de foco saiu.** Cada item ganhava `fundoElevado` arredondado, e numa
+coluna isso lê como grade de botões. Quem marca o **escolhido** é o facho — a luz
+do projetor, um item por vez; quem marca o **focado** é o ícone dourado. Duas
+coisas diferentes pediam dois sinais diferentes, e estavam usando o mesmo.
+
+A insígnia caiu de 44dp pra 26dp: o nível deixou de ser um número dentro do selo
+e virou só a cor do anel. O número volta quando o painel abre, que é onde há
+espaço pra ele significar alguma coisa.
+
+### 16.2 ⚠️ A sobreposição não sobreviveu ao D-pad
+
+A maquete previa o painel **por cima** do conteúdo, sem empurrar nada. Foi
+construído, e desenhou exatamente como se queria — e **parou de colapsar**: o ▶
+não devolvia o foco, e o menu ficava aberto pra sempre.
+
+A causa é geométrica e não tem conserto barato. A busca direcional do Compose
+procura um alvo *naquela direção*; com o painel de 240dp por cima, tudo o que
+estava à direita estava **debaixo** dele. Foco de D-pad não entende profundidade
+— entende posição.
+
+Por isso TV empurra em vez de sobrepor, e não é falta de imaginação: é a única
+topologia em que «à direita» quer dizer a mesma coisa pro olho e pro foco.
+
+O que sobrou da ideia é o que importava — o vão de 40dp. O empurrão só acontece
+enquanto o menu está aberto, que é o instante em que a pessoa está olhando pro
+menu e não pra grade.
+
+### 16.3 Dois enganos meus, no caminho
+
+⚠️ **«A luz é dez vezes menor que no celular»** — eu disse isso olhando o
+`desenhaOCone(raio = size.width * 5.5f)` da lente de 3dp, e **não vi** que o
+`FeixeDaCabine` desenha o cone de raio igual à largura da tela por trás. A luz de
+sala estava lá; o que eu comparei era o pontinho. Afirmação feita a partir de um
+número lido sem procurar o outro.
+
+⚠️ **«O trilho parou de colapsar»** — conclusão tirada de duas fotos pareadas que
+saíram idênticas. Medido depois com `uiautomator`, o foco **estava** indo de
+`[8,113]` (trilho) para `[176,324]` (conteúdo): o ▶ funcionava, e o que falhava
+era o meu roteiro, que disparava a tecla antes de a tela assentar. Duas rodadas
+de conserto gastas num defeito que não existia.
+
+E um defeito que existia mesmo: ao encolher os paddings, meu `replace` casou só
+com o bloco do retrato e **não** com o dos itens, que ficaram com 34dp de padding
+por lado dentro de um vão de 40dp. Resultado na TCL: o trilho com o rosto e a
+divisória, e **nenhum ícone** — recortados por excesso de largura.
+
+**Conferido na TCL:** fechado com sete ícones num vão de 40dp e o facho no
+escolhido; aberto com os rótulos inteiros num painel opaco de 220dp.

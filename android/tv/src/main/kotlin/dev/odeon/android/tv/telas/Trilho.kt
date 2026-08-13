@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -171,14 +172,26 @@ fun Trilho(
             .fillMaxHeight()
             .onFocusChanged { aberto = it.hasFocus }
             .animateContentSize(tween(160))
-            .width(if (aberto) 260.dp else 96.dp)
+            .width(if (aberto) LARGURA_ABERTO else LARGURA_FECHADO)
             .background(
                 /// O degrau de fundo só aparece aberto. Fechado, o trilho é
                 /// parte do fundo — o que evita uma tarja escura permanente na
                 /// borda esquerda de todo filme e todo pôster.
                 if (aberto) {
+                    /// ⚠️ **Opaco na maior parte, e só depois esmaece.**
+                    ///
+                    /// O degradê era `fundoAfundado → transparente` ao longo dos
+                    /// 240dp inteiros, e na TCL isso não é um painel: é um véu de
+                    /// gaze. Os rótulos caíam em cima dos cartazes e os dois
+                    /// tinham o mesmo peso.
+                    ///
+                    /// Um menu aberto precisa ser **página**, não filtro. Opaco
+                    /// até 80% e o esmaecimento só na borda, que é o que evita a
+                    /// aresta reta sem entregar a legibilidade.
                     Brush.horizontalGradient(
-                        listOf(Cores.fundoAfundado, Cores.fundo.copy(alpha = 0f)),
+                        0f to Cores.fundoAfundado,
+                        0.8f to Cores.fundoAfundado,
+                        1f to Cores.fundo.copy(alpha = 0f),
                     )
                 } else {
                     Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
@@ -267,9 +280,9 @@ fun Trilho(
 private fun Divisoria(aberto: Boolean) {
     Box(
         Modifier
-            .padding(horizontal = if (aberto) 34.dp else 30.dp)
+            .padding(horizontal = if (aberto) 30.dp else 10.dp)
             .height(1.dp)
-            .width(if (aberto) 172.dp else 36.dp)
+            .width(if (aberto) 172.dp else 20.dp)
             .background(Cores.linha),
     )
 }
@@ -290,20 +303,25 @@ private fun RetratoDoTrilho(
     val brilho = brilhoDoArco(escolhido)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = Modifier.padding(horizontal = 20.dp),
+        modifier = Modifier.padding(horizontal = 4.dp),
         forma = forma,
+        anel = false,
     ) { focado ->
+        /// ⚠️ **Sem caixa por trás do item focado.**
+        ///
+        /// Ele ganhava `fundoElevado` arredondado, e numa coluna isso lê como
+        /// grade de botões, não como trilho. Quem marca o **escolhido** é o
+        /// facho — a luz do projetor, um item por vez; quem marca o **focado** é
+        /// o ícone dourado. Duas coisas diferentes, dois sinais diferentes.
         Row(
-            Modifier
-                .background(if (focado) Cores.fundoElevado else Color.Transparent, forma)
-                .padding(horizontal = 11.dp, vertical = 10.dp),
+            Modifier.padding(horizontal = 2.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// A mesma lente dos destinos, no mesmo lugar da fileira — o retrato
             /// tem 3dp a menos de ícone, então ela alinha com as cinco de baixo.
             Box(
                 Modifier
-                    .size(width = 3.dp, height = 22.dp)
+                    .size(width = 3.dp, height = 20.dp)
                     .onGloballyPositioned { coords ->
                         aoMoverALente?.invoke(
                             coords.positionInWindow().y + coords.size.height / 2f,
@@ -332,7 +350,11 @@ private fun RetratoDoTrilho(
                 rosto = rosto,
                 nivel = nivel,
                 fatia = fatia,
-                tamanho = 44.dp,
+                /// ⚠️ 26dp, e não 44: a insígnia grande não cabe num vão de
+                /// 40dp. O nível deixa de ser um número dentro do selo e passa a
+                /// ser **só a cor do anel** — o número volta quando o painel
+                /// abre, que é onde há espaço pra ele significar algo.
+                tamanho = 26.dp,
                 cor = if (escolhido || focado) Cores.destaqueQuente else Cores.destaque,
             )
             if (aberto) {
@@ -364,13 +386,13 @@ private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
     val forma = RoundedCornerShape(10.dp)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = Modifier.padding(horizontal = 20.dp),
+        modifier = Modifier.padding(horizontal = 4.dp),
         forma = forma,
+        anel = false,
     ) { focado ->
         Row(
             Modifier
-                .background(if (focado) Cores.fundoElevado else Color.Transparent, forma)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 2.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// O vão de 3dp da barra de "você está aqui" dos destinos, vazio:
@@ -381,7 +403,7 @@ private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
                 painter = painterResource(R.drawable.ic_buscar),
                 contentDescription = "buscar",
                 tint = if (focado) Cores.destaqueQuente else Cores.textoApagado,
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(20.dp),
             )
             if (aberto) {
                 Spacer(Modifier.width(16.dp))
@@ -415,13 +437,13 @@ private fun ItemDoTrilho(
     val brilho = brilhoDoArco(escolhido)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = modifier.padding(horizontal = 20.dp),
+        modifier = modifier.padding(horizontal = 4.dp),
         forma = forma,
+        anel = false,
     ) { focado ->
         Row(
             Modifier
-                .background(if (focado) Cores.fundoElevado else Color.Transparent, forma)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 2.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             /// ## A barra de "você está aqui" virou **a lente** — T1
@@ -443,7 +465,7 @@ private fun ItemDoTrilho(
             /// caixa dele. Os ícones não se moveram um pixel.
             Box(
                 Modifier
-                    .size(width = 3.dp, height = 22.dp)
+                    .size(width = 3.dp, height = 20.dp)
                     .onGloballyPositioned { coords ->
                         /// O centro da lente, em coordenadas da **janela** — é o
                         /// que a `TelaInicialDaTv` precisa, porque o feixe é
@@ -487,7 +509,7 @@ private fun ItemDoTrilho(
                     escolhido -> Cores.destaque
                     else -> Cores.textoApagado
                 },
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(20.dp),
             )
             if (aberto) {
                 Spacer(Modifier.width(16.dp))
@@ -505,3 +527,23 @@ private fun ItemDoTrilho(
         }
     }
 }
+
+
+/// ## ⚠️ A grossura do trilho, medida contra a reclamação do dono
+///
+/// «Ele ocupa um puta espaço que a maior parte é inútil, principalmente de
+/// grossura.» Estava certo, e a conta é curta: os 96dp de antes eram **44dp de
+/// insígnia e 52dp de padding** — `horizontal = 20dp` no `Focavel` mais `11dp`
+/// no `Row`, dos dois lados.
+///
+/// 40dp é o ícone de 20dp com 10dp de folga de cada lado, que é o mínimo pra
+/// ele não encostar na borda da tela num aparelho com overscan.
+///
+/// ⚠️ E o ganho real é maior que a diferença: o conteúdo pedia `overscanH` por
+/// cima dos 96dp, então nada aparecia antes de **144dp**. Com o trilho por cima
+/// do conteúdo (ver `TelaInicialDaTv`), o vão dele **é** a margem.
+val LARGURA_FECHADO = 40.dp
+
+/// Aberto ele é uma **sobreposição**, e por isso pode ser generoso sem custar
+/// nada: nada reflui atrás dele.
+val LARGURA_ABERTO = 220.dp

@@ -213,6 +213,8 @@ fun TelaDaBibliotecaDaTv(
                     HeroiDaSala(
                         item = primeiro,
                         arte = modelo.arte(primeiro),
+                        folhaDoFilme = modelo::folha,
+                        urlDaFolha = modelo::urlDaFolha,
                         modifier = Modifier.padding(bottom = 10.dp),
                     )
                 }

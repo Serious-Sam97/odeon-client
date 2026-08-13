@@ -2334,3 +2334,61 @@ efeito nenhum.
 
 **Conferido na TCL:** rosto redondo, lente com queda em vez de pastilha, e o
 `OK` fechando o trilho com o foco no primeiro cartaz.
+
+## 17. O herói passa cenas do filme
+
+Pedido do dono: «o filme que está no topo, em vez de ficar com uma imagem
+estática, carregar cenas do filme».
+
+### 17.1 As cenas já existiam
+
+⚠️ Não foi preciso nada novo do servidor. A **folha de sprites** (`GET
+/api/media/{arquivo}/scrub`) é gerada pro preview de seek — é ela que desenha o
+rolo de miniaturas do player. São quadros do próprio filme, já servidos e já
+cacheados pelo Coil, porque é o mesmo arquivo que o rolo usa.
+
+O recorte é a técnica que o celular já tinha: mede a imagem em `colunas × linhas`
+o tamanho da caixa e a **empurra** pra que a célula certa caia na janela. Nada é
+decodificado duas vezes.
+
+### 17.2 ⚠️ Só cenas que você já viu
+
+Os quadros saem do trecho entre o começo e `ondeParou` — **nunca depois**. Um
+herói de «continuar assistindo» que mostrasse o terceiro ato seria um spoiler
+entregue justamente por quem devia estar te convidando a voltar.
+
+As duas pontas do intervalo têm motivo: começa em 8% do visto porque o zero é
+logotipo de estúdio e crédito de abertura, e para em 96% porque o quadro seguinte
+é o que a pessoa ainda não viu.
+
+⚠️ **Esta regra ganhou teste**, e é o único pedaço desta leva que tem. Ela é
+lógica pura e invisível: um erro aqui não quebra tela, não aparece no lint e não
+estoura nada — só mostra a alguém uma cena que ela não viu. Defeito silencioso,
+prejuízo irreversível. São seis casos, incluindo «filme mal começado não rende
+cena» e «a primeira cena não cai na abertura».
+
+Seis segundos por cena, `Crossfade` de 1,2s. Longo de propósito: é o fundo de uma
+tela que se navega, e o §4.2 é explícito — «ele não pode competir com um pôster».
+
+### 17.3 ⚠️ Conferido pela metade, e o que falta não é código
+
+Na TCL o herói **não trocou de cena**, e o log diz por quê:
+
+```
+arquivo=cbf498cb-… parou=950.329 folha=não gerada
+```
+
+Arquivo existe, 950s vistos — e o `/scrub` respondeu **404**. As folhas vêm de um
+trabalho em lote (`POST /api/scrub`, na página do Servidor da web), não sob
+demanda: um filme que nunca entrou no lote não tem tira.
+
+O que **está** conferido é a queda: sem folha, o herói fica na arte estática,
+igual a antes, sem piscar. É o §24 e ele funciona.
+
+O que **não** está conferido é a troca em si, na TV. Roda o lote de scrub e ela
+acende — e é uma coisa que eu não posso fazer pelo dono, porque é a máquina dele
+gerando arquivo.
+
+⚠️ Por isso o log ficou. «Não mudou nada» é o pior sintoma que existe: não
+distingue arquivo sem id, filme mal começado e folha inexistente. A linha responde
+os três.

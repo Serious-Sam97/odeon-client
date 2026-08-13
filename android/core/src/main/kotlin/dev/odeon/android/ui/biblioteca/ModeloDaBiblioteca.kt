@@ -8,6 +8,7 @@ import dev.odeon.android.dados.Filtros
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.dados.ItemPraContinuar
 import dev.odeon.android.dados.ObraDaLista
+import dev.odeon.android.dados.FolhaDeSprites
 import dev.odeon.android.dados.RepositorioOdeon
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -302,6 +303,16 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
     /// A arte da fileira de continuar — `still`, `backdrop` ou `poster`, nessa
     /// ordem. Ver `ItemPraContinuar.arte`.
     fun arte(item: ItemPraContinuar): String? = odeon.urlDaArte(item.arte)
+
+    /// A folha de sprites de um arquivo — os quadros que o rolo do player usa.
+    ///
+    /// ⚠️ Ela existe pro preview de seek, e é por isso que serve aqui: são
+    /// **quadros do próprio filme**, já gerados, já servidos, já cacheados. Um
+    /// herói que troca de cena não precisou de nada novo do servidor.
+    suspend fun folha(arquivoId: String): FolhaDeSprites? = odeon.folhaDeSprites(arquivoId)
+
+    /// A URL da folha, absoluta e com token — a mesma `urlDeMidia` de sempre.
+    fun urlDaFolha(caminho: String): String? = odeon.urlDeMidia("/scrub/$caminho")
 
     private companion object {
         /// O mesmo número da web (§1.6). Ele é curto o bastante pra a busca

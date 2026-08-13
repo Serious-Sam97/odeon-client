@@ -28,6 +28,17 @@ import coil3.compose.AsyncImage
 import dev.odeon.android.dados.ItemPraContinuar
 import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.tv.ui.TipoDaSala
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.layout
+import dev.odeon.android.dados.FolhaDeSprites
+import kotlinx.coroutines.delay
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.corDeHex
 
@@ -60,6 +71,10 @@ fun HeroiDaSala(
     item: ItemPraContinuar,
     arte: String?,
     modifier: Modifier = Modifier,
+    /// De onde vêm as cenas. `null` mantém o herói na arte estática, e é o
+    /// padrão: quem não passa não muda de comportamento.
+    folhaDoFilme: (suspend (String) -> FolhaDeSprites?)? = null,
+    urlDaFolha: (String) -> String? = { null },
 ) {
     val corDaObra = corDeHex(item.corDominante) ?: Cores.destaque
     val titulo = item.tituloDaSerie ?: item.title
@@ -71,6 +86,41 @@ fun HeroiDaSala(
             .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
             .background(Cores.fundoElevado),
     ) {
+        /// ## ⚠️ O herói passa cenas do filme, e elas já existiam
+        ///
+        /// A folha de sprites é gerada pro **preview de seek** do player — é ela
+        /// que desenha o rolo de miniaturas. São quadros do próprio filme, já
+        /// servidos e já cacheados: um herói que troca de cena não pediu nada
+        /// novo ao servidor.
+        ///
+        /// ⚠️ **Só cenas que você já viu.** Os quadros saem do trecho entre o
+        /// começo e `ondeParou` — nunca depois. Um herói de «continuar
+        /// assistindo» que mostrasse o terceiro ato seria um spoiler entregue por
+        /// quem devia estar te convidando a voltar.
+        val folha by produceState<FolhaDeSprites?>(null, item.arquivoId) {
+            val arquivo = item.arquivoId
+            value = if (arquivo == null || folhaDoFilme == null) null else folhaDoFilme(arquivo)
+            /// ⚠️ **Este log fica**, e é sobre um silêncio.
+            ///
+            /// Quando não há folha o herói não quebra: ele fica na arte estática,
+            /// exatamente como antes. É o §24 funcionando, e é também o pior tipo
+            /// de defeito pra diagnosticar depois — «não mudou nada» não diz se a
+            /// causa foi arquivo sem id, filme mal começado, ou folha inexistente.
+            ///
+            /// A folha vem de um trabalho em lote (`POST /api/scrub`, na página
+            /// do Servidor), não sob demanda. Um filme que nunca entrou nesse
+            /// lote responde 404 — e 404 aqui quer dizer «ainda não foi gerada»,
+            /// não «deu erro».
+            android.util.Log.i(
+                "odeon-heroi",
+                "arquivo=$arquivo parou=${item.ondeParou} " +
+                    "folha=${value?.quantosQuadros?.let { "$it quadros" } ?: "não gerada"}",
+            )
+        }
+        val cenas = remember(folha, item.ondeParou) { cenasJaVistas(folha, item.ondeParou) }
+        val urlDaTira = remember(folha) { folha?.let { urlDaFolha(it.path) } }
+
+
         if (arte != null) {
             AsyncImage(
                 model = arte,
@@ -84,6 +134,32 @@ fun HeroiDaSala(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+
+        /// ⚠️ A arte estática fica **por baixo** e nunca sai: enquanto a folha
+        /// carrega, e nos primeiros milissegundos de cada troca, é ela que
+        /// preenche. O herói nunca pisca preto.
+        val aFolha = folha
+        if (aFolha != null && urlDaTira != null && cenas.isNotEmpty()) {
+            var qual by remember(cenas) { mutableIntStateOf(0) }
+            LaunchedEffect(cenas) {
+                /// ⚠️ Seis segundos, e a troca é longa de propósito. Este é o
+                /// fundo de uma tela que se navega: cena que muda depressa
+                /// disputa com os cartazes, e o §4.2 é explícito — «ele não pode
+                /// competir com um pôster».
+                while (true) {
+                    delay(6_000)
+                    qual = (qual + 1) % cenas.size
+                }
+            }
+            Crossfade(
+                targetState = cenas[qual],
+                animationSpec = tween(1_200),
+                label = "cena do herói",
+            ) { segundo ->
+                QuadroDaFolha(aFolha, urlDaTira, segundo, Modifier.fillMaxSize())
+            }
+        }
+
 
         /// O véu. Ele é vertical e não radial porque o texto mora no pé — e a
         /// cor da obra entra por baixo, fraca, que é a §4b da espec: «a cor da
@@ -194,4 +270,72 @@ private fun faltamDoItem(item: ItemPraContinuar): String? {
     val total = item.duracaoEmSegundos?.takeIf { it > onde } ?: return null
     val minutos = ((total - onde) / 60).toInt()
     return if (minutos > 0) "faltam ${minutos}min" else null
+}
+
+
+/// Os segundos de onde tirar cena — **só do trecho já assistido**.
+///
+/// ⚠️ Começa em 8% do visto e para em 96% dele, e as duas pontas têm motivo: o
+/// começo é logotipo de estúdio e crédito de abertura, e o fim é a fronteira do
+/// spoiler — o quadro seguinte é o que a pessoa ainda não viu.
+///
+/// Devolve vazio quando não há trecho suficiente: menos de dois minutos vistos
+/// não dão cena nenhuma, e aí o herói fica na arte estática. Inventar quadro de
+/// onde não há é exatamente o que a regra proíbe (§24).
+internal fun cenasJaVistas(folha: FolhaDeSprites?, ondeParou: Double?): List<Int> {
+    if (folha == null || folha.quantosQuadros <= 0) return emptyList()
+    val visto = (ondeParou ?: 0.0).toInt()
+    if (visto < 120) return emptyList()
+
+    val comeco = (visto * 0.08).toInt()
+    val fim = (visto * 0.96).toInt()
+    if (fim <= comeco) return emptyList()
+
+    /// ⚠️ Cinco cenas, espaçadas por igual. Mais vira apresentação de slides;
+    /// menos, e o laço fica óbvio na segunda volta.
+    val quantas = 5
+    return (0 until quantas).map { comeco + (fim - comeco) * it / (quantas - 1) }
+}
+
+/// Um quadro da folha, recortado por **posicionamento** e não por bitmap.
+///
+/// ⚠️ A técnica é a mesma do rolo do celular: mede a imagem em `colunas × linhas`
+/// o tamanho da caixa e a empurra pra que a célula certa caia na janela. Nada é
+/// decodificado duas vezes, e a folha inteira é um `AsyncImage` só — que o Coil
+/// já tem em cache, porque é o mesmo arquivo do preview de seek.
+@Composable
+private fun QuadroDaFolha(
+    folha: FolhaDeSprites,
+    url: String,
+    segundo: Int,
+    modifier: Modifier = Modifier,
+) {
+    val indice = (segundo / folha.intervaloSegundos)
+        .toInt()
+        .coerceIn(0, (folha.quantosQuadros - 1).coerceAtLeast(0))
+    val coluna = indice % folha.columns
+    val linha = indice / folha.columns
+
+    Box(modifier) {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier
+                .fillMaxSize()
+                .layout { medivel, restricoes ->
+                    val larguraTotal = restricoes.maxWidth * folha.columns
+                    val alturaTotal = restricoes.maxHeight * folha.rows
+                    val posto = medivel.measure(
+                        androidx.compose.ui.unit.Constraints.fixed(larguraTotal, alturaTotal),
+                    )
+                    layout(restricoes.maxWidth, restricoes.maxHeight) {
+                        posto.place(
+                            x = -coluna * restricoes.maxWidth,
+                            y = -linha * restricoes.maxHeight,
+                        )
+                    }
+                },
+        )
+    }
 }

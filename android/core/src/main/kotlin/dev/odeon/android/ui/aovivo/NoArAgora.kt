@@ -27,6 +27,13 @@ data class QuadroNoAr(
     val arquivoId: String?,
     val comecaMs: Long,
     val terminaMs: Long,
+    /// O `programme_id` do guia — o que casa com um lembrete. `null` nos canais
+    /// do Odeon, que não têm EPG externo e por isso não têm o que lembrar.
+    val programaId: Int? = null,
+    /// O que entra depois deste, quando o servidor sabe.
+    val aSeguir: String? = null,
+    /// O logo do canal, quando existe. Os do Odeon não têm — e aí é o nome.
+    val logo: String? = null,
 )
 
 /// O que está no ar em cada canal do Odeon, agora.
@@ -96,6 +103,9 @@ fun emCartaz(
             arquivoId = c.arquivoId,
             comecaMs = c.comeca?.let { emMillis(it) } ?: 0L,
             terminaMs = c.termina?.let { emMillis(it) } ?: 0L,
+            programaId = c.programaId,
+            aSeguir = c.aSeguir,
+            logo = c.logo,
         )
     }
 

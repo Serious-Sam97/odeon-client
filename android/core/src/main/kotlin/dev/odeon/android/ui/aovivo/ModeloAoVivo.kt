@@ -21,6 +21,16 @@ data class EstadoAoVivo(
     val guia: Guia? = null,
     val doOdeon: GradeDoOdeon? = null,
     val escolhido: String? = null,
+    /// Os `programme_id` com lembrete marcado — o que desenha a estrela.
+    val lembretes: Set<Int> = emptySet(),
+    /// Canais fixados pelo dono, na ordem em que ele fixou.
+    ///
+    /// ⚠️ Guardados **no aparelho**, não no servidor: são 23 canais e a resposta
+    /// «quais são os meus» é da sala, não da casa. A TV da cozinha pode querer
+    /// outros três.
+    val favoritos: List<String> = emptyList(),
+    /// Quantas horas a grade está deslocada pra frente. `0` é agora.
+    val deslocamentoEmHoras: Int = 0,
     val erro: String? = null,
     /// ⚠️ O relógio **do servidor**, adiantado localmente — ver o cabeçalho.
     val agoraMs: Long = 0L,
@@ -67,6 +77,11 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
             val canais = odeon.canaisAoVivo()
             val guia = odeon.guiaAoVivo()
             val doOdeon = odeon.gradeDoOdeon()
+            /// ⚠️ Os lembretes vêm junto e não numa segunda ida: a grade sem
+            /// eles é uma grade que mente por omissão — mostra o programa e
+            /// esconde que você já pediu pra ser avisado dele.
+            val lembretes = odeon.lembretes().map { it.programaId }.toSet()
+            val favoritos = odeon.favoritosDeCanal()
 
             /// ⚠️ **O relógio sai da grade que veio**, com preferência pela do
             /// Odeon: ela é calculada na hora do pedido, então o `agora` dela é o
@@ -79,6 +94,8 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
             _estado.update {
                 it.copy(
                     carregando = false,
+                    lembretes = lembretes,
+                    favoritos = favoritos,
                     canais = canais,
                     guia = guia,
                     doOdeon = doOdeon,
@@ -110,6 +127,47 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
     }
 
     fun escolher(canalId: String) = _estado.update { it.copy(escolhido = canalId) }
+
+    /// ## Os lembretes
+    ///
+    /// ⚠️ A estrela só acende **depois** da confirmação do servidor. Pintar antes
+    /// é o otimismo que faz alguém perder o programa: um lembrete que parece
+    /// marcado e não está mente sobre a única coisa que ele promete.
+    fun alternarLembrete(programaId: Int) {
+        viewModelScope.launch {
+            val tinha = programaId in _estado.value.lembretes
+            val deu = if (tinha) odeon.desmarcarLembrete(programaId) else odeon.marcarLembrete(programaId)
+            if (!deu) return@launch
+            _estado.update {
+                it.copy(
+                    lembretes = if (tinha) it.lembretes - programaId else it.lembretes + programaId,
+                )
+            }
+        }
+    }
+
+    /// ## Os favoritos
+    ///
+    /// ⚠️ A ordem é a de **fixação**, não alfabética nem a do servidor: quem
+    /// fixou primeiro fica em cima, porque foi a primeira resposta que a pessoa
+    /// deu à pergunta «quais são os seus canais».
+    fun alternarFavorito(canalId: String) {
+        viewModelScope.launch {
+            val atuais = _estado.value.favoritos
+            val novos = if (canalId in atuais) atuais - canalId else atuais + canalId
+            odeon.guardarFavoritosDeCanal(novos)
+            _estado.update { it.copy(favoritos = novos) }
+        }
+    }
+
+    /// ## A janela da grade
+    ///
+    /// ⚠️ Deslocar **não recarrega**: a grade já vem com horas à frente, e o que
+    /// muda é onde a régua começa. Um pedido novo a cada seta seria trocar
+    /// latência por nada — e numa TV a seta se aperta rápido.
+    fun deslocar(horas: Int) = _estado.update {
+        it.copy(deslocamentoEmHoras = (it.deslocamentoEmHoras + horas).coerceIn(0, 12))
+    }
 
     suspend fun sintonizar(canalId: String): CanalAberto? = odeon.sintonizar(canalId)
 

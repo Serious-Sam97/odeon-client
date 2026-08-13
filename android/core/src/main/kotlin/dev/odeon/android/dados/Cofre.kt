@@ -105,6 +105,25 @@ class Cofre(contexto: Context) {
         }
     }
 
+    /// Os canais fixados, na ordem em que foram fixados.
+    ///
+    /// ⚠️ Guardados **neste aparelho** e não no servidor, e é decisão: «quais são
+    /// os meus canais» é pergunta da sala, não da casa. A TV da cozinha pode
+    /// querer outros três, e a conta do servidor é a mesma.
+    ///
+    /// Separados por quebra de linha porque id de canal pode conter vírgula — e
+    /// um separador que aparece no dado é um separador que um dia parte o dado ao
+    /// meio.
+    suspend fun guardarFavoritosDeCanal(ids: List<String>) {
+        armazem.edit { it[CHAVE_CANAIS_FIXADOS] = ids.joinToString("\n") }
+    }
+
+    suspend fun favoritosDeCanal(): List<String> =
+        armazem.data.first()[CHAVE_CANAIS_FIXADOS]
+            ?.split("\n")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
     suspend fun guardarServidor(url: String) {
         armazem.edit { it[CHAVE_SERVIDOR] = url }
     }
@@ -136,6 +155,7 @@ class Cofre(contexto: Context) {
 
     private companion object {
         val CHAVE_SERVIDOR = stringPreferencesKey("servidor")
+        val CHAVE_CANAIS_FIXADOS = stringPreferencesKey("canais_fixados")
         val CHAVE_SESSAO = stringPreferencesKey("sessao")
         val CHAVE_MIDIA = stringPreferencesKey("midia")
 

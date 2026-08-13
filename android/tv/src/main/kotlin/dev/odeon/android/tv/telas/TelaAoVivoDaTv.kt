@@ -39,6 +39,9 @@ import dev.odeon.android.tv.ui.Recado
 import dev.odeon.android.tv.ui.RotuloDeSecao
 import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.tv.ui.TipoDaSala
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.border
+import androidx.activity.compose.BackHandler
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.Serifada
 import dev.odeon.android.ui.aovivo.ModeloAoVivo
@@ -103,7 +106,24 @@ fun TelaAoVivoDaTv(
     /// atrás, e portanto os únicos em que «sintonizar» leva a algum lugar hoje.
     /// Pôr depois dos de M3U seria enterrar o que funciona embaixo do que não.
     val doOdeon = estado.doOdeon
-    val noAr = remember(estado) { emCartaz(estado.agoraMs, doOdeon, estado.canais) }
+    /// ⚠️ **Os fixados sobem, na ordem em que foram fixados.**
+    ///
+    /// São 23 canais, e os seus ficam onde o servidor os pôs. A ordem de fixação
+    /// é melhor que alfabética ou por número: ela é a resposta que a pessoa deu
+    /// à pergunta «quais são os seus», e a primeira resposta é a mais forte.
+    ///
+    /// O resto mantém a ordem do servidor — os do Odeon primeiro, depois os de
+    /// fora —, porque uma lista que se reordena sozinha é uma lista em que não se
+    /// decora onde as coisas estão.
+    val noAr = remember(estado) {
+        val todos = emCartaz(estado.agoraMs, doOdeon, estado.canais)
+        val fixados = estado.favoritos
+        if (fixados.isEmpty()) {
+            todos
+        } else {
+            todos.sortedBy { fixados.indexOf(it.canalId).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
+        }
+    }
 
     /// ## ⚠️ Digitar o canal — e ele **aparece enquanto se digita**
     ///
@@ -115,6 +135,9 @@ fun TelaAoVivoDaTv(
     /// acontece, e ela não sabe se a tecla não funciona ou se o app está
     /// esperando o resto. É o §8b na forma mais literal.
     var digitado by remember { mutableStateOf("") }
+
+    /// O bloco cuja ficha está aberta. `null` é a grade normal.
+    var blocoAberto by remember { mutableStateOf<BlocoDaGrade?>(null) }
 
     /// ⚠️ **1,2s a partir da última tecla**, e o contador reinicia a cada
     /// dígito — é o que deixa digitar `101` sem que o `1` sintonize sozinho no
@@ -151,7 +174,16 @@ fun TelaAoVivoDaTv(
                 }
             },
     ) {
-        item { NoAr(estado.agoraMs, noAr, estado.canais, estado.escolhido, modelo, aoTocar, aoSintonizarDeFora) }
+        item {
+            val escolhidoAgora = estado.escolhido ?: noAr.firstOrNull()?.canalId
+            NoAr(
+                estado.agoraMs, noAr,
+                fixado = escolhidoAgora != null && escolhidoAgora in estado.favoritos,
+                aoFixar = { escolhidoAgora?.let { modelo.alternarFavorito(it) } },
+                canais = estado.canais, escolhido = estado.escolhido, modelo = modelo,
+                aoTocar = aoTocar, aoSintonizarDeFora = aoSintonizarDeFora,
+            )
+        }
 
         if (estado.canais.isNotEmpty() || noAr.isNotEmpty()) {
             item {
@@ -172,6 +204,7 @@ fun TelaAoVivoDaTv(
                     itemsIndexed(noAr) { indice, quadro ->
                         CartaoDeCanal(
                             quadro = quadro,
+                            fixado = quadro.canalId in estado.favoritos,
                             agoraMs = estado.agoraMs,
                             arte = modelo.arte(quadro.arte),
                             saidaEsquerda = if (indice == 0) saidaEsquerda else null,
@@ -210,7 +243,10 @@ fun TelaAoVivoDaTv(
                     RotuloDeSecao("a linha do tempo")
                 }
             }
-            item { LinhaDoTempoAoVivo(estado.agoraMs, doOdeon, estado.canais, estado.guia, modelo) }
+            item { LinhaDoTempoAoVivo(
+                    estado.agoraMs, doOdeon, estado.canais, estado.guia,
+                    estado.lembretes, { blocoAberto = it }, modelo,
+                ) }
         }
     }
 
@@ -241,6 +277,18 @@ fun TelaAoVivoDaTv(
             )
         }
     }
+
+    /// ⚠️ A ficha é a **última camada** da tela, e não um filho da grade: ela
+    /// cobre tudo, e o `Focavel` de baixo não pode continuar recebendo tecla
+    /// enquanto ela está aberta.
+    blocoAberto?.let { bloco ->
+        FichaDoBloco(
+            bloco = bloco,
+            lembrado = bloco.programaId != null && bloco.programaId in estado.lembretes,
+            aoAlternarLembrete = { bloco.programaId?.let { modelo.alternarLembrete(it) } },
+            aoFechar = { blocoAberto = null },
+        )
+    }
     }
 }
 
@@ -264,6 +312,8 @@ private fun hora(ms: Long): String {
 private fun NoAr(
     agoraMs: Long,
     noAr: List<QuadroNoAr>,
+    fixado: Boolean,
+    aoFixar: () -> Unit,
     canais: List<CanalNoAr>,
     escolhido: String?,
     modelo: ModeloAoVivo,
@@ -395,6 +445,12 @@ private fun NoAr(
                 /// verdade.
                 val obra = quadro.obraId
                 val arquivo = quadro.arquivoId
+                /// ⚠️ **Fixar mora aqui**, e não num toque longo no cartão: o
+                /// `Focavel` desta casa não tem clique longo, e ensinar um gesto
+                /// escondido num controle de cinco teclas é esconder a função.
+                /// No herói ela fica ao lado de «sintonizar», que é onde o canal
+                /// escolhido já está sendo olhado.
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (arquivo != null && obra != null) {
                     BotaoDaSala(
                         rotulo = "▸ sintonizar",
@@ -424,6 +480,11 @@ private fun NoAr(
                         aoEscolher = { aoSintonizarDeFora(quadro.canalId, quadro.canalNome) },
                     )
                 }
+                BotaoDaSala(
+                    rotulo = if (fixado) "★ fixado" else "☆ fixar",
+                    aoEscolher = aoFixar,
+                )
+                }
             }
         }
 
@@ -451,6 +512,7 @@ private fun NoAr(
 @Composable
 private fun CartaoDeCanal(
     quadro: QuadroNoAr,
+    fixado: Boolean,
     agoraMs: Long,
     arte: String?,
     escolhido: Boolean,
@@ -501,6 +563,20 @@ private fun CartaoDeCanal(
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                     Spacer(Modifier.width(8.dp))
+                    /// ⚠️ **O logo foi tentado e revertido**, e o motivo é do
+                    /// dado, não do desenho.
+                    ///
+                    /// `CanalNoAr.logo_url` vem dos canais de M3U como URL
+                    /// **externa absoluta**, e a `urlDaArte` desta casa prefixa
+                    /// `$base/artwork/` cegamente: o resultado foi
+                    /// `…/artwork/https://…`, que é 404. Na TCL os canais de fora
+                    /// ficaram com o número e **nada mais** — o nome tinha saído
+                    /// pra dar lugar a uma imagem que nunca chegou.
+                    ///
+                    /// Trocar informação por espaço vazio é pior que não ter
+                    /// logo. Pra ele voltar, o logo externo precisa de um caminho
+                    /// que não passe pelo `/artwork/` — e isso é conversa de
+                    /// servidor, não de tela.
                     Text(
                         text = quadro.canalNome.uppercase(),
                         style = RotuloMiudo,
@@ -546,6 +622,21 @@ private fun CartaoDeCanal(
                 color = Cores.textoApagado,
                 modifier = recuo,
             )
+            /// ⚠️ **«a seguir» já vinha em toda resposta e não aparecia.**
+            ///
+            /// `CanalNoAr.aSeguir` chega desde o primeiro dia; a tela lia o campo
+            /// e não fazia nada com ele. É a pergunta de quem zapeia — «vale
+            /// esperar?» — respondida sem custar um byte a mais de rede.
+            quadro.aSeguir?.takeIf { it.isNotBlank() }?.let { proximo ->
+                Text(
+                    text = "a seguir · $proximo",
+                    style = RotuloMiudo,
+                    color = Cores.destaqueApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = recuo,
+                )
+            }
         }
     }
 }
@@ -570,8 +661,11 @@ private fun LinhaDoTempoAoVivo(
     doOdeon: dev.odeon.android.dados.GradeDoOdeon?,
     externos: List<CanalNoAr>,
     guia: dev.odeon.android.dados.Guia?,
+    lembretes: Set<Int>,
+    aoAbrirBloco: (BlocoDaGrade) -> Unit,
     modelo: ModeloAoVivo,
 ) {
+    val rolagemDaGrade = androidx.compose.foundation.rememberScrollState()
     if (agoraMs <= 0) return
 
     /// ⚠️ A grade começa **na hora cheia anterior ao agora**, e não no `agora`.
@@ -596,7 +690,11 @@ private fun LinhaDoTempoAoVivo(
                     .mapNotNull { p ->
                         val i0 = emMillis(p.comeca)
                         val i1 = emMillis(p.termina)
-                        if (i0 <= 0 || i1 <= i0) null else BlocoDaGrade(p.title, i0, i1)
+                        if (i0 <= 0 || i1 <= i0) {
+                            null
+                        } else {
+                            BlocoDaGrade(p.title, i0, i1, categoria = p.categoria)
+                        }
                     },
             )
         }
@@ -613,7 +711,19 @@ private fun LinhaDoTempoAoVivo(
                 blocos = porCanal[c.id].orEmpty().mapNotNull { p ->
                     val i0 = emMillis(p.comeca)
                     val i1 = emMillis(p.termina)
-                    if (i0 <= 0 || i1 <= i0) null else BlocoDaGrade(p.title, i0, i1)
+                    if (i0 <= 0 || i1 <= i0) {
+                        null
+                    } else {
+                        BlocoDaGrade(
+                            titulo = p.title,
+                            comecaMs = i0,
+                            terminaMs = i1,
+                            programaId = p.id,
+                            descricao = p.description,
+                            ano = p.year,
+                            categoria = p.categoria,
+                        )
+                    }
                 },
             )
         }
@@ -645,7 +755,7 @@ private fun LinhaDoTempoAoVivo(
             /// vermelha sozinha diz «aqui»; com as horas escritas em volta, ela
             /// diz **que horas** são aqui — e é isso que transforma a faixa numa
             /// grade de programação em vez de um gráfico.
-            Row(Modifier.padding(start = LARGURA_DO_ROTULO + 10.dp)) {
+            Row(Modifier.padding(start = LARGURA_DO_ROTULO + 10.dp).horizontalScroll(rolagemDaGrade)) {
                 repeat(6) { i ->
                     Box(Modifier.width((60f * LARGURA_DO_MINUTO).dp)) {
                         Text(
@@ -673,104 +783,54 @@ private fun LinhaDoTempoAoVivo(
             /// Por isso as faixas são achatadas num formato comum antes de
             /// desenhar, em vez de cada fonte desenhar do seu jeito.
             faixas.forEach { faixa ->
-                /// ⚠️ **Focável**, e é o conserto do terceiro relato: «ir pra
-                /// baixo faz aparecer o menu lateral».
+                /// ⚠️ **Quem é focável agora é o bloco, não a faixa.**
                 ///
-                /// A linha do tempo era desenho puro — nenhum nó focável nela.
-                /// Descendo da sintonia, o foco procurava vizinho abaixo, não
-                /// achava nada, e o único focável em qualquer direção era o
-                /// trilho à esquerda: o ▼ virava «abre o menu». O usuário não
-                /// estava errando o botão; a tela é que não tinha para onde
-                /// mandá-lo.
+                /// A faixa inteira era um alvo só, e servia pra rolar. Mas uma
+                /// grade em que se vê `Toy Story 3 · 16:46` e não se pode fazer
+                /// nada com aquilo é uma tabela, não um guia — e foi o que o dono
+                /// pediu pra mudar.
                 ///
-                /// Focável de propósito **sem `Focavel`**: o halo dourado dele é
-                /// pra cartaz, e numa faixa de 26dp ele cobriria a faixa inteira.
-                /// Aqui o foco se diz com o fundo da própria faixa, que é o que
-                /// o dono pediu ao tirar os efeitos («sem mt estresse ou
-                /// movimentos»).
-                val temFoco = remember { mutableStateOf(false) }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .onFocusChanged { temFoco.value = it.isFocused }
-                        .focusable(),
-                ) {
+                /// Com o bloco focável, ◀ ▶ andam de programa em programa e
+                /// ▲ ▼ trocam de canal, que é a navegação que todo guia de TV do
+                /// mundo já ensinou. E a rolagem horizontal vem de brinde: o foco
+                /// puxa a vista, então «olhar pra hoje à noite» deixou de precisar
+                /// de um controle próprio.
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = faixa.nome,
                         style = RotuloMiudo,
-                        color = if (temFoco.value) Cores.destaque else Cores.textoApagado,
-                        maxLines = 1,
+                        color = Cores.textoApagado,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.width(LARGURA_DO_ROTULO),
                     )
                     Spacer(Modifier.width(10.dp))
-                    Box(Modifier.fillMaxWidth().height(26.dp)) {
-                        faixa.blocos.forEach { b ->
-                            /// ⚠️ **O bloco é cortado na borda esquerda, não
-                            /// empurrado** — e a diferença aparece em todo canal
-                            /// cujo programa começou antes das 09:00.
-                            ///
-                            /// Encostar o começo em zero sem encurtar a largura
-                            /// desenha o filme inteiro a partir da hora cheia:
-                            /// um `Capitão América` das 07:43 vira um bloco que
-                            /// termina 77 minutos depois do que deveria. Hoje
-                            /// isso passa despercebido porque o bloco seguinte é
-                            /// desenhado por cima; no último de cada faixa, e em
-                            /// qualquer canal com um buraco na grade, o excesso
-                            /// fica à mostra.
-                            ///
-                            /// O fim é a âncora: ele não se move, e a largura é o
-                            /// que sobra dele até onde a grade começa.
-                            val comeco = ((b.comecaMs - inicio) / 60_000f) * LARGURA_DO_MINUTO
-                            val fim = ((b.terminaMs - inicio) / 60_000f) * LARGURA_DO_MINUTO
-                            if (fim <= 0f) return@forEach
-                            val esquerda = comeco.coerceAtLeast(0f)
-                            val largura = fim - esquerda
-                            if (largura <= 0f) return@forEach
-                            Box(
-                                Modifier
-                                    .padding(start = esquerda.dp)
-                                    .width(largura.dp)
-                                    .height(26.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        when {
-                                            agoraMs in b.comecaMs..b.terminaMs ->
-                                                Cores.destaque.copy(alpha = if (temFoco.value) 0.30f else 0.16f)
-                                            temFoco.value -> Cores.fundoElevado.copy(alpha = 0.85f)
-                                            else -> Cores.fundoElevado
-                                        },
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Column {
-                                    Text(
-                                        text = b.titulo,
-                                        style = RotuloMiudo,
-                                        color = Cores.texto,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    /// ⚠️ **Bloco estreito não ganha hora**, e é
-                                    /// melhor assim. Num programa de meia hora a
-                                    /// faixa tem 48dp: a hora entrava e saía
-                                    /// picada — `12:` —, que não é uma hora
-                                    /// abreviada, é um número errado.
-                                    ///
-                                    /// Perder a hora ali não custa nada: o bloco
-                                    /// já diz **quando** pela posição na régua,
-                                    /// que é a coisa que a grade inteira existe
-                                    /// pra dizer. O texto era redundância; a
-                                    /// redundância picada, não.
-                                    if (largura >= 60f) {
-                                        Text(
-                                            text = hora(b.comecaMs),
-                                            style = RotuloMiudo,
-                                            color = Cores.textoApagado,
-                                            maxLines = 1,
-                                        )
-                                    }
-                                }
+                    /// ⚠️ **Um `ScrollState` só pra todas as faixas.** Elas têm de
+                    /// andar juntas: duas faixas em posições horizontais
+                    /// diferentes seriam duas réguas de tempo, e a agulha do agora
+                    /// cortaria as duas mentindo para uma.
+                    Box(
+                        Modifier
+                            .height(30.dp)
+                            .horizontalScroll(rolagemDaGrade),
+                    ) {
+                        Box(Modifier.width(LARGURA_DA_GRADE_INTEIRA).height(30.dp)) {
+                            faixa.blocos.forEach { b ->
+                                val comeco = ((b.comecaMs - inicio) / 60_000f) * LARGURA_DO_MINUTO
+                                val fim = ((b.terminaMs - inicio) / 60_000f) * LARGURA_DO_MINUTO
+                                if (fim <= 0f) return@forEach
+                                val esquerda = comeco.coerceAtLeast(0f)
+                                val largura = fim - esquerda
+                                if (largura <= 0f) return@forEach
+
+                                BlocoDaFaixa(
+                                    bloco = b,
+                                    agoraMs = agoraMs,
+                                    esquerda = esquerda.dp,
+                                    largura = largura.dp,
+                                    lembrado = b.programaId != null && b.programaId in lembretes,
+                                    aoEscolher = { aoAbrirBloco(b) },
+                                )
                             }
                         }
                     }
@@ -859,7 +919,17 @@ private val DIGITOS: Map<Key, String> = mapOf(
 private data class FaixaDaGrade(val nome: String, val blocos: List<BlocoDaGrade>)
 
 /// Um programa já em milissegundos — as datas de texto ficam do lado de fora.
-private data class BlocoDaGrade(val titulo: String, val comecaMs: Long, val terminaMs: Long)
+private data class BlocoDaGrade(
+    val titulo: String,
+    val comecaMs: Long,
+    val terminaMs: Long,
+    /// O `programme_id` do guia. `null` num canal do Odeon, que não tem EPG
+    /// externo — e por isso não tem lembrete: não há programa a que se agarrar.
+    val programaId: Int? = null,
+    val descricao: String? = null,
+    val ano: Int? = null,
+    val categoria: String? = null,
+)
 
 
 /// ## ⚠️ A escala **desta tela**, e por que ela não é a da casa
@@ -890,3 +960,170 @@ private val RotuloMiudo = TipoDaSala.rotulo.copy(
 /// de uma arte que já ocupa o cartão inteiro, e quem quer lê-lo tem o herói lá
 /// em cima em 31sp dizendo a mesma coisa.
 private val CorpoMiudo = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+
+
+/// A largura total da grade — seis horas de programação, roláveis.
+///
+/// ⚠️ Ela é fixa e generosa de propósito: os blocos são posicionados em minutos a
+/// partir da hora cheia, e uma caixa que só medisse o visível cortaria tudo o que
+/// vem depois — que é exatamente o «e hoje à noite?» que a grade existe pra
+/// responder.
+private val LARGURA_DA_GRADE_INTEIRA = (6 * 60 * LARGURA_DO_MINUTO).dp
+
+/// Um programa na grade — focável, e por isso um destino.
+@Composable
+private fun BlocoDaFaixa(
+    bloco: BlocoDaGrade,
+    agoraMs: Long,
+    esquerda: androidx.compose.ui.unit.Dp,
+    largura: androidx.compose.ui.unit.Dp,
+    lembrado: Boolean,
+    aoEscolher: () -> Unit,
+) {
+    val noAr = agoraMs in bloco.comecaMs..bloco.terminaMs
+
+    /// ⚠️ **Começa em menos de 15 minutos** — a informação mais perecível desta
+    /// tela, e a que não estava nela. Um contorno basta: quem está olhando a
+    /// grade não precisa de um aviso, precisa de saber onde olhar.
+    val jaJa = !noAr &&
+        bloco.comecaMs > agoraMs &&
+        bloco.comecaMs - agoraMs <= 15 * 60_000L
+
+    Focavel(
+        aoEscolher = aoEscolher,
+        forma = RoundedCornerShape(4.dp),
+        escalar = false,
+        anel = false,
+        modifier = Modifier.padding(start = esquerda).width(largura),
+    ) { focado ->
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(26.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(
+                    when {
+                        focado -> Cores.destaqueQuente.copy(alpha = 0.34f)
+                        noAr -> Cores.destaque.copy(alpha = 0.16f)
+                        else -> Cores.fundoElevado
+                    },
+                )
+                .then(
+                    if (jaJa && !focado) {
+                        Modifier.border(1.dp, Cores.destaqueApagado, RoundedCornerShape(4.dp))
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    /// ⚠️ A estrela vem **antes** do título, e é a única coisa que
+                    /// pode empurrá-lo: um lembrete marcado é um compromisso que a
+                    /// pessoa assumiu, e compromisso não fica escondido no fim de
+                    /// um texto cortado por reticências.
+                    if (lembrado) {
+                        Text("★", style = RotuloMiudo, color = Cores.destaqueQuente)
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = bloco.titulo,
+                        style = RotuloMiudo,
+                        color = if (focado) Cores.texto else Cores.texto,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (largura >= 60.dp) {
+                    Text(
+                        text = hora(bloco.comecaMs),
+                        style = RotuloMiudo,
+                        color = Cores.textoApagado,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// A ficha de um programa da grade — o que o `OK` num bloco abre.
+///
+/// ## ⚠️ Ela existe porque a grade era uma tabela
+///
+/// Via-se `Toy Story 3 · 16:46` e não se podia fazer nada. Aqui está o que o
+/// guia já sabia e não mostrava — sinopse, ano, categoria — e a única ação que
+/// faz sentido num programa que ainda não começou: **ser avisado**.
+///
+/// ⚠️ Sem botão de «assistir». Um programa de canal externo que ainda não
+/// começou não tem o que tocar, e um botão que não pode cumprir é pior que a
+/// ausência dele (§53).
+@Composable
+private fun FichaDoBloco(
+    bloco: BlocoDaGrade,
+    lembrado: Boolean,
+    aoAlternarLembrete: () -> Unit,
+    aoFechar: () -> Unit,
+) {
+    BackHandler { aoFechar() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Cores.fundo.copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .width(700.dp)
+                .background(Cores.fundoElevado, RoundedCornerShape(12.dp))
+                .padding(36.dp),
+        ) {
+            Text(
+                text = listOfNotNull(hora(bloco.comecaMs), bloco.categoria, bloco.ano?.toString())
+                    .joinToString(" · ")
+                    .uppercase(),
+                style = RotuloMiudo,
+                color = Cores.destaque,
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = bloco.titulo,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = Serifada,
+                    fontSize = 34.sp,
+                    color = Cores.texto,
+                ),
+            )
+            /// ⚠️ A sinopse **só quando existe** — e o guia externo quase sempre
+            /// manda vazio. Um parágrafo em branco reservado «pro caso de vir»
+            /// é buraco desenhado (§24).
+            bloco.descricao?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = it,
+                    style = CorpoMiudo,
+                    color = Cores.textoApagado,
+                    maxLines = 5,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.height(26.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                /// ⚠️ Canal do Odeon não tem `programme_id`, e por isso não tem
+                /// lembrete: não há programa no guia externo a que se agarrar.
+                /// A ficha continua útil — ela mostra o que vai passar — e o
+                /// botão simplesmente não aparece.
+                if (bloco.programaId != null) {
+                    BotaoDaSala(
+                        rotulo = if (lembrado) "★ não me avise mais" else "☆ me avise",
+                        principal = !lembrado,
+                        aoEscolher = aoAlternarLembrete,
+                    )
+                }
+                BotaoDaSala("fechar", aoFechar)
+            }
+        }
+    }
+}

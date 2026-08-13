@@ -2501,3 +2501,88 @@ o número que eu tinha pra mostrar não é confiável, e apresentá-lo como vit�
 seria pior que não medir.
 
 Quem sabe se melhorou é quem estava sentindo: o dono, no sofá.
+
+## 19. O ao vivo — oito melhorias, e um logo que voltou atrás
+
+Pedido do dono: «gostaria de melhorar a experiência, veja o que temos e proponha
+diversas melhorias» — e depois, «do all».
+
+### 19.1 O que já chegava e não aparecia
+
+Metade das melhorias não precisou de rota nova. Estes campos vinham em toda
+resposta e a tela ignorava:
+
+| dado | onde | virou |
+|---|---|---|
+| `a_seguir` | `CanalNoAr` | a linha «a seguir · X» no cartão da sintonia |
+| `programme_id` | `ProgramaDoGuia` | a chave do lembrete |
+| `description`, `year`, `categoria` | idem | a ficha do bloco |
+| `lembrete` | idem | a estrela na grade |
+
+### 19.2 A grade deixou de ser tabela
+
+⚠️ **Quem é focável agora é o bloco, não a faixa.** Antes a faixa inteira era um
+alvo só, e servia pra rolar; via-se `Toy Story 3 · 16:46` e não se podia fazer
+nada com aquilo.
+
+Com o bloco focável, ◀ ▶ andam de programa em programa e ▲ ▼ trocam de canal —
+a navegação que todo guia de TV já ensinou. **E a rolagem horizontal veio de
+brinde**: o foco puxa a vista, então «olhar pra hoje à noite» deixou de precisar
+de um controle próprio. Uma melhoria que eu tinha listado separada saiu junto com
+a outra.
+
+⚠️ Um `ScrollState` **só** pra todas as faixas. Elas têm de andar juntas: duas
+faixas em posições horizontais diferentes seriam duas réguas de tempo, e a agulha
+do agora cortaria as duas mentindo para uma.
+
+### 19.3 Os lembretes, que existiam em todo lugar menos no app
+
+`GET/POST/DELETE /api/live/reminders` estavam na web desde sempre e **não
+existiam no `:core`**. O `ProgramaDoGuia` já vinha com `lembrete: Boolean` — o
+app lia o campo e não tinha o que fazer com ele.
+
+⚠️ A estrela só acende **depois** da confirmação do servidor. Pintar antes é o
+otimismo que faz alguém perder o programa: um lembrete que parece marcado e não
+está mente sobre a única coisa que ele promete.
+
+### 19.4 Os favoritos moram no aparelho
+
+São 23 canais, e os seus ficam onde o servidor os pôs. Fixar sobe o canal pro
+começo da sintonia, na **ordem de fixação** — que é a resposta que a pessoa deu à
+pergunta «quais são os seus», e a primeira resposta é a mais forte.
+
+⚠️ Guardados no `Cofre` deste aparelho e não no servidor: «quais são os meus
+canais» é pergunta da sala, não da casa. A TV da cozinha pode querer outros três.
+
+⚠️ E fixar mora num **botão no herói**, não num toque longo no cartão: o
+`Focavel` desta casa não tem clique longo, e ensinar um gesto escondido num
+controle de cinco teclas é esconder a função.
+
+### 19.5 ⚠️ O logo foi tentado e revertido
+
+`CanalNoAr.logo_url` vem dos canais de M3U como URL **externa absoluta**, e a
+`urlDaArte` desta casa prefixa `$base/artwork/` cegamente. O resultado foi
+`…/artwork/https://…` — 404.
+
+Na TCL os canais de fora ficaram com o número e **nada mais**: o nome tinha saído
+pra dar lugar a uma imagem que nunca chegou. Trocar informação por espaço vazio é
+pior que não ter logo, então voltou o nome.
+
+Pra ele existir, o logo externo precisa de um caminho que não passe pelo
+`/artwork/` — e isso é conversa de servidor, não de tela.
+
+### 19.6 O que eu vi e o que eu não vi
+
+**Visto na TCL:** o botão `☆ fixar` ao lado do `▸ sintonizar`; a linha
+`a seguir · Os Incríveis 2` nos canais de fora; o contorno de «começa em menos de
+15 minutos» no `O Lagosta 17:31`; e o número sem nome que denunciou o logo.
+
+⚠️ **Não visto:** o bloco focável, a ficha que o `OK` abre, o lembrete marcando, e
+a reordenação por favorito. Compilam, passam no lint e nos 164 testes — mas isso
+não é o mesmo que ter funcionado, e esta doc existe justamente pra não confundir
+as duas coisas.
+
+O motivo é raso e vale registrar: a navegação por `adb` me levou três vezes
+seguidas pra telas erradas (biblioteca, perfil, guia), e o consentimento do Gemini
+apareceu no meio. Insistir custaria mais do que vale — o dono está na frente da
+TV.

@@ -1348,6 +1348,24 @@ data class Guia(
     val programas: List<ProgramaDoGuia> = emptyList(),
 )
 
+/// Um lembrete marcado — `GET /api/live/reminders`.
+///
+/// ⚠️ O app só precisa do `programa_id`: é ele que casa com o
+/// `ProgramaDoGuia.id` e diz quais blocos da grade desenham a estrela. Os outros
+/// campos vêm e não são lidos, e isso é de propósito — a grade já tem título e
+/// horário; repetir aqui seria manter a mesma verdade em dois lugares.
+@Serializable
+data class LembreteDoGuia(
+    @SerialName("programme_id") val programaId: Int,
+    val title: String = "",
+)
+
+@Serializable
+data class LembreteMarcado(
+    val ok: Boolean = false,
+    @SerialName("starts_at") val comeca: String = "",
+)
+
 /// Um canal que o **próprio Odeon** programa, do acervo da casa.
 @Serializable
 data class CanalDoOdeon(

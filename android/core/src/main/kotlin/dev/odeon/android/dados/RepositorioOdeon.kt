@@ -559,6 +559,28 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// ⚠️ `null` em vez de exceção, e a tela mostra o recado. Sintonizar falha
     /// por motivos que não são defeito — fonte fora do ar, canal removido do
     /// M3U — e cada um deles é notícia pra quem está com o controle na mão.
+    /// Os lembretes do guia. Falha vira lista vazia: sem lembrete a grade
+    /// desenha sem estrelas, que é o estado anterior e não é erro.
+    suspend fun favoritosDeCanal(): List<String> = cofre.favoritosDeCanal()
+
+    suspend fun guardarFavoritosDeCanal(ids: List<String>) = cofre.guardarFavoritosDeCanal(ids)
+
+    suspend fun lembretes(): List<LembreteDoGuia> = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().lembretes() }.getOrDefault(emptyList())
+    }
+
+    /// ⚠️ Devolve `true` só quando o servidor confirmou. A tela **não** pinta a
+    /// estrela por conta própria antes disso: um lembrete que parece marcado e
+    /// não está é pior que um que não se marcou — o primeiro faz alguém perder o
+    /// programa confiando no app.
+    suspend fun marcarLembrete(programaId: Int): Boolean = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().marcarLembrete(programaId).ok }.getOrDefault(false)
+    }
+
+    suspend fun desmarcarLembrete(programaId: Int): Boolean = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().desmarcarLembrete(programaId) }.isSuccess
+    }
+
     suspend fun sintonizar(canalId: String): CanalAberto? = withContext(Dispatchers.IO) {
         runCatching { exigirApi().sintonizar(canalId) }
             .onFailure { android.util.Log.w("Odeon", "não sintonizou $canalId: $it") }

@@ -287,6 +287,20 @@ interface OdeonApi {
     suspend fun gradeDoOdeon(@Query("hours") horas: Int = 5): GradeDoOdeon
 
     /// Abre uma sessão num canal e devolve a playlist.
+    /// Os lembretes marcados — `GET /api/live/reminders`.
+    ///
+    /// ⚠️ Eles existiam na web desde sempre e **nunca no app**. O
+    /// `ProgramaDoGuia` já vinha com `lembrete: Boolean` dizendo se o programa
+    /// está marcado; o app lia o campo e não tinha o que fazer com ele.
+    @GET("api/live/reminders")
+    suspend fun lembretes(): List<LembreteDoGuia>
+
+    @POST("api/live/reminders/{programa}")
+    suspend fun marcarLembrete(@Path("programa") programaId: Int): LembreteMarcado
+
+    @DELETE("api/live/reminders/{programa}")
+    suspend fun desmarcarLembrete(@Path("programa") programaId: Int)
+
     @POST("api/live/{id}/watch")
     suspend fun sintonizar(@Path("id") canalId: String): CanalAberto
 }

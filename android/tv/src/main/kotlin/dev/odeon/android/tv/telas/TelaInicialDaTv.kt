@@ -157,7 +157,7 @@ fun TelaInicialDaTv(
         /// coisa que este trilho inteiro existe pra não fazer — foi um defeito
         /// medido na T1, quando o perfil escolhido deixava a luz órfã.
         if (destino != Destino.LOCADORA) {
-            FeixeDaCabine(alturaDaLente = alturaDaLente, chave = destino)
+            FeixeDaCabine(alturaDaLente = { alturaDaLente }, chave = destino)
         }
 
         /// ## ⚠️ A sobreposição **não sobreviveu ao D-pad** — visto na TCL
@@ -293,16 +293,31 @@ fun TelaInicialDaTv(
 /// ele tem a sala inteira, e um cone que morre no meio da tela pareceria uma
 /// mancha, não um feixe.
 @Composable
-private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
+private fun FeixeDaCabine(alturaDaLente: () -> Float, chave: Any?) {
     /// Os mesmos dez quadros do trilho, pela mesma chave: a lâmpada é uma só, e
     /// o feixe é o que ela joga. Se as duas animações não partissem do mesmo
     /// evento, a luz e o facho piscariam fora de sincronia.
     val brilho = brilhoDoArco(chave)
 
     Canvas(Modifier.fillMaxSize()) {
-        if (alturaDaLente <= 0f) return@Canvas
+        /// ⚠️ **A altura é lida aqui dentro, e é a otimização inteira.**
+        ///
+        /// Ela era um `Float` passado por valor: quem lê um estado é quem
+        /// **recompõe** quando ele muda, e a leitura acontecia no corpo do
+        /// `TelaInicialDaTv` — que é o pai de todas as telas. Cada movimento de
+        /// foco no trilho move a lente, e mover a lente recompunha a biblioteca
+        /// inteira junto.
+        ///
+        /// Medido na TCL: **300ms por tecla**, com quase nenhum quadro entre uma
+        /// e outra. Não era animação pesada; era a grade toda sendo recomposta
+        /// porque uma barrinha de 3dp mudou de lugar.
+        ///
+        /// Como lambda, a leitura acontece na fase de **desenho** deste `Canvas`.
+        /// A composição não é invalidada; só este retângulo é repintado.
+        val lente = alturaDaLente()
+        if (lente <= 0f) return@Canvas
         val forca = brilho * FORCA_DO_FEIXE
-        val origem = Offset(0f, alturaDaLente)
+        val origem = Offset(0f, lente)
 
         /// ## ⚠️ O raio é **curto**, e essa é a diferença entre facho e névoa
         ///
@@ -347,11 +362,11 @@ private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
         /// | `alcance` | 20% da altura, e não 50% — a espessura do feixe |
         /// | `raio` | metade da largura, e não a tela toda — até onde o pó chega |
         desenhaAPoeira(
-            eixo = alturaDaLente,
+            eixo = lente,
             raio = alcanceDoFacho * 0.8f,
+            deitado = true,
             forca = forca,
             alcance = size.height * 0.16f,
-            deitado = true,
         )
     }
 }

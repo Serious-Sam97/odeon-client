@@ -2444,3 +2444,60 @@ mais do que vale — o dono está na frente da TV e leva dez segundos.
 Foi por não ter conferido que a prévia ganhou as duas últimas travas (`ON_PAUSE`
 e os 45s). Elas não substituem a conferência; elas reduzem a janela enquanto ela
 não acontece.
+
+## 18. O menu travado — três custos removidos, e uma medida que não serviu
+
+«Abrir e fechar o menu, movimentar ele tá meio travado, tem como otimizar?»
+
+### 18.1 Os três custos
+
+**A varredura do pó.** O `desenhaAPoeira` percorria a **área de desenho inteira**:
+numa tela de 1920×1080 são ~2050 iterações por quadro, e a esmagadora maioria
+termina em «alfa pequeno demais, não desenha». No celular isso nunca doeu porque
+a caixa tem 143dp de altura; na TV a caixa é a sala. Agora o laço é recortado
+pelo **próprio raio** do facho — fora dele o resultado já era zero, então não
+muda um pixel do que se vê; muda quantas contas se faz pra não desenhar nada.
+
+**A animação de largura do trilho.** O `animateContentSize(tween(160))` parecia
+barato — 160ms de uma barra crescendo. Mas o trilho é o primeiro filho de uma
+`Row`: mudar a largura dele a cada quadro obriga a **grade inteira ao lado** a se
+remedir e reposicionar, sessenta vezes. Removido. O menu aparece em vez de
+crescer, e o dono já tinha pedido isso em outra tela: «sem mt estresse ou
+movimentos».
+
+**⚠️ A leitura da lente no escopo errado — este é o grande.** `alturaDaLente` era
+um `Float` passado por valor pro `FeixeDaCabine`. Em Compose, **quem lê um estado
+é quem recompõe quando ele muda** — e a leitura acontecia no corpo do
+`TelaInicialDaTv`, que é o pai de todas as telas. Cada movimento de foco no
+trilho move a lente, e mover a lente recompunha **a biblioteca inteira** junto.
+
+Passou a ser `() -> Float`, lido dentro do `Canvas`. A leitura caiu na fase de
+desenho: a composição não é invalidada, e só aquele retângulo é repintado.
+
+### 18.2 ⚠️ E a medida não serviu — o que é um resultado
+
+Medido com `dumpsys gfxinfo` durante o vaivém do menu:
+
+| | quadros travados | mediana | gpu |
+|---|---|---|---|
+| antes | 86% | 150ms | 21ms |
+| depois das três | 100% | 400ms | — |
+| com o facho **desligado** | 98% | 350ms | 13ms |
+
+Os números **pioraram** depois de mudanças que só podem ajudar, e desligar o
+facho inteiro mudou pouco. Isso não é um resultado sobre o app — é um resultado
+sobre a régua.
+
+A causa provável: esta tela **desenha sob demanda**, não continuamente. São ~43
+quadros em 18 segundos, cerca de dois por tecla. Um quadro que acorda depois de
+segundos parado sempre «perde» o vsync que nunca tentou alcançar, e o `gfxinfo`
+conta isso como travamento. A métrica serve pra animação contínua — foi assim que
+ela mediu a caixa 3D na T0, e ali ela funcionou.
+
+⚠️ **Então os três consertos entram sem prova de melhora.** Cada um remove um
+custo real e verificável por leitura — 2050 iterações desperdiçadas, um relayout
+global por quadro de animação, e uma recomposição de tela inteira por tecla —, mas
+o número que eu tinha pra mostrar não é confiável, e apresentá-lo como vitória
+seria pior que não medir.
+
+Quem sabe se melhorou é quem estava sentindo: o dono, no sofá.

@@ -197,12 +197,32 @@ fun DrawScope.desenhaAPoeira(
 ) {
     val passoX = 19.dp.toPx()
     val passoY = 13.dp.toPx()
-    var linha = 0
-    var y = passoY / 2
-    while (y < size.height) {
+
+    /// ## ⚠️ O laço varre **onde o facho chega**, e não a tela inteira
+    ///
+    /// Ele percorria toda a área de desenho: numa tela de 1920×1080 são ~2050
+    /// iterações por quadro, e a esmagadora maioria delas termina em «alfa
+    /// pequeno demais, não desenha». Trabalho feito pra ser jogado fora, sessenta
+    /// vezes por segundo, enquanto a lâmpada pisca.
+    ///
+    /// No celular isso nunca doeu porque a caixa tem 143dp de altura. Na TV a
+    /// caixa é a sala — e foi o dono quem sentiu: «abrir e fechar o menu,
+    /// movimentar ele tá meio travado».
+    ///
+    /// ⚠️ A janela é derivada do **próprio raio**, não de um número novo: fora
+    /// dele `altura` já daria zero. Recortar aqui não muda um pixel do que se vê;
+    /// muda quantas contas se faz pra não desenhar nada.
+    val alcanceY = if (deitado) raio else size.height
+    val deY = if (deitado) (eixo - alcanceY).coerceAtLeast(0f) else 0f
+    val ateY = if (deitado) (eixo + alcanceY).coerceAtMost(size.height) else size.height
+    val ateX = if (deitado) minOf(size.width, raio) else size.width
+
+    var linha = (deY / passoY).toInt()
+    var y = passoY / 2 + linha * passoY
+    while (y < ateY) {
         var coluna = 0
         var x = passoX / 2
-        while (x < size.width) {
+        while (x < ateX) {
             /// Espalhamento barato: dois primos, o resto vira fração.
             val semente = (coluna * 73856093) xor (linha * 19349663)
             val rx = ((semente shr 3) and 0xFF) / 255f - 0.5f

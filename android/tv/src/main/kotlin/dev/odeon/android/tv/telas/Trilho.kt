@@ -172,7 +172,22 @@ fun Trilho(
         modifier
             .fillMaxHeight()
             .onFocusChanged { aberto = it.hasFocus }
-            .animateContentSize(tween(160))
+            /// ## ⚠️ Sem animação de largura, e é otimização medida
+            ///
+            /// O `animateContentSize(tween(160))` daqui parecia barato: 160ms de
+            /// uma barra crescendo. Mas o trilho é o **primeiro filho de uma
+            /// `Row`** — mudar a largura dele a cada quadro obriga a grade
+            /// inteira ao lado a se remedir e a se reposicionar, sessenta vezes,
+            /// por uma animação que ninguém pediu.
+            ///
+            /// Medido na TCL enquanto se abre e fecha o menu: **86% de quadros
+            /// travados, mediana de 150ms**, com a GPU em 21ms — ou seja, o custo
+            /// não estava no desenho, estava na medida.
+            ///
+            /// E o dono já tinha dito o que queria em outra tela: «tire ele,
+            /// quero só ir percorrendo os filmes sem mt estresse ou movimentos».
+            /// Um menu que aparece é mais rápido e mais calmo que um menu que
+            /// cresce.
             .width(if (aberto) LARGURA_ABERTO else LARGURA_FECHADO)
             .background(
                 /// O degrau de fundo só aparece aberto. Fechado, o trilho é

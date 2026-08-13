@@ -1031,10 +1031,31 @@ private fun Controles(
             /// Ela só aparece durante o arrasto, e some quando o dedo levanta —
             /// e some **inteira** quando não há folha de sprites, em vez de virar
             /// um retângulo cinza dizendo "sem preview" (§24).
-            if (arrastando && estado.folha != null && estado.urlDaFolha != null) {
+            ///
+            /// ⚠️ As duas cópias locais não são estilo — são **exigência do
+            /// compilador**, e foram o único preço que a extração do `:core`
+            /// cobrou no `:app` inteiro (12/08/2026):
+            ///
+            ///     Smart cast to 'FolhaDeSprites' is impossible, because
+            ///     'folha' is a public API property declared in different module
+            ///
+            /// Enquanto `EstadoDoPlayer` morava neste módulo, o `!= null` do
+            /// `if` bastava pra `estado.folha` entrar em `Miniatura` já
+            /// estreitado. Agora ele mora no `:core`, e o Kotlin recusa: outro
+            /// módulo pode ser recompilado sozinho, e uma `val` de lá pode virar
+            /// uma `val` com getter — que é livre pra devolver `null` na segunda
+            /// leitura.
+            ///
+            /// Ler uma vez pra uma local resolve porque a local **é** deste
+            /// módulo. Foi só aqui, e em nenhum outro dos 60 arquivos: sinal de
+            /// que a fronteira já estava no lugar certo antes de virar um
+            /// `:core`.
+            val folha = estado.folha
+            val urlDaFolha = estado.urlDaFolha
+            if (arrastando && folha != null && urlDaFolha != null) {
                 Miniatura(
-                    folha = estado.folha,
-                    url = estado.urlDaFolha,
+                    folha = folha,
+                    url = urlDaFolha,
                     segundo = (posicaoDoArrasto * (duracao / 1000.0)).toInt(),
                 )
             } else if (arrastando && estado.erroDaFolha != null) {
@@ -1523,32 +1544,6 @@ private fun mudarVolume(
 /// O `rotulo` é a chave porque é o que o servidor manda pronto e é o que a
 /// pessoa acabou de tocar na lista — ou seja, o mesmo texto dos dois lados.
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun escolherLegenda(player: Player?, rotulo: String?) {
-    val p = player ?: return
-
-    if (rotulo == null) {
-        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, true)
-            .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_TEXT)
-            .build()
-        return
-    }
-
-    val grupo = p.currentTracks.groups
-        .firstOrNull { g ->
-            g.type == androidx.media3.common.C.TRACK_TYPE_TEXT &&
-                (0 until g.length).any { g.getTrackFormat(it).label == rotulo }
-        } ?: return
-
-    val faixa = (0 until grupo.length).first { grupo.getTrackFormat(it).label == rotulo }
-
-    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-        .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, false)
-        .setOverrideForType(
-            androidx.media3.common.TrackSelectionOverride(grupo.mediaTrackGroup, faixa),
-        )
-        .build()
-}
 
 /// Acha a Activity subindo a corrente de `ContextWrapper`.
 ///

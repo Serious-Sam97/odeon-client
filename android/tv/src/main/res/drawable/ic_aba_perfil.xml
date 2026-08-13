@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O perfil — cabeça e ombros.
+
+  Ele **não** existe no `:app`, e é o único dos seis que nasce aqui. Lá o perfil
+  não é aba: é a insígnia redonda do canto, com o rosto de verdade da pessoa
+  dentro. Numa TV não há canto superior direito alcançável (ver `Trilho.kt`), e o
+  perfil virou o sexto destino da coluna — então precisou de um símbolo.
+
+  Os outros cinco são cópia dos do celular, com o `android:tint` removido: aquele
+  era `?attr/colorControlNormal`, um atributo do tema de View, e neste módulo
+  quem pinta é o Compose com um `ColorFilter`. Deixá-lo faria o ícone sair da cor
+  errada, ou de cor nenhuma.
+
+  Desenhado no mesmo viewport de 24 e com o mesmo peso de traço dos outros cinco
+  — seis ícones de pesos diferentes numa coluna é o que faz um menu parecer
+  montado de peças achadas.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- a cabeça -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,4 A4,4 0 1 1 11.99,4 Z" />
+    <!-- os ombros -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,20 A8,8 0 0 1 20,20 Z" />
+</vector>

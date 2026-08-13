@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A estrela — "para você".
+
+  As coordenadas são calculadas, não desenhadas no olho: centro em (12,12), raio
+  externo 9, raio interno 3.8, primeira ponta em -90° e as dez seguintes de 36°
+  em 36°, alternando externo e interno. Uma estrela feita no olho fica torta de
+  um jeito que só aparece ampliada, e este arquivo é o tipo de coisa que ninguém
+  volta pra conferir.
+
+  ⚠️ Estrela é a forma que o Odeon usa pra **nota**, e aqui ela é recomendação —
+  duas coisas diferentes. É o §18 rondando: nenhuma decoração pode parecer dado.
+  Ela passa porque num trilho de aba ninguém lê estrela como avaliação de nada,
+  não há número ao lado dela e a aba tem rótulo escrito. Se um dia esta estrela
+  aparecer perto de uma nota, ela sai.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+   >
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,3 L14.23,8.93 L20.56,9.22 L15.61,13.17 L17.29,19.28 L12,15.8 L6.71,19.28 L8.39,13.17 L3.44,9.22 L9.77,8.93 Z" />
+</vector>

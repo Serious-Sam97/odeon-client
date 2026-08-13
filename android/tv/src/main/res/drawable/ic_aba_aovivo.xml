@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O ao vivo — a antena, e o ponto que ela emite.
+
+  ⚠️ É o único ícone desta barra que não veio do celular, porque o destino
+  também não veio: o ao vivo nasceu na TV. Os outros seis são cópia dos
+  `ic_aba_*.xml` do `:app`, e o comentário do `Trilho` explica por quê.
+
+  Duas ondas e um ponto. A escolha é a mesma dos outros: **formas cheias**, sem
+  traço fino — ícone de traço a três metros vira borrão, e a TCL já provou isso
+  com os glifos que ela não tinha.
+
+  Não é uma TV desenhada de propósito: uma telinha com anteninhas diria «o
+  aparelho», e o que este destino é são os **canais** — o que chega, não onde
+  chega.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+   >
+    <!-- O ponto que emite. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,10.1a1.9,1.9 0 1,0 0,3.8a1.9,1.9 0 1,0 0,-3.8z" />
+    <!-- A onda de dentro, dos dois lados. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M7.9,6.6l1.8,1.8a5.1,5.1 0 0,0 0,7.2l-1.8,1.8a7.6,7.6 0 0,1 0,-10.8zM16.1,6.6a7.6,7.6 0 0,1 0,10.8l-1.8,-1.8a5.1,5.1 0 0,0 0,-7.2z" />
+    <!-- A onda de fora. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M4.6,3.3l1.8,1.8a9.8,9.8 0 0,0 0,13.8l-1.8,1.8a12.3,12.3 0 0,1 0,-17.4zM19.4,3.3a12.3,12.3 0 0,1 0,17.4l-1.8,-1.8a9.8,9.8 0 0,0 0,-13.8z" />
+</vector>

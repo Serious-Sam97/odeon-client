@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Um consumidor de `/api/...` e nada mais, como os outros dois clientes. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      A sessão de mídia roda em primeiro plano. Numa TV isso não é sobre tela
+      apagada — é o que faz o botão de play do **controle remoto** chegar ao
+      player, e o que põe o Odeon no "o que está tocando" do sistema.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!--
+      ## As duas permissões que põem o app na **primeira tela** da TV
+
+      A home da Google TV é uma pilha de fileiras, e cada fileira é uma linha
+      numa base de dados do sistema — a mesma que guarda a grade de canais de TV
+      aberta. Escrever nela é o que o `androidx.tvprovider` faz, e ela é
+      protegida.
+
+      `WRITE_EPG_DATA` é de nível `signature|privileged` **pra apps comuns
+      lerem**, mas o sistema a concede a qualquer app que a declare **para as
+      próprias linhas**: um app pode criar e mexer no canal que ele mesmo
+      publicou, e em nada além disso. Sem a declaração, o `insert` volta com
+      `SecurityException` — e volta em tempo de execução, na primeira vez que
+      alguém abrir o app, que é o §8b em pessoa.
+
+      Ver `home/CanalDaHome.kt` pro que é escrito lá.
+    -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+
+    <!--
+      ## As três linhas que **fazem** disto um app de TV
+
+      Elas são o avesso exato do comentário longo do `app/src/main/AndroidManifest.xml`,
+      e vale ler os dois juntos. Lá está escrito que mencionar `leanback` — mesmo
+      com `required="false"` — declara que o app considera a TV, e que o jeito de
+      ficar fora dela é o **silêncio**. Aqui o silêncio seria o defeito.
+
+      (A tabela abaixo vai sem a régua de markdown de propósito: **o XML proíbe
+      dois hifens seguidos dentro de um comentário**, e um `|———|———|` faz o
+      `processDebugMainManifest` falhar com «Error parsing AndroidManifest.xml»
+      e mais nada. É a mesma pegadinha anotada no `res/values/colors.xml` do
+      `:app`, e ela custou um build aqui também.)
+
+      | `software.leanback` `required="true"` | «isto é um app de TV». É o que faz a Play Store da TV aceitar o APK, e o que faz o launcher da TCL listá-lo |
+      | `hardware.touchscreen` `required="false"` | uma TV não tem toque. Sem esta linha o padrão é **obrigatório**, e o app fica invisível pra todo aparelho de TV que existe |
+      | `hardware.gamepad` `required="false"` | o controle da TCL não é gamepad, e algum fabricante declara o contrário. Explicitar que não é exigência evita ficar de fora por causa de um `uses-feature` implícito |
+
+      O lint cobra o par: declarar `leanback` sem uma Activity com
+      `LEANBACK_LAUNCHER` reprova o build com `[MissingLeanbackLauncher]`. Foi
+      esse erro que denunciou o manifesto errado do `:app`, e aqui ele é o que
+      confere que a Activity abaixo está certa.
+    -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+
+    <!--
+      O `networkSecurityConfig` é o mesmo do `:app`, e pelo mesmo motivo: o
+      Odeon é um servidor de casa que serve HTTP puro, e sem a exceção o app
+      instala, abre, e o login falha com um erro de rede que não diz "cleartext"
+      em lugar nenhum.
+
+      Numa TV o argumento é mais forte, não mais fraco: a TV **está** na LAN onde
+      o servidor mora — é o cliente que menos sai de casa dos três.
+
+      O arquivo é uma cópia do `:app`, e é cópia porque `res/` não se
+      compartilha entre módulos de aplicação. Ver o original pro custo escrito
+      de frente.
+    -->
+    <application
+        android:name=".OdeonTv"
+        android:allowBackup="true"
+        android:banner="@drawable/banner"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/nome_do_app"
+        android:networkSecurityConfig="@xml/config_de_rede"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OdeonTv">
+
+        <!--
+          ⚠️ **`LEANBACK_LAUNCHER`, e não `LAUNCHER`.** É a linha que decide se o
+          Odeon aparece na home da TV ou se ele instala e some.
+
+          As duas categorias existem e são independentes: `LAUNCHER` é a gaveta
+          de apps do celular, `LEANBACK_LAUNCHER` é a fileira de apps da TV.
+          Declarar a primeira aqui não põe o app em lugar nenhum de uma TV — o
+          launcher de TV só lê a segunda.
+
+          `screenOrientation="landscape"`: uma TV não gira. A linha existe pra
+          impedir que um fabricante que reporta orientação de retrato — há
+          Google TV em projetor e em monitor girado — abra o app de pé.
+
+          `configChanges` cobre o que numa TV muda sem a Activity precisar
+          morrer: `uiMode` (o sistema alterna modos de imagem), `screenSize`
+          (troca de resolução de saída HDMI ao entrar em HDR), `keyboardHidden`
+          (um teclado bluetooth pareado). Sem ele, cada um desses recria a tela —
+          e recriar a tela no meio de um filme é o filme reiniciando.
+        -->
+        <activity
+            android:name=".AtividadeDaTv"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|navigation"
+            android:theme="@style/Theme.OdeonTv">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              O que faz um cartão da home **abrir no lugar certo**.
+
+              Quando alguém escolhe "continuar assistindo" na primeira tela da
+              TV, o sistema dispara o `Intent` que o app pendurou naquele cartão
+              — ver `home/CanalDaHome.kt`. Sem este filtro, o `Intent` não
+              encontra ninguém e o cartão fica bonito e morto.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="odeon-tv"
+                    android:host="obra" />
+            </intent-filter>
+
+            <!--
+              ## A busca do sistema
+
+              Na Google TV, segurar o botão do microfone e falar "assistir
+              Alien" abre uma busca **do sistema**, que pergunta aos apps
+              instalados. Quem responde é o `ProvedorDeBusca`; esta linha é o que
+              liga a pergunta à resposta, e o `searchable.xml` é o formulário
+              dela.
+            -->
+            <meta-data
+                android:name="android.app.searchable"
+                android:resource="@xml/busca" />
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          A sessão de mídia da sala. Ver `midia/ServicoDeMidiaDaTv.kt`.
+
+          Ela **não** é a do `:app`: aquela vive no `:app` porque depende do
+          `OdeonApp` e do cache de downloads, e a TV não baixa. Esta é a mesma
+          ideia em muito menos linha.
+
+          `exported="true"` com o filtro de `MediaSessionService` é o que faz o
+          botão de play do controle remoto chegar até aqui. Sem o filtro, a
+          sessão existe e o controle remoto não a acha.
+        -->
+        <service
+            android:name=".midia.ServicoDeMidiaDaTv"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          ## O Odeon dentro da busca do sistema
+
+          Quem segura o microfone do controle e fala "Alien" abre a busca da
+          Google TV, e ela pergunta aos apps instalados. Este provedor é a
+          resposta do Odeon — ver `busca/ProvedorDeBusca.kt` pro que ele devolve.
+
+          ⚠️ **`exported="true"` com `readPermission`, e as duas linhas são
+          necessárias.** Sem `exported`, o processo da busca não enxerga o
+          provedor e o app some do resultado sem erro nenhum. Sem a permissão,
+          qualquer app instalado na TV poderia consultar o acervo desta casa —
+          `android.permission.GLOBAL_SEARCH` é de sistema, e restringe a
+          pergunta a quem tem o direito de fazê-la.
+
+          A autoridade é a mesma string do `searchSuggestAuthority` do
+          `res/xml/busca.xml`. Elas são casadas à mão: divergir faz a busca
+          procurar um provedor que não existe, calada.
+        -->
+        <provider
+            android:name=".busca.ProvedorDeBusca"
+            android:authorities="dev.odeon.android.tv.busca"
+            android:exported="true"
+            android:readPermission="android.permission.GLOBAL_SEARCH" />
+
+        <!--
+          ## Quem responde quando a TV pede "publique suas fileiras"
+
+          A Google TV manda `INITIALIZE_PROGRAMS` quando o app é instalado, e de
+          novo quando o sistema é restaurado de um backup. É o gancho certo pra
+          criar o canal: criá-lo no `onCreate` da Activity funcionaria, mas só
+          depois de alguém **abrir** o app pela primeira vez — e a graça da
+          fileira é justamente não precisar abrir.
+
+          `exported="true"` porque quem dispara é o sistema, de fora do app.
+        -->
+        <receiver
+            android:name=".home.ReceptorDaHome"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.tv.action.INITIALIZE_PROGRAMS" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

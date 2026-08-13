@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Quem pode falar HTTP puro, e por quê.
+
+  ## O problema, medido
+
+  O Odeon é um servidor que roda na casa da pessoa. Em 04/08/2026 o `odeon-api`
+  serve em `http://…:8085`, com o TLS desligado; a porta `:8443` está mapeada e
+  não responde. E os clientes Kotlin de `clients/` já tentam `https` antes de
+  `http` justamente porque as duas hipóteses existem.
+
+  Do Android 9 em diante, HTTP puro é bloqueado por padrão. Sem este arquivo, o
+  app não alcança o servidor da casa — e falha com um erro de rede genérico que
+  não diz "cleartext" em lugar nenhum. É o §8b: **errar em silêncio é o
+  defeito**.
+
+  ## Por que `cleartextTrafficPermitted="true"` e não uma lista de domínios
+
+  Porque não há domínio pra listar. O endereço do servidor é **digitado pela
+  pessoa** na tela de login — pode ser `rog`, `10.0.2.2`, um IP da LAN ou um
+  nome de tailnet. Uma lista fixa aqui seria a lista de servidores que este app
+  aceita, e o Odeon não tem essa lista: cada casa tem o seu.
+
+  ## O lint reprova as duas linhas, e as duas ficam — com o custo escrito
+
+  Ele aponta `InsecureBaseConfiguration` e `AcceptsUserCertificates`, e **está
+  certo nas duas**. Elas estão silenciadas aqui, uma a uma, e não por um
+  `lint.disable` global — silenciar no arquivo obriga a escrever o motivo ao
+  lado, e é o motivo que envelhece, não o aviso.
+
+  O que elas custam, dito de frente: um app que aceita HTTP aceita ser lido no
+  caminho, e um app que confia em certificado instalado pelo usuário aceita ser
+  interceptado por quem conseguir instalar um. Numa LAN doméstica isso é o mesmo
+  risco que a interface web já corre hoje.
+
+  A alternativa — exigir TLS de autoridade pública — quebraria o app em toda
+  instalação do Odeon que não tem certificado, que é a maioria delas, incluindo
+  a desta casa.
+
+  **Quando o servidor ganhar TLS por padrão, isto vira exceção com data pra
+  sair, e não o padrão.**
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+
+            <!--
+              `user` porque um servidor de casa com TLS quase sempre usa
+              certificado próprio, e o jeito de confiar nele é instalá-lo no
+              aparelho. Sem esta linha, instalar o certificado não adiantaria
+              nada — o app continuaria recusando, e a pessoa não teria como
+              saber por quê.
+
+              O lint sugere mover isto pra um `<debug-overrides>`, que só vale
+              em build de depuração. Não serve aqui: quem instala o Odeon em
+              casa usa o **release**, e é justamente ele que precisa confiar no
+              certificado da casa.
+            -->
+            <certificates
+                src="user"
+                tools:ignore="AcceptsUserCertificates" />
+        </trust-anchors>
+    </base-config>
+
+</network-security-config>

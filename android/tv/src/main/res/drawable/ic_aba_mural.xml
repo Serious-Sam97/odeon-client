@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O mural — três recados pregados.
+
+  Não é um balão de fala nem um sino: os dois dizem "mensagem" e "notificação",
+  e o mural do Odeon não é nenhum dos dois. Ele é o que aconteceu na casa —
+  alguém pegou uma fita, alguém terminou um filme. Três papéis de tamanhos
+  diferentes numa parede é o que uma casa tem, e é o que o ícone mostra.
+
+  Os tamanhos são desiguais de propósito: três retângulos idênticos leriam como
+  lista, e lista já é a biblioteca.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+   >
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,4h11v6.5h-11z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16,6.5h5v9h-5z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,13h10.5v7h-10.5z" />
+</vector>

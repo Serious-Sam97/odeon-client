@@ -1,0 +1,178 @@
+package dev.odeon.android.ui
+
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeParseException
+import kotlin.math.ceil
+
+/// Quando a semana vira, em palavra.
+///
+/// ## Por que isto é uma função só, e não duas frases
+///
+/// A revista do guia e a vitrine da locadora viram **na mesma segunda-feira** —
+/// é literalmente o mesmo instante, e é o que dá assunto em comum (`IDEIAS.md`
+/// §2.4). Duas telas dizendo o mesmo instante com palavras diferentes fariam
+/// parecer dois relógios; e até agora era pior que isso: a locadora imprimia o
+/// `vira_em` cru, como uma data de banco de dados vazando pra tela.
+///
+/// A gramática é a da web (`Guia.tsx:143`), copiada inteira:
+///
+/// ```
+/// dias <= 1  →  "amanhã"
+/// senão      →  "segunda"
+/// ```
+///
+/// "Segunda" sem contar quantos dias faltam é decisão da web e ela está certa:
+/// numa casa, "vira segunda" é a informação; "vira em 5 dias" é um cronômetro.
+///
+/// ## O nulo
+///
+/// `null` quando o campo não veio ou não parseia — e aí a frase inteira some
+/// (§24), em vez de escrever "vira em null" ou chutar uma data. É o mesmo motivo
+/// de a função devolver `String?` e não `""`: string vazia ainda desenha um vão.
+fun viraQuando(iso: String?, agora: Instant = Instant.now()): String? {
+    val quando = instanteDe(iso) ?: return null
+    val dias = ceil((quando.toEpochMilli() - agora.toEpochMilli()) / 86_400_000.0)
+    return if (dias <= 1) "amanhã" else "segunda"
+}
+
+/// O prazo de um empréstimo, em palavra — `3 dias`, `vence amanhã`, `vence
+/// hoje`, `venceu`.
+///
+/// ## Ela some quando não há data, e é o §24
+///
+/// `vence_em` nulo é empréstimo sem prazo, e escrever «sem prazo» na caixa seria
+/// ocupar a cinta de papel com uma não-informação.
+///
+/// ## Os três dias que mudam de cor são decisão da web
+///
+/// `vence hoje` e `vence amanhã` saem em vermelho lá (§6 da referência: «vermelho
+/// a 2 dias»). Aqui quem pinta é a tela; esta função só devolve a frase e quantos
+/// dias faltam, porque cor é assunto de quem desenha.
+fun prazoDoEmprestimo(iso: String?, agora: Instant = Instant.now()): Pair<String, Int>? {
+    val quando = instanteDe(iso) ?: return null
+    val dias = ceil((quando.toEpochMilli() - agora.toEpochMilli()) / 86_400_000.0).toInt()
+    val frase = when {
+        dias < 0 -> "venceu"
+        dias == 0 -> "vence hoje"
+        dias == 1 -> "vence amanhã"
+        else -> "$dias dias"
+    }
+    return frase to dias
+}
+
+/// Isto aconteceu **hoje**?
+///
+/// ## O que ela resolve, e por que não é um corte em N
+///
+/// O balcão listava todas as devoluções que o servidor mandasse — nove, no
+/// servidor de casa, e as nove com a mesma cara. A reação óbvia é cortar em três
+/// e pôr um «mais 6». Ela mente nos dois sentidos: num dia em que voltaram cinco
+/// fitas, esconde duas notícias; num dia parado, promove a histórico o que
+/// aconteceu na semana passada.
+///
+/// O corte certo é o tempo, e ele **já chegava**: `devolvido_em` vem em toda
+/// devolução e não era lido por ninguém — nem aqui, nem na web, onde ele só
+/// serve de chave de lista. Era o sétimo campo do §8, e o único que não desenhava
+/// nem escondia nada: **datava**.
+///
+/// ## Por que dia local, e não «faz menos de 24h»
+///
+/// «Hoje» numa casa é o dia do calendário, não uma janela deslizante. Uma fita
+/// devolvida às 23h ontem não é notícia de hoje às 8h da manhã, mesmo tendo nove
+/// horas de idade — e uma devolvida às 00h10 é, mesmo tendo dez minutos.
+///
+/// `false` quando a data não veio ou não parseia: sem carimbo, a devolução cai no
+/// histórico. É o §18 — o app não promove a notícia o que ele não sabe quando
+/// aconteceu.
+fun ehDeHoje(iso: String?, agora: Instant = Instant.now()): Boolean {
+    val quando = instanteDe(iso) ?: return false
+    val fuso = ZoneId.systemDefault()
+    return quando.atZone(fuso).toLocalDate() == agora.atZone(fuso).toLocalDate()
+}
+
+/// `hoje` · `ontem` · `há 3 dias` · `há 2 semanas` · `12 de agosto`.
+///
+/// ## Ela é a irmã ao contrário da `viraQuando`, e por isso mora ao lado
+///
+/// A `viraQuando` olha pra frente — quando a semana **vai** virar. Esta olha pra
+/// trás: faz quanto tempo aconteceu. Ter as duas no mesmo arquivo é o que evita
+/// alguém escrever a segunda de novo por não achar a primeira, e é o que deixa
+/// óbvio que o sinal do subtraendo é a única diferença estrutural entre elas.
+///
+/// ## A gramática é a da web, copiada e não inventada
+///
+/// Sai do `quando()` do `web/src/Mural.tsx:801`, degrau por degrau. O comentário
+/// de lá dá a régua: «a data exata de um acontecimento social não interessa — o
+/// que interessa é se foi agora ou faz tempo». Daí a escada ficar mais grossa
+/// conforme envelhece: dias, semanas, e depois de um mês a data seca, porque
+/// «há 7 semanas» já não diz nada a ninguém.
+///
+/// ⚠️ Escrever esta função à mão no cliente novo seria a terceira redação da
+/// mesma frase — e a terceira a divergir. Duas telas do mesmo produto dizendo
+/// «há 3 dias» e «3 dias atrás` sobre o mesmo acontecimento é o defeito que
+/// nenhum teste pega e todo mundo vê.
+///
+/// ## O nulo
+///
+/// `null` quando o campo não veio ou não parseia, e aí quem chama **não
+/// desenha** (§24). A web devolve `""` porque em HTML uma string vazia não
+/// ocupa espaço; aqui um `Text("")` ainda desenha um vão com a altura da linha.
+///
+/// ⚠️ O futuro cai em «hoje», e é de propósito: é o que o `Math.floor` da web
+/// faz com um número negativo de dias. Um carimbo adiantado — relógio da TV
+/// fora de hora, servidor noutro fuso — vira «hoje» em vez de «há -1 dias».
+fun fazQuantoTempo(iso: String?, agora: Instant = Instant.now()): String? {
+    val quando = instanteDe(iso) ?: return null
+    val dias = Math.floorDiv(agora.toEpochMilli() - quando.toEpochMilli(), 86_400_000L)
+    return when {
+        dias <= 0 -> "hoje"
+        dias == 1L -> "ontem"
+        dias < 7 -> "há $dias dias"
+        dias < 30 -> {
+            val semanas = dias / 7
+            if (semanas == 1L) "há uma semana" else "há $semanas semanas"
+        }
+        else -> {
+            val data = quando.atZone(ZoneId.systemDefault()).toLocalDate()
+            "${data.dayOfMonth} de ${MESES[data.monthValue - 1]}"
+        }
+    }
+}
+
+/// Os meses por extenso, em minúscula.
+///
+/// À mão, e não `Month.getDisplayName(TextStyle.FULL, Locale("pt", "BR"))`: o
+/// nome que o Java devolve depende dos dados de idioma **do aparelho**, e uma
+/// Google TV vendida fora do Brasil pode não tê-los — o que faria a data sair
+/// «12 de August» no meio de uma tela em português. A web escreve
+/// `toLocaleDateString("pt-BR")` e tem o mesmo risco; num app instalado numa TV
+/// que ninguém configurou, ele é maior.
+private val MESES = listOf(
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
+
+/// O `vira_em` em instante.
+///
+/// Duas formas porque o servidor manda as duas conforme a rota: a data seca
+/// (`2026-08-10`) e o carimbo completo (`2026-08-10T03:00:00Z`). O `new Date()`
+/// da web engole as duas sem que ninguém tenha escrito uma linha pra isso — aqui
+/// é preciso escrever, e a ordem importa: `Instant.parse` recusa a data seca.
+///
+/// A data seca vira **meia-noite local**, e não UTC: a semana que vira é a da
+/// casa, não a de Greenwich.
+private fun instanteDe(iso: String?): Instant? {
+    val texto = iso?.trim().orEmpty()
+    if (texto.isEmpty()) return null
+    return try {
+        Instant.parse(texto)
+    } catch (_: DateTimeParseException) {
+        try {
+            LocalDate.parse(texto).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }
+}

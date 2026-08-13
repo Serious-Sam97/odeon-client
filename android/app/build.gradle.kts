@@ -109,6 +109,26 @@ kotlin {
 }
 
 dependencies {
+    /// Tudo que não desenha — `dados/` e os dez `Modelo*.kt`, agora dividos com
+    /// a TV. Ver `core/build.gradle.kts` pra régua do que entra lá.
+    ///
+    /// As linhas abaixo continuam declaradas mesmo com o `:core` as repassando
+    /// por `api`, e é de propósito: este módulo usa cada uma **direto** — o
+    /// OkHttp em `midia/`, o Media3 no player, o Coil nos pôsteres. Depender
+    /// delas por tabela seria depender de um detalhe da lista de dependências
+    /// de outro módulo.
+    implementation(project(":core"))
+
+    /// A cenografia: a caixa 3D, o palco, a contracapa, a película, a cortina, a
+    /// projeção e a luz do facho. Ver `cenario/build.gradle.kts`.
+    ///
+    /// ⚠️ Elas **saíram** deste módulo em 12/08/2026 e continuam se escrevendo
+    /// igual: o pacote lá é o mesmo `dev.odeon.android.ui.*`, então nenhum
+    /// `import` deste módulo mudou por causa da mudança de módulo. O que mudou
+    /// foram as 25 chamadas de `material3` que elas faziam — ver a §3 do
+    /// `docs/REDESENHO-TV.md`.
+    implementation(project(":cenario"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -129,6 +149,11 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+
+    // As duas tintas da lombada saem da capa que o Coil já baixou — ver
+    // `ui/locadora/TintasDaCapa.kt` pro porquê de ser a Palette e não uma conta
+    // nossa em cima do bitmap.
+    implementation(libs.androidx.palette)
 
     /// O player, ligado na fase 2.
     ///

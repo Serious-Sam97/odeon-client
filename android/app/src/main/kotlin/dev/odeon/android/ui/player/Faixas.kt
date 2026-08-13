@@ -70,58 +70,21 @@ import dev.odeon.android.ui.Cores
 /// botão não nasce. É o §53 — o produto não oferece o que a validação vai negar
 /// —, a mesma régua que já governava o botão de legenda.
 
-/// O rótulo de uma faixa de áudio, com as quedas na ordem certa.
+/// ⚠️ **O `rotuloDaFaixa` não está mais aqui.** Ele foi pro `:core`, em
+/// `core/.../ui/player/RotuloDaFaixa.kt`, quando a TV nasceu — e o comentário de
+/// lá conta o que o denunciou: o teste dele mora no pacote `dados`, foi junto
+/// com os modelos, e a função ficou pra trás.
 ///
-/// ⚠️ **O `label` vem pronto do servidor** — codec, idioma, canais e o resto já
-/// vêm compostos por quem tem a probe. Montar «Português - AC3 5.1» aqui seria a
-/// terceira redação da mesma frase entre web, Android e servidor, que é a mesma
-/// regra do `label` das legendas e do `reasons` do plano.
-///
-/// As quedas existem pro caso de ele vir vazio, e cada uma é fato e não chute:
-///
-/// | | |
-/// |---|---|
-/// | `title` | o que quem ripou escreveu na faixa |
-/// | `language` | o código do contêiner |
-/// | `faixa N` | a posição, que é o que sempre se sabe |
-///
-/// ⚠️ **`und` conta como ausente**, e a foto de 06/08/2026 é que cobrou: o menu
-/// abriu com uma faixa chamada `und`. Não é idioma — em ISO 639 quer dizer
-/// *undetermined*, o contêiner declarando que **não sabe**. Repassar isso é a
-/// tela mostrando um código que significa «sem informação»; `faixa 1` diz o
-/// mesmo, e diz em português.
-internal fun rotuloDaFaixa(faixa: dev.odeon.android.dados.FaixaDeAudio): String =
-    faixa.label.ifBlank { null }
-        ?: faixa.title?.ifBlank { null }
-        ?: faixa.language?.ifBlank { null }?.takeIf { it != "und" }
-        ?: "faixa ${faixa.index + 1}"
+/// O pacote é o mesmo, então as chamadas daqui e do `TelaDoPlayer` não mudaram.
+/// O que mudou é que a TV agora usa **a mesma** função no menu de faixas dela,
+/// em vez de escrever a quarta redação da frase.
 
-/// Manda o player tocar a **enésima** faixa de áudio do contêiner.
+/// ⚠️ **O `escolherAudio` também não está mais aqui.** Ele e o `escolherLegenda`
+/// foram pro `:core`, em `core/.../ui/player/EscolhaDeFaixa.kt`, quando a TV
+/// nasceu — e o comentário de lá diz por quê: as duas são sutis, cada uma carrega
+/// um defeito medido, e copiá-las pro `:tv` teria copiado as linhas sem o porquê.
 ///
-/// ## ⚠️ Só serve em `direct_play`, e é por isso que ela sobreviveu
-///
-/// Em transcodificação a outra faixa não está na playlist: quem troca é o
-/// servidor, abrindo sessão nova — ver `ModeloDoPlayer.trocarFaixaDeAudio`.
-///
-/// Em `direct_play` é o contrário: o contêiner inteiro chega ao aparelho com
-/// todas as faixas, o plano novo devolve a **mesma** URL, e o player recarrega
-/// escolhendo a primeira faixa por conta própria. Sem esta chamada, pedir a
-/// faixa 1 num arquivo direto não mudaria uma nota do que se ouve.
-///
-/// ⚠️ **A ordem é a do contêiner nas duas pontas.** O `index` do servidor é o
-/// `N` de `-map 0:a:N`, e os grupos de áudio do ExoPlayer chegam na ordem em que
-/// o contêiner os declara. É a mesma fila, contada do mesmo lugar.
-internal fun escolherAudio(player: Player?, indice: Int) {
-    val p = player ?: return
-    val grupo = p.currentTracks.groups
-        .filter { it.type == C.TRACK_TYPE_AUDIO }
-        .getOrNull(indice) ?: return
-
-    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-        .setOverrideForType(TrackSelectionOverride(grupo.mediaTrackGroup, 0))
-        .build()
-}
+/// O pacote é o mesmo, então as chamadas daqui e do `TelaDoPlayer` não mudaram.
 
 /// O botão de legenda: `cc` dentro de uma moldura.
 @Composable

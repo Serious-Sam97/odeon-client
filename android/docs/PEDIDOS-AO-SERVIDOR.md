@@ -1,11 +1,12 @@
 # Pedidos ao servidor
 
-Escrito em **04/08/2026**, do lado do app Android.
+Escrito em **04/08/2026**, do lado do app Android. Os pedidos 3 e 4 entraram em
+**12/08/2026**, do lado do `:tv`.
 
 Estes são os pedidos no formato da **§1b do `docs/CONTINUAR-ANDROID.md`**, prontos
-para o dono levar ao `serious-server`. Nenhum deles bloqueia o app hoje — os dois
-são coisas que o app **não consegue decidir sozinho** sem afirmar algo que não
-sabe.
+para o dono levar ao `serious-server`. Nenhum deles bloqueia o app hoje — os
+quatro são coisas que o app **não consegue decidir sozinho** sem afirmar algo que
+não sabe, ou que ele resolve com um paliativo que se sabe temporário.
 
 > A regra que este arquivo obedece: *«Você diz ao dono o que precisa. Ele leva o
 > pedido pro `serious-server`, onde a mudança é feita.»* O `odeon-server` não é
@@ -123,6 +124,68 @@ que foram assistidos numa delas.
 
 Fora do app isso fica mais evidente que dentro: numa grade de 8.316 entradas dá
 pra não reparar; num widget de três, metade da lista é o mesmo filme.
+
+---
+
+## 3. Um token de arte de vida longa, pra a fileira na home da Google TV
+
+> Acrescentado em **12/08/2026**, do lado do `:tv`. Ele não bloqueia nada: a
+> fileira funciona, e o paliativo está escrito. O que ele conserta é o dia em que
+> ela **para** de funcionar sozinha.
+
+```
+o que preciso: um jeito de servir `/artwork/...` que sobreviva à rotação do
+               token de mídia — um token longo e de leitura só, ou uma rota de
+               arte que aceite o token de sessão
+
+por quê:       a home da Google TV não busca a imagem pelo app. O que se entrega
+               ao sistema é uma `Uri`, guardada no `TvProvider`, e quem a baixa
+               é o processo do launcher — dias depois, com o Odeon fechado
+
+o que quebra:  o token de mídia roda (§43), e aí as artes já publicadas passam a
+               devolver 401. A fileira fica com os retângulos vazios na primeira
+               tela da TV, que é o lugar mais visível que este produto tem
+
+já tentei:     republicar a cada abertura do app, que é o que está no código —
+               reescreve todas as URLs com o token da vez. Resolve pra quem abre
+               o Odeon toda semana; não resolve pra quem passou um mês sem abrir
+```
+
+### Por que não dá pra consertar deste lado
+
+O `TvProvider` guarda uma `Uri` e mais nada. Não há gancho de «a imagem falhou,
+peça de novo», não há interceptor, e o `OkHttp` desta casa nem está no processo
+que faz a requisição. É a única superfície do app em que o cliente entrega uma
+credencial e **perde o controle de quando ela é usada**.
+
+O paliativo e o raciocínio inteiro estão em
+`android/tv/.../home/CanalDaHome.kt`.
+
+---
+
+## 4. Entrar na TV pelo celular — um código curto trocado por sessão
+
+> Acrescentado em **12/08/2026**. Também não bloqueia: dá pra entrar digitando.
+> O que ele conserta é o quanto isso custa.
+
+```
+o que preciso: um par de rotas de pareamento — o celular (já logado) pede um
+               código curto de vida curta, a TV o troca por uma sessão
+
+por quê:       digitar numa TV é soletrar com o D-pad. Uma senha de doze
+               caracteres custa uns oitenta apertos, e o teclado da Google TV
+               esconde metade da tela enquanto isso
+
+o que quebra:  nada quebra — é a primeira tela do app sendo a pior. É o que faz
+               todo serviço grande de TV empurrar o login pro celular
+
+já tentei:     o que dá pra fazer só do lado do cliente, e está feito: campos
+               grandes, foco óbvio, o endereço do servidor junto do login (numa
+               TV "não conecta" é quase sempre o IP errado), `ImeAction.Go` na
+               senha, e a sessão salva por aparelho — digita-se **uma** vez
+```
+
+O raciocínio está em `android/tv/.../ui/Campo.kt`, junto do campo de texto.
 
 ---
 

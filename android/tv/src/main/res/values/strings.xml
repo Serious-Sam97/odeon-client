@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O texto que o **sistema** mostra, em português, que é o idioma do projeto.
+
+  Vale a nota do `:app`: o texto das telas não vem daqui. Frase de erro é
+  decidida onde o erro acontece — o `ModeloDeLogin` sabe quais endereços foram
+  tentados, e "não respondeu em https://rog:8443 nem http://rog:8080" não é um
+  recurso estático.
+
+  O que está aqui é o que o Android e a home do Google TV leem: o nome sob o
+  ícone, e o nome do canal que o app publica na primeira tela.
+-->
+<resources>
+    <string name="nome_do_app">Odeon</string>
+
+    <!--
+      O rótulo da fileira que o app publica na home da TV.
+
+      ⚠️ Ele aparece **na primeira tela da TV**, ao lado das fileiras da Netflix
+      e do YouTube — ou seja, é o único texto deste app que é lido fora dele.
+      "Odeon" e mais nada: o nome do canal não precisa repetir o que a fileira já
+      mostra, e a home já é um lugar cheio.
+    -->
+    <string name="canal_da_home">Odeon</string>
+
+    <!--
+      A dica dentro da caixa de busca do sistema. Ela aparece **fora** do app,
+      na busca global da TV, ao lado do nome do Odeon — então precisa dizer o que
+      se acha aqui, e não repetir "buscar".
+    -->
+    <string name="dica_da_busca">buscar no acervo</string>
+</resources>

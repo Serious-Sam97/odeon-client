@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O tema do sistema, que é diferente do tema do Compose.
+
+  Vale a explicação do `:app`: o Compose desenha tudo o que se vê, mas a janela
+  existe **antes** do primeiro quadro dele. Entre escolher o Odeon na home da TV
+  e a primeira composição, quem pinta a tela é o `android:windowBackground`
+  daqui.
+
+  ## Na TV isso é mais visível do que no celular, e não menos
+
+  No celular o lampejo dura o tempo de uma animação de ícone. Numa Google TV, a
+  troca da home pro app passa por um fade que o sistema desenha em cima da
+  janela ainda vazia — um fundo claro ali é um flash em tela grande, num quarto
+  escuro, a três metros de distância. É a coisa mais visível que este app faz
+  antes de fazer qualquer coisa.
+
+  ## O `parent` não é o do celular
+
+  O `:app` herda de `android:Theme.Material.NoActionBar`. Aqui é
+  `Theme.Leanback`, do `androidx.leanback`… **e não é.** Não há leanback neste
+  módulo: a UI é Compose de ponta a ponta, e arrastar o artefato inteiro do
+  leanback pra herdar um tema seria trazer um framework de View pra ganhar um
+  `windowBackground`.
+
+  O que se herda é o `Theme.Material.NoActionBar` mesmo, com
+  `windowNoTitle`/`windowActionBar` explícitos — que é tudo o que o tema de TV
+  faz de diferente que interessa a um app sem uma única View.
+-->
+<resources>
+
+    <style name="Theme.OdeonTv" parent="android:Theme.Material.NoActionBar">
+        <!-- O fundo da casa. É este pixel que se vê antes do Compose acordar. -->
+        <item name="android:windowBackground">@color/fundo</item>
+
+        <!--
+          Numa TV não há barra de status nem de navegação pra colorir — o que
+          existe é a tela inteira, e ela é do app. As duas linhas ficam mesmo
+          assim porque uma Google TV é um Android, e há fabricante que desenha
+          uma faixa de sistema em cima; transparente é o que a faz sumir em vez
+          de virar uma tarja preta sobre o filme.
+        -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+
+</resources>

@@ -2241,6 +2241,30 @@ que faz a luz parecer **sair do item**: com 16dp de halo, menor que o próprio
 
 Medido nas fotos, no calor médio (r−b) da faixa ao lado do trilho: **27,9 → 35,5**.
 
+⚠️ **E não adiantou: «a luz tá uma merda ainda».** O dono estava certo de novo, e
+desta vez o erro era meu duas vezes — porque a resposta estava escrita no próprio
+`Arco.kt`, no comentário da peça que eu estava usando:
+
+> `desenhaOCone` — o radial é isotrópico, e o que faz ele parecer um cone é o
+> **centro cair fora da área visível**.
+
+O feixe da TV tinha `raio = size.width`: meio disco de 960dp de raio sobre uma
+tela de 960dp. Um radial esticado assim não tem queda visível em lugar nenhum —
+vira um lavado marrom uniforme cobrindo tudo, inclusive o canto oposto. **Não é
+um facho fraco, é névoa**, e aumentar a força só engrossa a névoa. Foi o que eu
+fiz na primeira tentativa.
+
+No celular a lente fica na aresta de baixo e a barra tem 89dp: o que se vê é uma
+**fatia** do radial, e a fatia é o cone. Aqui a fatia se faz pelo raio — 340dp
+numa tela de 960 significa que a luz nasce forte na lente, atravessa o trilho,
+alcança a primeira coluna de cartazes e **acaba**. É o acabar que faz o olho ver
+de onde ela veio.
+
+⚠️ A medida de calor que eu tinha usado pra dizer «melhorou» era ruim: ela mede a
+faixa ao lado do trilho, onde a névoa também era quente. Névoa e facho dão o
+mesmo número ali. O que separa os dois é o **resto da tela** — e isso a foto
+mostra e o número não mostrava.
+
 ⚠️ **Não consegui fotografar a piscada.** O `screencap` leva uns 300ms e a
 coreografia inteira dura 1200ms com picos aos 90 e aos 200 — a rajada de cinco
 quadros pegou a lente já assentada, com brilho constante (176,8 · 176,8 · 177,3).

@@ -26,6 +26,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import dev.odeon.android.tv.ui.Sala
+import androidx.compose.ui.unit.dp
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
 import dev.odeon.android.ui.guia.ModeloDoGuia
@@ -276,7 +277,25 @@ private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
         if (alturaDaLente <= 0f) return@Canvas
         val forca = brilho * FORCA_DO_FEIXE
         val origem = Offset(0f, alturaDaLente)
-        desenhaOCone(centro = origem, raio = size.width, forca = forca)
+
+        /// ## ⚠️ O raio é **curto**, e essa é a diferença entre facho e névoa
+        ///
+        /// Ele era `size.width` — meio disco de 960dp de raio sobre uma tela de
+        /// 960dp. Um radial esticado assim não tem queda visível em lugar nenhum:
+        /// vira um lavado marrom uniforme cobrindo tudo. E aumentar a força só
+        /// engrossa o lavado, que foi o que aconteceu na primeira tentativa.
+        ///
+        /// O próprio `Arco.kt` já dizia como: «o radial é isotrópico, e o que faz
+        /// ele parecer um cone é o centro cair **fora da área visível**». No
+        /// celular a lente fica na aresta de baixo e a barra tem 89dp de altura —
+        /// o que se vê é uma fatia, e a fatia é o cone.
+        ///
+        /// Aqui a fatia se faz pelo raio: 340dp numa tela de 960 significa que a
+        /// luz nasce forte na lente, atravessa o trilho, alcança a primeira
+        /// coluna de cartazes e **acaba** — e é o acabar que faz o olho ver de
+        /// onde ela veio.
+        val alcanceDoFacho = 340.dp.toPx()
+        desenhaOCone(centro = origem, raio = alcanceDoFacho, forca = forca)
         /// ## ⚠️ Os dois números da poeira foram **medidos na TCL**, e a
         /// primeira versão errou os dois
         ///
@@ -303,9 +322,9 @@ private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
         /// | `raio` | metade da largura, e não a tela toda — até onde o pó chega |
         desenhaAPoeira(
             eixo = alturaDaLente,
-            raio = size.width * 0.5f,
+            raio = alcanceDoFacho * 0.8f,
             forca = forca,
-            alcance = size.height * 0.20f,
+            alcance = size.height * 0.16f,
             deitado = true,
         )
     }
@@ -328,7 +347,7 @@ private fun FeixeDaCabine(alturaDaLente: Float, chave: Any?) {
 /// O pico dos quadros é 1,35, então o brilho real chega a ~0,74 no primeiro
 /// estalo e assenta em 0,55. É o que faz a troca de destino parecer uma lâmpada
 /// **ligando**, e não um degradê trocando de lugar.
-private const val FORCA_DO_FEIXE = 0.55f
+private const val FORCA_DO_FEIXE = 0.85f
 
 /// A tela do destino escolhido.
 ///

@@ -9,6 +9,7 @@ import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.dados.ItemPraContinuar
 import dev.odeon.android.dados.ObraDaLista
 import dev.odeon.android.dados.FolhaDeSprites
+import dev.odeon.android.dados.PlanoDeReproducao
 import dev.odeon.android.dados.RepositorioOdeon
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -313,6 +314,24 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
 
     /// A URL da folha, absoluta e com token — a mesma `urlDeMidia` de sempre.
     fun urlDaFolha(caminho: String): String? = odeon.urlDeMidia("/scrub/$caminho")
+
+    /// O plano de reprodução de um arquivo — só pra saber se ele **toca direto**.
+    ///
+    /// ⚠️ A prévia do herói usa isto como **porteiro**, não como negociação: se o
+    /// filme precisar de transcodificação, não há prévia. Abrir uma sessão de
+    /// `ffmpeg` no servidor pra enfeitar um fundo é caro do lado errado — a
+    /// máquina da casa passaria a trabalhar porque alguém está *olhando* a
+    /// biblioteca, sem ter pedido nada.
+    suspend fun planoDoArquivo(arquivoId: String): PlanoDeReproducao? =
+        runCatching { odeon.plano(arquivoId) }.getOrNull()
+
+    /// A URL de mídia, absoluta e com token.
+    fun urlDeMidia(caminho: String?): String? = odeon.urlDeMidia(caminho)
+
+    /// Ver `RepositorioOdeon.cabecalhosDeMidia`. **O `?token=` da URL não basta
+    /// pro ExoPlayer** — foi 401 nos canais ao vivo e foi 401 aqui, pelo mesmo
+    /// motivo e com uma semana de diferença.
+    fun cabecalhosDeMidia(): Map<String, String> = odeon.cabecalhosDeMidia()
 
     private companion object {
         /// O mesmo número da web (§1.6). Ele é curto o bastante pra a busca

@@ -2335,7 +2335,7 @@ efeito nenhum.
 **Conferido na TCL:** rosto redondo, lente com queda em vez de pastilha, e o
 `OK` fechando o trilho com o foco no primeiro cartaz.
 
-## 17. O herói passa cenas do filme
+## 17. O herói passa cenas do filme — primeiro paradas, depois em vídeo
 
 Pedido do dono: «o filme que está no topo, em vez de ficar com uma imagem
 estática, carregar cenas do filme».
@@ -2392,3 +2392,55 @@ gerando arquivo.
 ⚠️ Por isso o log ficou. «Não mudou nada» é o pior sintoma que existe: não
 distingue arquivo sem id, filme mal começado e folha inexistente. A linha responde
 os três.
+
+### 17.4 «Cenas» era **vídeo**, não quadro parado
+
+O dono corrigiu: «cenas que eu digo é um videozinho rodando de uma cena
+aleatória». Outra peça, outro risco — e o risco estava documentado nesta casa
+antes de a prévia existir, no `TelaDoPlayerDaTv`:
+
+> «solta o **decodificador de hardware** — e numa TCL ele é um só, então quem o
+> segura impede o próximo filme de abrir.»
+
+Um fundo decorativo que segura o decodificador é um fundo que impede alguém de
+assistir. A prévia é cercada por cinco condições, e nenhuma é enfeite:
+
+| | |
+|---|---|
+| **só toca direto** | transcodificar pra enfeitar um fundo põe o servidor a trabalhar porque alguém está *olhando* a tela, sem ter pedido nada |
+| **só depois de 3s parado** | passar pela biblioteca a caminho de outra tela não acende decodificador |
+| **solta no `ON_PAUSE`**, não no `ON_STOP` | o primeiro chega antes; entre os dois há a janela em que a prévia e o filme existiriam juntos |
+| **morre em 45s** | uma TV esquecida na biblioteca não pode segurar o decodificador a tarde inteira |
+| **sem som** | é fundo, e fundo que fala interrompe |
+
+A regra de spoiler continua: o ponto de entrada é sorteado entre 8% e 96% do
+trecho **já visto**.
+
+#### ⚠️ Dois erros meus, e o segundo é o mesmo de duas semanas atrás
+
+**Um:** reusei a lista de cenas da folha de sprites pra escolher o ponto do
+vídeo. A folha é 404 na maioria dos filmes desta casa, então a prévia nascia
+morta junto com ela — por dependência que ela não tinha. São coisas
+independentes: quadro parado precisa da tira; vídeo precisa de um segundo e de um
+arquivo. Viraram duas funções e dois testes.
+
+**Dois:** `401`. O mesmo código, a mesma causa e o mesmo conserto dos canais de
+fora — as rotas de mídia querem `Authorization: Bearer` na fonte de dados, e o
+`?token=` da URL não vale por ele. Da primeira vez a resposta estava escrita no
+`web/src/hls.ts` e eu não procurei. Da segunda estava escrita no
+`RepositorioOdeon` **por mim**, na mesma semana.
+
+#### Conferido, e o que falta
+
+✅ A prévia toca: três capturas espaçadas mostram três cenas distintas do filme no
+herói, e a diferença média entre elas é de 13 a 23 níveis de cinza — contra 0,0
+antes do conserto do `401`.
+
+⚠️ **Não conferido: abrir um filme logo depois da prévia.** É exatamente o risco
+do decodificador, e é o que eu mais queria ter visto. A navegação por `adb` me
+deixou preso na tela do perfil em três tentativas seguidas, e insistir custaria
+mais do que vale — o dono está na frente da TV e leva dez segundos.
+
+Foi por não ter conferido que a prévia ganhou as duas últimas travas (`ON_PAUSE`
+e os 45s). Elas não substituem a conferência; elas reduzem a janela enquanto ela
+não acontece.

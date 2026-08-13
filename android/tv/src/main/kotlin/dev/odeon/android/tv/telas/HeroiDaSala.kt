@@ -39,6 +39,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.layout.layout
 import dev.odeon.android.dados.FolhaDeSprites
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import dev.odeon.android.dados.PlanoDeReproducao
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.corDeHex
 
@@ -75,6 +82,10 @@ fun HeroiDaSala(
     /// padrão: quem não passa não muda de comportamento.
     folhaDoFilme: (suspend (String) -> FolhaDeSprites?)? = null,
     urlDaFolha: (String) -> String? = { null },
+    /// O plano do arquivo — a prévia em vídeo só existe se ele **tocar direto**.
+    planoDoArquivo: (suspend (String) -> PlanoDeReproducao?)? = null,
+    urlDeMidia: (String?) -> String? = { null },
+    cabecalhosDeMidia: () -> Map<String, String> = { emptyMap() },
 ) {
     val corDaObra = corDeHex(item.corDominante) ?: Cores.destaque
     val titulo = item.tituloDaSerie ?: item.title
@@ -131,6 +142,53 @@ fun HeroiDaSala(
                 /// quem estiver em pé na cena, que é quase todo mundo num pôster
                 /// deitado.
                 alignment = Alignment.TopCenter,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        /// ## ⚠️ A prévia em vídeo, e o decodificador que é **um só**
+        ///
+        /// O pedido do dono foi «um videozinho rodando de uma cena aleatória», e
+        /// a peça mais perigosa desta casa está exatamente aqui. O comentário do
+        /// player já dizia, antes de esta prévia existir:
+        ///
+        /// > «solta o **decodificador de hardware** — e numa TCL ele é um só,
+        /// > então quem o segura impede o próximo filme de abrir.»
+        ///
+        /// Um fundo decorativo que segura o decodificador é um fundo que impede
+        /// alguém de assistir. Por isso a prévia é cercada por quatro condições,
+        /// e nenhuma delas é enfeite:
+        ///
+        /// | | |
+        /// |---|---|
+        /// | **só toca direto** | transcodificar pra enfeitar um fundo põe a máquina da casa a trabalhar porque alguém está *olhando* a tela, sem ter pedido nada |
+        /// | **só depois de 3s parado** | passar pela biblioteca a caminho de outra tela não deve acender decodificador nenhum |
+        /// | **solta no `onDispose` e no `ON_STOP`** | as duas, porque a ordem entre desmontar a biblioteca e montar o player não é garantida |
+        /// | **sem som** | é fundo. Fundo que fala interrompe |
+        val ondeComecar = remember(item.arquivoId, item.ondeParou) {
+            umaCenaJaVista(item.ondeParou)
+        }
+        val plano by produceState<PlanoDeReproducao?>(null, item.arquivoId) {
+            val arquivo = item.arquivoId
+            if (arquivo == null || planoDoArquivo == null) return@produceState
+            /// A folga de 3s: quem passa reto não paga decodificador.
+            delay(3_000)
+            val obtido = planoDoArquivo(arquivo)
+            android.util.Log.i(
+                "odeon-heroi",
+                "plano de $arquivo: modo=${obtido?.mode ?: "nenhum"} " +
+                    "direta=${obtido?.urlDireta != null} comecarEm=$ondeComecar",
+            )
+            value = obtido.takeIf { it?.eDireto == true }
+        }
+
+        val urlDaPrevia = remember(plano) { plano?.let { urlDeMidia(it.urlDireta) } }
+
+        if (urlDaPrevia != null && ondeComecar != null) {
+            PreviaDoHeroi(
+                url = urlDaPrevia,
+                comecarEm = ondeComecar,
+                cabecalhos = cabecalhosDeMidia(),
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -338,4 +396,123 @@ private fun QuadroDaFolha(
                 },
         )
     }
+}
+
+
+/// O «videozinho» do herói: uma cena, sem som, em laço curto.
+///
+/// ⚠️ **Este player nasce e morre com o herói, e isso é a regra de segurança.**
+/// Ver o quadro de condições no [HeroiDaSala]: numa TCL o decodificador de
+/// hardware é um só, e um fundo decorativo que o segura impede um filme de abrir.
+///
+/// ⚠️ Ele também solta no `ON_STOP`, e não só no `onDispose`. A ordem entre
+/// desmontar a biblioteca e montar a tela do filme não é garantida pelo Compose;
+/// o ciclo de vida chega antes e é o que fecha a janela em que os dois
+/// existiriam ao mesmo tempo.
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun PreviaDoHeroi(
+    url: String,
+    comecarEm: Int,
+    cabecalhos: Map<String, String>,
+    modifier: Modifier = Modifier,
+) {
+    val contexto = LocalContext.current
+    val player = remember(url, comecarEm) {
+        /// ⚠️ **O `Bearer` na fonte, e é a segunda vez que este projeto aprende
+        /// isso.** A prévia deu `401` com a URL que já leva `?token=` — o mesmo
+        /// erro, o mesmo código e a mesma causa dos canais de fora: as rotas de
+        /// mídia querem o cabeçalho, e o token na query não vale por ele.
+        ///
+        /// Da primeira vez a resposta estava escrita no `web/src/hls.ts` e eu não
+        /// procurei. Da segunda estava escrita no `RepositorioOdeon` desta casa,
+        /// por mim, três dias antes.
+        val fonte = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(cabecalhos)
+            .setAllowCrossProtocolRedirects(true)
+
+        ExoPlayer.Builder(contexto)
+            .setMediaSourceFactory(
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(fonte),
+            )
+            .build()
+            .apply {
+            setMediaItem(MediaItem.fromUri(url), comecarEm * 1_000L)
+            /// ⚠️ Sem som, e não é «volume zero por educação»: é fundo. Um fundo
+            /// que fala interrompe quem está escolhendo o que ver.
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_OFF
+            playWhenReady = true
+            prepare()
+        }
+    }
+
+    /// ⚠️ **A prévia tem hora pra acabar**, e é uma trava de segurança, não de
+    /// estética.
+    ///
+    /// Numa TV que fica ligada na biblioteca a tarde inteira, um decodificador
+    /// preso por um fundo decorativo é um decodificador preso por horas. Depois
+    /// de 45s ela solta e a arte estática reaparece — que é como a tela era antes
+    /// desta prévia existir, então não se perde nada.
+    LaunchedEffect(player) {
+        delay(45_000)
+        player.stop()
+        player.clearMediaItems()
+    }
+
+    val dono = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(dono, player) {
+        val observador = androidx.lifecycle.LifecycleEventObserver { _, evento ->
+            /// ⚠️ `ON_PAUSE`, e não `ON_STOP`: ele chega **antes**, no instante
+            /// em que outra tela toma a frente. Entre os dois há uma janela em
+            /// que a prévia e o player do filme existiriam juntos — e nesta TV
+            /// existir junto é um deles não abrir.
+            if (evento == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
+                player.stop()
+                player.clearMediaItems()
+            }
+        }
+        dono.lifecycle.addObserver(observador)
+        onDispose {
+            dono.lifecycle.removeObserver(observador)
+            player.stop()
+            player.clearMediaItems()
+            player.release()
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            androidx.media3.ui.PlayerView(ctx).apply {
+                useController = false
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                layoutParams = android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            }
+        },
+        update = { it.player = player },
+        modifier = modifier,
+    )
+}
+
+
+/// Um segundo qualquer do trecho **já assistido** — o ponto onde a prévia entra.
+///
+/// ⚠️ A mesma regra de spoiler dos quadros parados, e pelo mesmo motivo: a prévia
+/// é um convite pra voltar ao filme, e um convite não entrega o final. Sorteia
+/// entre 8% e 96% do que já foi visto — fora a abertura, aquém da fronteira.
+///
+/// `null` quando não há trecho suficiente, e aí não há prévia: menos de dois
+/// minutos vistos é abertura, não é cena.
+internal fun umaCenaJaVista(ondeParou: Double?, sorteio: (Int) -> Int = { (0 until it).random() }): Int? {
+    val visto = (ondeParou ?: 0.0).toInt()
+    if (visto < 120) return null
+    val comeco = (visto * 0.08).toInt()
+    val fim = (visto * 0.96).toInt()
+    if (fim <= comeco) return null
+    return comeco + sorteio(fim - comeco)
 }

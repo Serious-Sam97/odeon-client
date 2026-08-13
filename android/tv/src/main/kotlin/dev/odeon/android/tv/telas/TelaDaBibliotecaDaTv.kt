@@ -215,6 +215,9 @@ fun TelaDaBibliotecaDaTv(
                         arte = modelo.arte(primeiro),
                         folhaDoFilme = modelo::folha,
                         urlDaFolha = modelo::urlDaFolha,
+                        planoDoArquivo = modelo::planoDoArquivo,
+                        urlDeMidia = modelo::urlDeMidia,
+                        cabecalhosDeMidia = modelo::cabecalhosDeMidia,
                         modifier = Modifier.padding(bottom = 10.dp),
                     )
                 }

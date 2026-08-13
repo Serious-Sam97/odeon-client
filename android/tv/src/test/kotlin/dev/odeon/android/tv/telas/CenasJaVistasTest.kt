@@ -65,3 +65,33 @@ class CenasJaVistasTest {
         assertEquals(cenas.sorted(), cenas)
     }
 }
+
+/// A mesma regra de spoiler, agora pro **vídeo** da prévia.
+///
+/// ⚠️ Ela existe separada porque o ponto do vídeo **não depende da folha de
+/// sprites** — e essa confusão já custou uma rodada: a prévia nascia morta em
+/// todo filme sem tira, porque eu tinha reusado a lista de cenas dos quadros
+/// parados. Duas fontes, duas funções, dois testes.
+class UmaCenaJaVistaTest {
+
+    @Test
+    fun `nunca passa do ponto onde parou`() {
+        val parou = 3_600.0
+        repeat(50) {
+            val s = umaCenaJaVista(parou)!!
+            assertTrue("cena em $s é spoiler de quem parou em $parou", s < parou)
+        }
+    }
+
+    @Test
+    fun `pula a abertura`() {
+        /// Determinístico: com o sorteio sempre em zero, o resultado é o piso.
+        assertEquals(288, umaCenaJaVista(3_600.0) { 0 })
+    }
+
+    @Test
+    fun `filme mal comecado nao tem previa`() {
+        assertEquals(null, umaCenaJaVista(90.0))
+        assertEquals(null, umaCenaJaVista(null))
+    }
+}

@@ -42,7 +42,12 @@ import dev.odeon.android.tv.ui.Pilula
 import dev.odeon.android.tv.ui.Recado
 import dev.odeon.android.tv.ui.RotuloDeSecao
 import dev.odeon.android.tv.ui.Sala
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.player.Perfuracoes
 import dev.odeon.android.ui.corDeHex
 import dev.odeon.android.ui.duracaoCompacta
 import dev.odeon.android.ui.obra.ModeloDaObra
@@ -133,9 +138,20 @@ fun TelaDaObraDaTv(
         /// existe pra mostrar.
         Box(
             Modifier.fillMaxSize().background(
+                /// ## ⚠️ O véu passou a **decidir**
+                ///
+                /// Ele ia de 0,96 a 0,80 até a fração do texto e só então caía —
+                /// cobria a imagem inteira com uma gaze e não deixava nem ler
+                /// direito nem ver a arte. «Muito feia e sem graça» é o que uma
+                /// tela indecisa parece.
+                ///
+                /// Agora: opaco de verdade até 38%, esmaece até 66%, e some. O
+                /// texto tem o lado dele e a imagem tem o dela — e o filme volta
+                /// a aparecer na tela que é sobre ele.
                 Brush.horizontalGradient(
-                    0f to Cores.fundo.copy(alpha = 0.96f),
-                    FRACAO_DO_TEXTO to Cores.fundo.copy(alpha = 0.80f),
+                    0f to Cores.fundo.copy(alpha = 0.97f),
+                    0.38f to Cores.fundo.copy(alpha = 0.95f),
+                    0.66f to Color.Transparent,
                     1f to Color.Transparent,
                 ),
             ),
@@ -213,6 +229,8 @@ fun TelaDaObraDaTv(
                 Spacer(Modifier.height(10.dp))
             }
 
+            Cascata(0) {
+            Column {
             Text(
                 text = obra.title,
                 style = MaterialTheme.typography.displayMedium,
@@ -233,7 +251,11 @@ fun TelaDaObraDaTv(
 
             Spacer(Modifier.height(18.dp))
             LinhaDeFicha(estado, obra.year, obra.duracaoEmSegundos)
+            }
+            }
 
+            Cascata(1) {
+            Column {
             obra.overview?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.height(22.dp))
                 Text(
@@ -308,6 +330,8 @@ fun TelaDaObraDaTv(
             }
 
             Spacer(Modifier.height(30.dp))
+            }
+            }
 
             val comecarEm = ondeContinuar(obra.ondeParou, obra.duracaoEmSegundos, obra.finished)
             /// ⚠️ `FlowRow` aqui pelo **mesmo** motivo das etiquetas, e o
@@ -395,27 +419,48 @@ fun TelaDaObraDaTv(
             /// decodifica doze pontos do arquivo — e fica em cache pra sempre
             /// depois. Segurar a ficha por isso seria trocar três segundos de
             /// espera por uma fileira de fotos.
+            Cascata(3) {
             if (estado.cenas.isNotEmpty()) {
                 Spacer(Modifier.height(28.dp))
                 RotuloDeSecao("do filme")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(estado.cenas.take(8)) { cena ->
-                        Box(
-                            Modifier
-                                .size(width = 200.dp, height = 113.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Cores.fundoElevado),
-                        ) {
-                            AsyncImage(
-                                model = modelo.capa(cena.imagem),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                Spacer(Modifier.height(10.dp))
+                /// ## ⚠️ As cenas viram **película**, e a peça é a do player
+                ///
+                /// Eram retângulos arredondados com vão entre eles — uma galeria
+                /// que podia ser de qualquer app. Agora são quadros colados num
+                /// rolo, com os furos de arrasto em cima e embaixo.
+                ///
+                /// ⚠️ E os furos são os **do player**: o `Perfuracoes` do
+                /// `Tira.kt` era privado e fixo no tamanho da barra fina; ganhou
+                /// medidas e virou público. Nenhuma peça nova — a casa já tinha
+                /// película desenhada, e ela estava trancada dentro de outra tela.
+                Column(
+                    Modifier
+                        .background(Color(0xFF0D0B09), RoundedCornerShape(4.dp))
+                        .padding(vertical = 6.dp),
+                ) {
+                    Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        items(estado.cenas.take(8)) { cena ->
+                            Box(
+                                Modifier
+                                    .size(width = 210.dp, height = 118.dp)
+                                    .background(Cores.fundoAfundado),
+                            ) {
+                                AsyncImage(
+                                    model = modelo.capa(cena.imagem),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
-
+                    Spacer(Modifier.height(8.dp))
+                    Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
                 }
+            }
             }
 
             /// O recado da locadora vem **depois** das cenas: ele é raro e é
@@ -498,3 +543,41 @@ private fun LinhaDeFicha(
 /// simplesmente não casa, e a etiqueta continua aparecendo. Errar aqui mostra
 /// demais, nunca de menos — que é o lado certo pra errar.
 private val ETIQUETAS_MUDAS = setOf("country", "pais", "format", "kind", "tipo", "type")
+
+
+/// A cascata de entrada: cada bloco sobe 14dp e acende, um atrás do outro.
+///
+/// ## ⚠️ Ela é a diferença entre uma tela que **abre** e uma que **aparece**
+///
+/// Sem ela a ficha inteira materializa de uma vez, e o olho não sabe por onde
+/// começar — que foi metade do «sem graça». Com 70ms entre um bloco e o próximo,
+/// a ordem de leitura vira uma coisa que a tela **conta**: título, ficha,
+/// sinopse, botões, cenas.
+///
+/// ⚠️ **Só na entrada.** Nada aqui anima em repouso: depois de 500ms a tela está
+/// parada e não custa mais nada. Animação contínua numa tela de leitura é o que a
+/// biblioteca já reprovou («tire ele, quero só ir percorrendo sem mt estresse»).
+///
+/// ⚠️ E ela respeita quem desligou animação no sistema: com `escalaDeAnimacao` em
+/// zero o `tween` termina no primeiro quadro, e a tela aparece pronta — sem
+/// piscar e sem esperar.
+@Composable
+private fun Cascata(
+    ordem: Int,
+    conteudo: @Composable () -> Unit,
+) {
+    val entrou = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(ordem * 70L)
+        entrou.animateTo(1f, tween(durationMillis = 380))
+    }
+    Box(
+        Modifier
+            .graphicsLayer {
+                alpha = entrou.value
+                translationY = (1f - entrou.value) * 14.dp.toPx()
+            },
+    ) {
+        conteudo()
+    }
+}

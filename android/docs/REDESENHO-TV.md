@@ -2790,3 +2790,44 @@ que de fato responderia «sem graça»:
 ⚠️ E não foi vista rodando: a navegação por `adb` caiu na tela do guia, e eu
 preferi parar a insistir. O que está aqui é legível no código e passou no portão —
 mas «passou no portão» não é «ficou bonito», e a segunda coisa só o dono decide.
+
+### 22.5 O redesenho, primeira parte — e nada de peça nova
+
+O dono aprovou a maquete com o argumento certo: «a caixa 3D já temos da locadora
+e a fita já usamos do próprio player». Foi o que guiou a implementação.
+
+**O véu passou a decidir.** Ele ia de 0,96 a 0,80 e só então caía — cobria a
+imagem inteira com uma gaze e não deixava nem ler direito nem ver a arte. «Muito
+feia e sem graça» é o que uma tela indecisa parece. Agora é opaco até 38%,
+esmaece até 66%, e some.
+
+**As cenas viraram película.** Eram retângulos arredondados com vão entre eles —
+uma galeria que podia ser de qualquer app. Agora são quadros colados num rolo,
+com os furos de arrasto em cima e embaixo.
+
+⚠️ E os furos são **os do player**: o `Perfuracoes` do `Tira.kt` era privado e
+fixo no tamanho da barra fina. Ganhou medidas e virou público — os padrões
+continuam os do player, então quem já o usava não mudou de aparência. Abrir uma
+peça sem mexer em quem a usa é o único jeito honesto de reaproveitar.
+
+**A cascata de entrada.** Título e ficha entram, depois sinopse e etiquetas,
+depois a película — 70ms entre cada, subindo 14dp. É a diferença entre uma tela
+que **abre** e uma que **aparece**: sem ela tudo materializa junto e o olho não
+sabe por onde começar, que era metade do «sem graça».
+
+⚠️ **Só na entrada.** Nada anima em repouso: depois de meio segundo a tela está
+parada e não custa mais nada. Animação contínua numa tela de leitura é o que a
+biblioteca já reprovou.
+
+### 22.6 ⚠️ O que a foto mostrou que falta
+
+Conferido na TCL: o véu decide e a película tem furos. **Mas a tira está presa na
+coluna de texto** — ela herdou os 55% de largura do bloco em que nasceu — e sai
+cortada pela borda de baixo.
+
+Ela precisa sair da coluna e atravessar a tela, como na maquete. Isso é mudança
+de estrutura, não de estilo, e eu preferi parar aqui a começá-la sem poder
+conferir.
+
+Falta também a **caixa 3D**, que é a segunda parte combinada — e é a que precisa
+de medição antes de entrar, porque a §10.1 mediu 97ms por quadro com uma só.

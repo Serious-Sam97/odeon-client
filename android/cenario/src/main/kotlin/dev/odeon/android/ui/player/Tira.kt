@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.odeon.android.dados.FolhaDeSprites
 import dev.odeon.android.ui.Cores
@@ -542,16 +543,29 @@ private fun QuadroDaTira(
 /// tamanho de fabricação, e espaçá-lo proporcionalmente faria a tira parecer
 /// mais «grossa» num tablet que num celular — que é o oposto do que material
 /// físico faz.
+/// ⚠️ **Pública, e com medidas**, porque a ficha da obra pediu a mesma película.
+///
+/// Ela nasceu privada e fixa no tamanho do rolo do player — 28 furos de 5×2,5dp,
+/// que é o que cabe numa barra fina. Na ficha a tira é dez vezes mais alta, e os
+/// mesmos furos sumiriam.
+///
+/// Os padrões são os do player: quem já a usava não muda de aparência. Abrir uma
+/// peça sem mexer em quem a usa é o único jeito honesto de reaproveitar.
 @Composable
-private fun Perfuracoes(modifier: Modifier = Modifier) {
+fun Perfuracoes(
+    modifier: Modifier = Modifier,
+    quantos: Int = 28,
+    largura: Dp = 5.dp,
+    altura: Dp = 2.5.dp,
+) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 1.5.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
     ) {
-        repeat(28) {
+        repeat(quantos) {
             Box(
                 Modifier
-                    .size(width = 5.dp, height = 2.5.dp)
+                    .size(width = largura, height = altura)
                     .clip(RoundedCornerShape(1.dp))
                     .background(Color.White.copy(alpha = 0.30f)),
             )

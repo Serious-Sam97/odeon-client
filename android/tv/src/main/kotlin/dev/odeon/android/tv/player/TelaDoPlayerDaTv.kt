@@ -58,6 +58,7 @@ import dev.odeon.android.tv.ui.Pilula
 import dev.odeon.android.tv.ui.Recado
 import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.ManterATelaAcesa
 import dev.odeon.android.ui.player.ModeloDoPlayer
 import dev.odeon.android.ui.player.escolherAudio
 import dev.odeon.android.ui.player.escolherLegenda
@@ -236,11 +237,23 @@ fun TelaDoPlayerDaTv(
     /// parado, e some inteiro quando o menu de faixas abre. Um ouvinte que vive
     /// junto dele deixaria de existir exatamente na situação mais comum de todas:
     /// alguém assistindo sem tocar no controle até o filme acabar.
+    /// ⚠️ `estaTocando` mora **aqui**, e não no `Cromo`. O cromo é a barra de
+    /// baixo, que some sozinha depois de alguns segundos parado — e a tela tem de
+    /// continuar acesa exatamente quando ninguém está tocando no controle, que é
+    /// o caso em que o sistema mais quer dormir.
+    var estaTocando by remember { mutableStateOf(false) }
+    ManterATelaAcesa(estaTocando)
+
     DisposableEffect(player) {
         val p = player ?: return@DisposableEffect onDispose { }
+        estaTocando = p.isPlaying
         val ouvinte = object : Player.Listener {
             override fun onPlaybackStateChanged(estadoDoPlayer: Int) {
                 if (estadoDoPlayer == Player.STATE_ENDED) aoAcabar()
+            }
+
+            override fun onIsPlayingChanged(tocando: Boolean) {
+                estaTocando = tocando
             }
         }
         p.addListener(ouvinte)

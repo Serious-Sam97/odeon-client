@@ -62,6 +62,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import dev.odeon.android.dados.FolhaDeSprites
 import dev.odeon.android.midia.ServicoDeMidia
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.ManterATelaAcesa
 import kotlinx.coroutines.delay
 
 /// Assistir.
@@ -350,6 +351,11 @@ private fun Reprodutor(
     var posicao by remember { mutableLongStateOf(0L) }
     var duracao by remember { mutableLongStateOf(0L) }
     var tocando by remember { mutableStateOf(true) }
+
+    /// ⚠️ O celular tem o mesmo defeito, e ninguém tinha notado porque ali o
+    /// tempo de tela do sistema é curto e a pessoa costuma estar com o aparelho
+    /// na mão. Num filme longo apoiado na mesa, dorme igual.
+    ManterATelaAcesa(tocando)
 
 
     LaunchedEffect(player) {

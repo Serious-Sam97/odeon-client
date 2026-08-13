@@ -2678,3 +2678,59 @@ o que anunciar.
 
 A ordem de conferência é: marcar um lembrete na TV, ver a estrela ficar; depois
 esperar o programa se aproximar com o celular no bolso.
+
+## 21. A TV dormia no meio do filme
+
+«Quando fica assistindo filme, a TV acaba entrando em modo screensaver.»
+
+### 21.1 O sistema não sabe que você está assistindo
+
+Ele conta **interações** — tecla, toque, controle — e um filme de duas horas não
+tem nenhuma. Do ponto de vista do Android, quem assiste em silêncio é quem saiu
+da sala.
+
+⚠️ **Nenhum dos três players desta casa dizia o contrário.** Não havia
+`KEEP_SCREEN_ON` nem `keepScreenOn` em lugar nenhum — nem na TV, nem no celular.
+
+É o tipo de defeito que não aparece em teste nem em captura: ele precisa de
+**tempo passando** pra existir, e todo teste é apressado. Só quem assiste um filme
+inteiro encontra.
+
+### 21.2 Só enquanto **toca**
+
+A tentação é acender no `PlayerView` e esquecer. Mas um filme pausado é um filme
+que alguém deixou pra lá, e segurar uma TV acesa a noite inteira porque um player
+está aberto e parado é trocar um incômodo por um pior.
+
+⚠️ E o `keepScreenOn` é o da `View`, não a flag da janela: a flag mora na janela e
+depende de alguém lembrar de desligá-la, inclusive por caminhos que ninguém
+previu. O da `View` morre **com a `View`** — o `onDispose` é rede, não é a única
+defesa.
+
+### 21.3 ⚠️ E a primeira medição não media nada
+
+Eu conferi com `dumpsys window | grep -c KEEP_SCREEN_ON` e deu `1` — tocando,
+pausado, fora do player, sempre `1`. Parecia funcionar sempre, o que já devia ter
+me alertado.
+
+O `grep` estava casando com **`WM_DEBUG_KEEP_SCREEN_ON`**, um nome numa lista de
+grupos de log de depuração. A medida não tinha relação nenhuma com o estado.
+
+A régua certa é o `dumpsys power`: a flag vira um `SCREEN_BRIGHT_WAKE_LOCK` que o
+WindowManager segura **em nome do app**.
+
+```
+tocando        : 1
+pausado        : 0
+tocando de novo: 1
+fora do player : 0
+```
+
+```
+SCREEN_BRIGHT_WAKE_LOCK 'WindowManager/displayId:0'
+  ACQ=-30s165ms  ws=WorkSource{10011 dev.odeon.android.tv.debug}
+```
+
+⚠️ É a segunda vez nesta doc que uma medida ruim quase virou conclusão — a outra
+foi o calor do facho (§16.4). O padrão é o mesmo: um número que **sempre** dá a
+resposta que se queria não está medindo o que se pensa.

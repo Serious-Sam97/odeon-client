@@ -39,6 +39,7 @@ import dev.odeon.android.tv.ui.Recado
 import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.tv.ui.TipoDaSala
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.ManterATelaAcesa
 import dev.odeon.android.ui.aovivo.ModeloAoVivo
 
 /// Um canal **de fora**, tocando a playlist que o servidor abriu.
@@ -133,12 +134,22 @@ fun TelaDoCanalAoVivoDaTv(
         onDispose { player?.release() }
     }
 
+    /// ⚠️ Num canal a tela tem de ficar acesa pelo mesmo motivo do filme — e com
+    /// mais razão: uma transmissão não tem pausa, então ninguém vai tocar no
+    /// controle até querer sair.
+    var estaTocando by remember(player) { mutableStateOf(false) }
+    ManterATelaAcesa(estaTocando)
+
     var falhou by remember(player) { mutableStateOf(false) }
     DisposableEffect(player) {
         val p = player ?: return@DisposableEffect onDispose { }
         val ouvinte = object : Player.Listener {
             override fun onPlayerError(e: androidx.media3.common.PlaybackException) {
                 falhou = true
+            }
+
+            override fun onIsPlayingChanged(tocando: Boolean) {
+                estaTocando = tocando
             }
         }
         p.addListener(ouvinte)

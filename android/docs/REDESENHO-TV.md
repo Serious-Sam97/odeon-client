@@ -2623,3 +2623,58 @@ ele responde a segunda pergunta: **de onde essa pessoa veio**.
 que o aperto não tenha chegado ao botão (a navegação por `adb` estava me levando
 pra telas erradas na mesma rodada). Instrumentei a falha com log e não consegui
 uma captura limpa. Fica como **não conferido**, não como pronto.
+
+## 20. O lembrete vira aviso no celular
+
+«O "me avise" não vai notificar em lugar algum. Talvez aproveitar a notificação
+do celular pra isso?» — e, junto: «o android já tem notificações e lembrete do
+canal ao vivo, dá pra aproveitar».
+
+⚠️ **Conferido antes de construir, e não tinha.** O `:app` não tem tela de ao
+vivo, não tem lembrete e não tem notificação própria — o que existe é a
+notificação de download, que o Media3 gerencia por dentro do `DownloadService`, e
+a permissão `POST_NOTIFICATIONS` já declarada no manifesto. Essa última sim foi
+aproveitada; o resto nasceu agora.
+
+### 20.1 Por que no celular, e por que um trabalho periódico
+
+O lembrete é marcado **na sala**, na grade do ao vivo, e guardado no servidor. Mas
+o aviso não serve numa TV: quem marcou «me avise» não está na frente dela — se
+estivesse, não precisaria de aviso. O celular é o aparelho que anda com a pessoa.
+
+⚠️ E um `AlarmManager` sozinho não basta. Ele sabe disparar numa hora marcada, e é
+o que dispara o aviso — mas alguém precisa **descobrir** os lembretes, que nascem
+na TV. Sem uma pergunta periódica, um lembrete marcado às 18h para as 20h40 só
+seria visto se o celular fosse aberto no meio-tempo — que é justamente o que a
+pessoa não vai fazer, porque marcou pra não ter de lembrar.
+
+Quinze minutos é o piso do `WorkManager` e serve: cada rodada agenda tudo o que
+começa na **próxima hora**, então a janela nunca perde nada por atraso de
+descoberta.
+
+### 20.2 Os dez minutos
+
+Escolhidos pelo dono, e o número decide **o que a frase pode dizer**: com cinco,
+«começa em cinco minutos» é um susto; com trinta, vira agenda e a pessoa esquece
+de novo. Dez dá tempo de sentar.
+
+⚠️ A frase diz **quanto falta**, não a hora. «Começa às 20:40» obriga quem lê a
+olhar o relógio e fazer a conta; «começa em 10 minutos» já é a resposta. É o §8b
+numa linha de notificação.
+
+### 20.3 As três defesas
+
+| | |
+|---|---|
+| `setExactAndAllowWhileIdle` | com o celular no bolso e a tela apagada há horas, o Doze adiaria um alarme comum — e um aviso de «começa em 10 minutos» que chega às 21h05 não é atrasado, é lixo |
+| queda pra alarme inexato | o Android 12+ pode negar o exato; alguns minutos de folga ainda servem, um app que fecha na cara de alguém não |
+| permissão conferida **no receptor** | entre marcar o lembrete e a hora dele a pessoa pode ter desligado as notificações, e postar sem permissão é exceção dentro de um `BroadcastReceiver` — ou seja, processo derrubado |
+
+⚠️ **Não conferido no aparelho.** Compila, passa no lint e nos 164 testes, mas um
+aviso que depende de quinze minutos de trabalho periódico, de um alarme e de um
+lembrete marcado na TV não se prova numa captura de tela. E o lembrete em si
+continua sem confirmação (§19.7) — se ele não estiver marcando, este aviso não tem
+o que anunciar.
+
+A ordem de conferência é: marcar um lembrete na TV, ver a estrela ficar; depois
+esperar o programa se aproximar com o celular no bolso.

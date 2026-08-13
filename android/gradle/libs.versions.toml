@@ -80,6 +80,15 @@ serialization = "1.11.0"
 # também aceita a instância compartilhada — é a terceira coisa a usar a mesma.
 coil = "3.5.0"
 
+# O agendador do lembrete de ao vivo.
+#
+# ⚠️ Ele entra porque a pergunta «o programa que você marcou começa em 10 minutos»
+# só pode ser respondida com o app **fechado** — e nenhuma das peças que esta casa
+# já tinha faz isso. O `AlarmManager` sozinho agendaria, mas alguém precisa
+# **descobrir** os lembretes novos: eles são marcados na TV, e o celular não fica
+# sabendo. Um trabalho periódico é a única forma de o celular perguntar.
+work = "2.10.0"
+
 # Extrai as cores vivas da capa, pra lombada da caixa 3D — decisão do dono em
 # 06/08/2026: «A opção C, pode adicionar a dependência». Medida em 06/08/2026:
 # a última é 1.1.0-alpha01, e a estável é esta — alpha por causa de duas cores
@@ -186,6 +195,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 # O BOM alinha as versões de todo artefato do Compose entre si. Com ele, as
 # linhas de `compose-*` abaixo vão sem versão de propósito — duas versões de

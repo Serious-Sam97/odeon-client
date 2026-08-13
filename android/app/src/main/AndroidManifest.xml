@@ -201,6 +201,15 @@
         <!-- O widget de "continuar assistindo" — R9.
              `exported="false"`: quem manda a difusão de atualização é o próprio
              sistema, e nenhum outro app tem o que fazer com ela. -->
+        <!--
+          O aviso do lembrete de ao vivo. `exported="false"` porque quem o
+          dispara é o alarme deste mesmo app — ninguém de fora tem o que dizer
+          aqui, e um receptor exportado seria uma porta aberta por descuido.
+        -->
+        <receiver
+            android:name=".aovivo.ReceptorDoLembrete"
+            android:exported="false" />
+
         <receiver
             android:name=".widget.ReceptorDoWidget"
             android:exported="false">

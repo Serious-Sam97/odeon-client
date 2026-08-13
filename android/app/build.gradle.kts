@@ -165,6 +165,8 @@ dependencies {
     /// O `datasource-okhttp` é o que amarra o player **na mesma instância de
     /// OkHttp** do Retrofit e do Coil. Sem ele o player abre pool próprio, e o
     /// token de mídia passa a ter duas contabilidades — que é onde o §43 morde.
+    /// O agendador do lembrete de ao vivo — ver o comentário em `libs.versions.toml`.
+    implementation(libs.androidx.work.runtime)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
 

@@ -28,6 +28,15 @@ class OdeonApp : Application(), SingletonImageLoader.Factory {
     val cofre: Cofre by lazy { Cofre(this) }
     val odeon: RepositorioOdeon by lazy { RepositorioOdeon(cofre) }
 
+    /// ⚠️ Ligado na criação do app e **não numa tela**: o lembrete é marcado na
+    /// TV, e o celular precisa estar perguntando mesmo que ninguém abra a tela do
+    /// ao vivo aqui — que, aliás, ainda não existe neste aparelho. Um trabalho
+    /// preso a uma tela nunca rodaria pra quem só usa o celular pra assistir.
+    override fun onCreate() {
+        super.onCreate()
+        dev.odeon.android.aovivo.ligarOsLembretes(this)
+    }
+
     /// O barramento — **uma conexão pro app inteiro** (§62).
     ///
     /// Aqui pelo mesmo motivo do OkHttp e do cofre: uma conexão por tela seriam

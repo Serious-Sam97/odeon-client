@@ -99,13 +99,34 @@ fun TelaDoCanalAoVivoDaTv(
     /// Uma sessão serve pra continuar tocando com o app no fundo e pra os
     /// controles do sistema — coisas que fazem sentido num filme. Num canal, sair
     /// da tela é desligar a TV do canal, e é isso que o `release` faz.
+    val cabecalhos = remember { modelo.cabecalhos() }
     val player = remember(url) {
         url?.let {
-            ExoPlayer.Builder(contexto).build().apply {
-                setMediaItem(MediaItem.fromUri(it))
-                playWhenReady = true
-                prepare()
-            }
+            /// ⚠️ **O `Bearer` vai na fonte de dados, não na URL.**
+            ///
+            /// A regra está escrita na web (`hls.ts`) e custou um 401 aqui pra
+            /// ser lembrada: o `ffmpeg` escreve os segmentos com nome relativo
+            /// (`seg00000.ts`), e resolução relativa **descarta a query string**.
+            /// Com o token só na URL, a playlist até carrega e o primeiro
+            /// segmento vai nu.
+            ///
+            /// `setDefaultRequestProperties` vale pra todo pedido desta fonte —
+            /// playlist e segmento —, que é exatamente o papel do `xhrSetup` do
+            /// hls.js do outro lado.
+            val fonte = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setDefaultRequestProperties(cabecalhos)
+                .setAllowCrossProtocolRedirects(true)
+
+            ExoPlayer.Builder(contexto)
+                .setMediaSourceFactory(
+                    androidx.media3.exoplayer.source.DefaultMediaSourceFactory(fonte),
+                )
+                .build()
+                .apply {
+                    setMediaItem(MediaItem.fromUri(it))
+                    playWhenReady = true
+                    prepare()
+                }
         }
     }
     DisposableEffect(player) {

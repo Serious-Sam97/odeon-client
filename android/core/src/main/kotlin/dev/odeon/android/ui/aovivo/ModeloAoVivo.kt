@@ -139,6 +139,9 @@ class ModeloAoVivo(private val odeon: RepositorioOdeon) : ViewModel() {
     /// dois de uma vez — é a mesma que o player de filme usa.
     fun playlist(caminho: String?): String? = odeon.urlDeMidia(caminho)
 
+    /// Ver `RepositorioOdeon.cabecalhosDeMidia` — sem eles o segmento volta 401.
+    fun cabecalhos(): Map<String, String> = odeon.cabecalhosDeMidia()
+
     private fun primeiroNoAr(canais: List<CanalNoAr>, doOdeon: GradeDoOdeon?): String? =
         canais.firstOrNull { it.titulo != null }?.id
             ?: canais.firstOrNull()?.id

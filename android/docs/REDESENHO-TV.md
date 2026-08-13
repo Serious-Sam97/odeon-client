@@ -2116,7 +2116,7 @@ arquivo local**, e ele foi procurar no cartão de memória.
 A `urlDeMidia` do `:core` resolve base e token de uma vez, e é a mesma que o
 player de filme usa pra sua própria playlist (`ModeloDoPlayer:814`).
 
-### 15.4 ⚠️ E aí veio 401 — pendência, não conclusão
+### 15.4 O 401, e a resposta escrita na própria web
 
 Com a URL absoluta o pedido chega ao servidor e volta:
 
@@ -2124,16 +2124,39 @@ Com a URL absoluta o pedido chega ao servidor e volta:
 HttpDataSource$InvalidResponseCodeException: Response code: 401
 ```
 
-O formato está certo — é HTTP, é o host da casa, e leva o mesmo token que o
-player de filme leva. O que não sei é **por que esta rota não o aceita**. Pode
-ser escopo de token, pode ser que `/api/hls/<sessão>` de canal autentique
-diferente de `/api/hls/<sessão>` de filme. É pergunta pro servidor, não pro app,
-e fica registrada como pergunta.
+Eu tinha registrado isto como pergunta pro servidor. Estava errado: a resposta já
+estava escrita nesta casa, no `web/src/hls.ts`, num comentário que alguém deixou
+depois de pagar o mesmo defeito no navegador.
 
-⚠️ **Possível parentesco, e é hipótese:** o `o servidor não entregou o arquivo`
-da foto do dono é da mesma família (4xx numa mídia). Não afirmo ligação — só
-anoto que valeria olhar as duas juntas.
+> **O token vai por header, não por query.** O `?token=` da URL da playlist NÃO
+> chega nos segmentos: o ffmpeg escreve os nomes de forma relativa
+> (`seg00000.ts`), e resolução relativa descarta a query string. O segmento saía
+> sem credencial, o servidor devolvia 401 (…). O `xhrSetup` vale pra todo pedido,
+> então o header resolve playlist e segmento de uma vez.
 
-**O que está feito e conferido:** a dependência, a tela, o caminho da sintonia
-até a playlist, a URL absoluta com token, e as duas telas de falha. O que falta é
-uma resposta 200.
+A web manda **os dois**: token de mídia na query e `Authorization: Bearer` da
+sessão em cada pedido do hls.js. O ExoPlayer estava mandando só o primeiro.
+
+⚠️ O equivalente do `xhrSetup` aqui é
+`DefaultHttpDataSource.Factory().setDefaultRequestProperties(...)`: ele vale pra
+todo pedido daquela fonte, playlist e segmento.
+
+⚠️ **A lição não é sobre HLS.** A resposta estava a um `grep` de distância, num
+comentário escrito por quem já tinha errado isso antes. Eu preferi declarar
+pendência a procurar. O projeto inteiro é construído sobre a ideia de que o
+comentário registra o porquê — e o registro só vale se alguém for ler.
+
+**Conferido na TCL:** o `Sessão Seriado` — canal de M3U externo, via ErsatzTV —
+tocando com imagem, a tarja `NO AR`, o nome do canal e a dica de sair.
+
+### 15.5 Uma pergunta que fica
+
+⚠️ O player de **filme** monta a URL de HLS pela mesma `urlDeMidia` (query
+token) e não declara cabeçalho nenhum (`ModeloDoPlayer:814`). Se o argumento do
+`hls.ts` vale igual lá — e não há por que não valer, é o mesmo `ffmpeg` —, então
+filme em transcodificação falha no primeiro segmento pelo mesmo motivo, e ninguém
+notou porque nesta casa quase tudo toca **direto**.
+
+Não mexi: o player de filme monta o `ExoPlayer` por outro caminho (sessão de
+mídia), e trocar a fonte dele sem ter um caso que reproduza seria consertar no
+escuro. Fica anotado como o próximo lugar a olhar.

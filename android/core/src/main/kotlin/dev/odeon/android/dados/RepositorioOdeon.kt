@@ -451,6 +451,28 @@ class RepositorioOdeon(private val cofre: Cofre) {
         return "$completa${separador}token=$token"
     }
 
+    /// Os cabeçalhos que **o ExoPlayer** precisa mandar pra baixar mídia.
+    ///
+    /// ## ⚠️ O `?token=` da URL não chega nos segmentos
+    ///
+    /// A regra está escrita na web, no `hls.ts`, e vale igual aqui: o `ffmpeg`
+    /// escreve os nomes dos segmentos de forma **relativa** (`seg00000.ts`), e
+    /// resolução relativa descarta a query string. A playlist até pode ir com
+    /// `?token=`; o primeiro segmento vai sem credencial nenhuma, e o servidor
+    /// responde 401.
+    ///
+    /// O `Bearer` da sessão vale pra todo pedido do mesmo `DataSource` —
+    /// playlist e segmento —, então ele resolve os dois de uma vez. É o que o
+    /// `xhrSetup` do hls.js faz na web.
+    ///
+    /// ⚠️ Devolve mapa vazio sem sessão, e não um cabeçalho com string vazia:
+    /// `Authorization: Bearer ` é um cabeçalho **inválido**, e alguns servidores
+    /// respondem 400 em vez do 401 que diria a verdade.
+    fun cabecalhosDeMidia(): Map<String, String> {
+        val sessao = cofre.sessaoEmMemoria ?: return emptyMap()
+        return mapOf("Authorization" to "Bearer $sessao")
+    }
+
     private fun String.ensurePrefix(): String = if (startsWith("/")) this else "/$this"
 
     /// Garante que existe token de mídia — **sem pedir um novo se já houver**.

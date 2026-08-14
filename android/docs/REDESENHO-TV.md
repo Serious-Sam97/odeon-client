@@ -3130,3 +3130,50 @@ direita — e a tela ficou equilibrada de propósito, não por acaso.
 com `Arrangement.Center` e três itens simétricos põe o do meio no eixo por
 definição de layout. O que a foto acrescentaria é a confirmação de que os cantos
 não brigam com nada — e isso vale conferir.
+
+E foi conferido: na foto do 007 pausado, o disco está no eixo da tela, o `sair`
+numa quina e o `legendas` na outra, sem encostar no `faltam 2:06:36`.
+
+## 24. O menu de faixas virou modal, e as duas escolhas passaram a morar juntas
+
+«O botão de legenda abre a opção lá em cima, wtf. O ideal é abrir uma modal na
+tela pra pessoa escolher, mesmo com escolha de áudio nos casos de dual áudio.»
+
+O menu era desenhado **dentro da coluna do cromo**, acima da fileira de
+transporte. Não era um descuido de espaçamento: era o lugar errado. Escolher
+legenda **para o filme** — a pessoa deixa de assistir e vai mexer numa
+preferência —, e uma tirinha encostada na borda de baixo trata isso como se fosse
+mais um botão do transporte.
+
+### O que mudou
+
+1. **Modal centrada, com véu.** Última camada do `Box` raiz — desenhada por cima
+   do cromo, e não dentro dele. ⚠️ A ordem importa: enquanto ela morava antes do
+   bloco das quinas, os botões de canto eram desenhados **por cima do véu**.
+2. **Os dois assuntos na mesma modal.** `LEGENDAS` e `ÁUDIO` lado a lado, e a
+   coluna de áudio só aparece quando há mais de uma faixa — cabeçalho sem
+   alternativa é pergunta sem resposta, que é o §24.
+3. **Um botão só no canto**, com rótulo conforme o que existe: `legendas e
+   áudio`, `legendas` ou `áudio`. Dois botões que abrem a mesma modal fariam a
+   pessoa escolher antes de escolher, e diriam — por existirem separados — que a
+   outra escolha está noutro lugar.
+4. **O foco entra e não sai.** `focusGroup` + `exit = FocusRequester.Cancel`, e o
+   primeiro item pede o foco. Sem isso o ▼ mexeria no play atrás do véu. A saída
+   é o ◀, pela cadeia única do player (`menuDeFaixas → aberto → sair`) — ⚠️ a
+   modal **não** tem `BackHandler` próprio de propósito: um segundo venceria o de
+   lá por ser composto depois, e passaria a haver dois lugares decidindo o mesmo.
+5. **A marca `✓` ocupa lugar sempre**, escolhida ou não, senão as linhas não
+   marcadas andam pra esquerda e a coluna desalinha.
+
+### Visto na TCL
+
+007, pausado: o `legendas` do canto abre a modal centrada, o foco já entra em
+«✓ sem legenda», ▼▼ chega em `pt-BR`, `OK` fecha a modal e a legenda aparece na
+tela — «Royal Beluga … do Cáspio».
+
+⚠️ **A coluna de áudio não foi vista**: este filme tem uma faixa só. O caminho de
+dual áudio está escrito e compila, mas não foi fotografado.
+
+⚠️ E a foto mostrou de brinde um defeito **antigo**, que não é desta mudança: com
+o cromo aberto, a legenda do filme fica **atrás do botão de play** — ela é
+desenhada pelo `PlayerView`, que não sabe que há cromo em cima.

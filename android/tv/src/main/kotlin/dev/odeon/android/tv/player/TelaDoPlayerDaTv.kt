@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -82,6 +83,7 @@ import dev.odeon.android.ui.player.BotaoDeTocar
 import androidx.compose.runtime.mutableIntStateOf
 import dev.odeon.android.tv.ui.Focavel
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.heightIn
 import dev.odeon.android.tv.ui.TipoDaSala
 import androidx.compose.ui.focus.onFocusChanged
@@ -326,7 +328,7 @@ private fun Cromo(
     val foco = remember { FocusRequester() }
 
     var aberto by remember { mutableStateOf(true) }
-    var menuDeFaixas by remember { mutableStateOf<TipoDeMenu?>(null) }
+    var menuDeFaixas by remember { mutableStateOf(false) }
     var legendaEscolhida by remember { mutableStateOf<String?>(null) }
     var posicao by remember { mutableLongStateOf(0L) }
     var duracao by remember { mutableLongStateOf(0L) }
@@ -391,7 +393,7 @@ private fun Cromo(
     /// ⚠️ `alvoDaViagem` entra na conta: o cromo apagando no meio de uma viagem
     /// levaria embora a própria película que se está navegando.
     LaunchedEffect(aberto, tocando, menuDeFaixas, alvoDaViagem) {
-        if (aberto && tocando && menuDeFaixas == null && alvoDaViagem == null) {
+        if (aberto && tocando && !menuDeFaixas && alvoDaViagem == null) {
             delay(4_000)
             aberto = false
         }
@@ -471,7 +473,7 @@ private fun Cromo(
 
     BackHandler(enabled = true) {
         when {
-            menuDeFaixas != null -> menuDeFaixas = null
+            menuDeFaixas -> menuDeFaixas = false
             aberto -> aberto = false
             else -> aoSair()
         }
@@ -618,23 +620,6 @@ private fun Cromo(
                     )
                     .padding(horizontal = Sala.overscanH, vertical = Sala.overscanV),
             ) {
-                if (menuDeFaixas != null) {
-                    MenuDeFaixasDaSala(
-                        tipo = menuDeFaixas!!,
-                        estado = estado,
-                        legendaEscolhida = legendaEscolhida,
-                        aoEscolherLegenda = { rotulo ->
-                            legendaEscolhida = rotulo
-                            escolherLegenda(player, rotulo)
-                            menuDeFaixas = null
-                        },
-                        aoEscolherAudio = { indice ->
-                            modelo.trocarFaixaDeAudio(indice, posicao)
-                            menuDeFaixas = null
-                        },
-                    )
-                    Spacer(Modifier.height(20.dp))
-                }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     /// ## ⚠️ O plano virou um **ponto**, e não é economia de espaço
@@ -884,18 +869,32 @@ private fun Cromo(
         /// duas quinas de baixo estão ocupadas, e a tela ficou equilibrada de
         /// propósito e não por acaso.
         if (aberto && (estado.legendas.isNotEmpty() || estado.faixasDeAudio.size > 1)) {
+            /// ⚠️ **Um botão só**, e o rótulo diz o que há.
+            ///
+            /// Eram dois, um por assunto, porque cada um abria a sua listinha.
+            /// Agora os dois abrem a mesma modal — e dois botões que fazem a
+            /// mesma coisa fazem a pessoa escolher antes de escolher, além de
+            /// dizerem, por existirem separados, que a outra escolha está noutro
+            /// lugar. Justamente o que o dono não quis.
+            ///
+            /// O rótulo não é fixo porque a tela não é sempre a mesma: num
+            /// filme dublado sem legenda, «legendas» seria mentira, e `cc` seria
+            /// mentira e sigla.
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(horizontal = Sala.overscanH, vertical = Sala.overscanV),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (estado.legendas.isNotEmpty()) {
-                    BotaoDaSala("cc", { menuDeFaixas = TipoDeMenu.LEGENDA })
-                }
-                if (estado.faixasDeAudio.size > 1) {
-                    BotaoDaSala("áudio", { menuDeFaixas = TipoDeMenu.AUDIO })
-                }
+                val temLegenda = estado.legendas.isNotEmpty()
+                val temAudio = estado.faixasDeAudio.size > 1
+                BotaoDaSala(
+                    when {
+                        temLegenda && temAudio -> "legendas e áudio"
+                        temLegenda -> "legendas"
+                        else -> "áudio"
+                    },
+                    { menuDeFaixas = true },
+                )
             }
         }
 
@@ -914,10 +913,41 @@ private fun Cromo(
                 naSala.values.forEach { quem -> Pilula("${quem.nome} está aqui") }
             }
         }
+
+        /// ## ⚠️ O menu de faixas virou **modal no meio da tela**
+        ///
+        /// Ele era desenhado **dentro da coluna do cromo**, acima da fileira de
+        /// transporte — e o resultado, na foto do dono, foi uma listinha espremida
+        /// na quina inferior esquerda, por cima do filme. «Abre a opção lá em
+        /// cima, wtf.»
+        ///
+        /// Escolher legenda é uma decisão que **para o filme**: a pessoa deixa de
+        /// assistir e vai mexer numa preferência. Uma tira de opções encostada na
+        /// borda trata isso como se fosse mais um botão do transporte. Uma modal
+        /// centrada trata como o que é — uma pausa deliberada.
+        ///
+        /// ⚠️ E as duas escolhas moram **juntas**, como o dono pediu: «mesmo com
+        /// escolha de áudio nos casos de dual áudio». Quem abre pra trocar a
+        /// legenda de um filme dublado quase sempre quer mexer no áudio também, e
+        /// obrigar a fechar e reabrir por outro botão é fazer a pessoa pagar duas
+        /// vezes pela mesma pausa.
+        if (menuDeFaixas) {
+            MenuDeFaixasDaSala(
+                estado = estado,
+                legendaEscolhida = legendaEscolhida,
+                aoEscolherLegenda = { rotulo ->
+                    legendaEscolhida = rotulo
+                    escolherLegenda(player, rotulo)
+                    menuDeFaixas = false
+                },
+                aoEscolherAudio = { indice ->
+                    modelo.trocarFaixaDeAudio(indice, posicao)
+                    menuDeFaixas = false
+                },
+            )
+        }
     }
 }
-
-private enum class TipoDeMenu { LEGENDA, AUDIO }
 
 /// O menu de faixas, deitado.
 ///
@@ -926,60 +956,117 @@ private enum class TipoDeMenu { LEGENDA, AUDIO }
 /// era inalcançável. Aqui ele é uma **fileira**, e o problema não se repete:
 /// numa `LazyRow` a décima sexta faixa está a quinze setas de distância, mas
 /// está alcançável, e o foco a traz pra tela sozinho.
+/// ⚠️ `exit` do `focusProperties` ainda é experimental no Compose, e por isso a
+/// anotação — que aqui é declaração, não silêncio. É a única forma de dizer «o
+/// foco não sai daqui pelas setas»; imitá-la à mão significaria interceptar as
+/// quatro direções e adivinhar quando já se está na borda, que é o mesmo bug
+/// escrito por nós em vez de pela biblioteca.
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun MenuDeFaixasDaSala(
-    tipo: TipoDeMenu,
     estado: dev.odeon.android.ui.player.EstadoDoPlayer,
     legendaEscolhida: String?,
     aoEscolherLegenda: (String?) -> Unit,
     aoEscolherAudio: (Int) -> Unit,
 ) {
-    Column {
-        Text(
-            text = if (tipo == TipoDeMenu.LEGENDA) "LEGENDAS" else "ÁUDIO",
-            style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
-            color = Cores.destaque,
-        )
-        Spacer(Modifier.height(12.dp))
-        androidx.compose.foundation.lazy.LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    /// ⚠️ Sem `BackHandler` próprio: quem atende o ◀ é a cadeia única do player
+    /// (`menuDeFaixas -> aberto -> sair`). Um segundo aqui venceria o de lá por
+    /// ser composto depois, e passaria a haver dois lugares que decidem o que o
+    /// ◀ faz — o tipo de duplicata que fica certa até alguém mexer num só.
+    ///
+    /// ⚠️ O foco **entra** na modal, e não sai dela pelas setas.
+    ///
+    /// A fileira de transporte continua composta atrás do véu, e continua
+    /// focável. Sem pedir o foco, o ▼ da pessoa moveria o play lá embaixo com a
+    /// modal aberta na cara dela — o controle mexendo numa coisa que ela não
+    /// está olhando. E sem `exit = Cancel`, sair pela borda de baixo cairia de
+    /// volta no transporte em vez de não fazer nada.
+    ///
+    /// A saída é o ◀, que o `BackHandler` acima atende. É a única, e é a que a
+    /// pessoa já usa pra fechar tudo nesta casa.
+    val primeiro = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { primeiro.requestFocus() } }
+
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.82f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .focusGroup()
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .background(Cores.fundoAfundado, RoundedCornerShape(14.dp))
+                .border(1.dp, Cores.destaqueApagado.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                .padding(horizontal = 52.dp, vertical = 40.dp),
+            horizontalArrangement = Arrangement.spacedBy(56.dp),
         ) {
-            if (tipo == TipoDeMenu.LEGENDA) {
-                item {
-                    ItemDeFaixa("sem legenda", legendaEscolhida == null) {
-                        aoEscolherLegenda(null)
-                    }
-                }
-                items(estado.legendas.size) { i ->
-                    val legenda = estado.legendas[i]
+            /// ⚠️ **Uma coluna por assunto**, e o áudio só aparece quando há
+            /// escolha. Um cabeçalho «ÁUDIO» com uma faixa só embaixo é uma
+            /// pergunta que não tem resposta alternativa — o §24 aplicado a um
+            /// menu.
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "LEGENDAS",
+                    style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
+                    color = Cores.destaque,
+                )
+                Spacer(Modifier.height(10.dp))
+                ItemDeFaixa(
+                    rotulo = "sem legenda",
+                    escolhido = legendaEscolhida == null,
+                    modifier = Modifier.focusRequester(primeiro),
+                ) { aoEscolherLegenda(null) }
+                estado.legendas.forEach { legenda ->
                     ItemDeFaixa(legenda.rotulo, legendaEscolhida == legenda.rotulo) {
                         aoEscolherLegenda(legenda.rotulo)
                     }
                 }
-            } else {
-                items(estado.faixasDeAudio.size) { i ->
-                    val faixa = estado.faixasDeAudio[i]
-                    /// ⚠️ O rótulo sai do `rotuloDaFaixa` do `:core` — o mesmo do
-                    /// celular. Ele é quem sabe que `und` conta como ausente, e
-                    /// escrevê-lo de novo aqui seria a quarta redação da frase.
-                    ItemDeFaixa(
-                        rotulo = rotuloDaFaixa(faixa),
-                        escolhido = estado.faixaDeAudioEmUso == faixa.index,
-                    ) { aoEscolherAudio(faixa.index) }
+            }
+
+            if (estado.faixasDeAudio.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ÁUDIO",
+                        style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
+                        color = Cores.destaque,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    estado.faixasDeAudio.forEach { faixa ->
+                        /// ⚠️ O rótulo sai do `rotuloDaFaixa` do `:core` — o mesmo
+                        /// do celular. Ele é quem sabe que `und` conta como
+                        /// ausente, e escrevê-lo de novo aqui seria a quarta
+                        /// redação da frase.
+                        ///
+                        /// ⚠️ E a escolha vai por `faixa.index`, **não** pela
+                        /// posição na lista: o índice é o da faixa dentro do
+                        /// arquivo, e a lista pode não estar na mesma ordem.
+                        ItemDeFaixa(
+                            rotulo = rotuloDaFaixa(faixa),
+                            escolhido = estado.faixaDeAudioEmUso == faixa.index,
+                        ) { aoEscolherAudio(faixa.index) }
+                    }
                 }
             }
         }
     }
 }
 
+
 @Composable
-private fun ItemDeFaixa(rotulo: String, escolhido: Boolean, aoEscolher: () -> Unit) {
+private fun ItemDeFaixa(
+    rotulo: String,
+    escolhido: Boolean,
+    modifier: Modifier = Modifier,
+    aoEscolher: () -> Unit,
+) {
     dev.odeon.android.tv.ui.Focavel(
         aoEscolher = aoEscolher,
         forma = RoundedCornerShape(8.dp),
+        modifier = modifier,
     ) { focado ->
-        Box(
+        Row(
             Modifier
+                .width(280.dp)
                 .background(
                     when {
                         focado -> Cores.destaqueQuente
@@ -988,14 +1075,25 @@ private fun ItemDeFaixa(rotulo: String, escolhido: Boolean, aoEscolher: () -> Un
                     },
                     RoundedCornerShape(8.dp),
                 )
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            /// ⚠️ A marca ocupa lugar **sempre**, escolhida ou não. Se ela só
+            /// existisse na linha em uso, todas as outras andariam pra esquerda
+            /// e a coluna ficaria desalinhada — e o olho leria isso como se a
+            /// linha marcada fosse de outro tipo.
+            Text(
+                text = if (escolhido) "✓" else " ",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (focado) Cores.fundoAfundado else Cores.destaque,
+            )
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = rotulo,
                 style = MaterialTheme.typography.labelLarge,
                 color = when {
                     focado -> Cores.fundoAfundado
-                    escolhido -> Cores.destaque
+                    escolhido -> Cores.texto
                     else -> Cores.textoApagado
                 },
             )

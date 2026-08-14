@@ -252,6 +252,37 @@ apertar.
 
 ### Sem TV, e é decisão
 
+> ## ⚠️ Esta seção foi **revertida em 12/08/2026**, e fica inteira
+>
+> O dono pediu um app para uma **TCL com Google TV**, e ele existe: é o módulo
+> `:tv` do projeto `android/`. Ver o `android/README.md`.
+>
+> O texto abaixo continua aqui em vez de ser reescrito porque **ele não errou**.
+> Ele decidiu o alvo da v1 do celular e listou o preço de servir os dois ao mesmo
+> tempo — e esse preço foi pago exatamente onde ele disse que seria: o `:tv` é um
+> módulo separado, com Compose de TV próprio, justamente porque «misturá-lo com
+> Material3 de celular no mesmo módulo é briga constante». A briga é real e tem
+> nome: `Card`, `Button`, `Surface`, `Text` e `MaterialTheme` existem nos dois
+> pacotes, com a mesma assinatura, e errar o import **compila**.
+>
+> A frase que mais valeu é a última do parágrafo do `:core`: «dividir **quando
+> houver alvo** é outra coisa». Ela foi cobrada e pagou. Medido antes de mover,
+> `dados/` e os dez `Modelo*.kt` do `:app` tinham **zero** imports de Compose de
+> UI — a fronteira já existia de fato antes de existir no Gradle. A extração foi
+> um `git mv` e uma linha de dependência, e o `:app` inteiro mudou **duas**
+> linhas.
+>
+> Ou seja: a decisão de 04/08 não atrasou a TV. Ela é o motivo de a TV ter
+> custado uma tarde em vez de uma reescrita.
+>
+> **O que mudou de verdade**, e vale registrar como correção:
+>
+> | escrito em 04/08 | o que se viu em 12/08 |
+> |---|---|
+> | «toda tela nova sairia duas vezes» | ⬅️ **verdade, e é o custo em vigor.** As seis telas da sala são código novo. O que não saiu duas vezes foi o que está debaixo delas |
+> | «`Cast` entra na v1. Sem app de TV, é ele que responde "quero ver isso na sala"» | continua valendo **pro celular**. A TV não tem Cast: mandar pra TV, da TV |
+> | «`minSdk` 26 (…) antes o número estava preso ao aparelho de TV mais velho» | o `:tv` herdou 26 e **sobra** — a Google TV mais velha que recebe atualização está muito acima |
+
 **Decidido: o app é de celular e tablet.** Nada de Android TV, nada de D-pad,
 nada de layout de três metros.
 

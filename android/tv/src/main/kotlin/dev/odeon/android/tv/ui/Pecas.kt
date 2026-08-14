@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -60,10 +61,16 @@ internal fun RotuloDoBotao(rotulo: String, tinta: Color) {
     /// 62sp; escrito assim, ele **responde** ao título em vez de sumir.
     Text(
         text = rotulo.uppercase(),
-        style = TipoDaSala.rotulo.copy(fontSize = 17.sp),
+        /// ⚠️ O espaçamento do rótulo cai pela metade num botão: `0.28em` é ar
+        /// pra um versalete solto, e dentro de uma pílula ele estica a palavra até
+        /// ela expulsar a vizinha da fileira — na TCL o `voltar` sumiu por isso.
+        style = TipoDaSala.rotulo.copy(
+            fontSize = 17.sp,
+            letterSpacing = 0.14.em,
+        ),
         color = tinta,
         maxLines = 1,
-        modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
+        modifier = Modifier.padding(horizontal = 30.dp, vertical = 18.dp),
     )
 }
 

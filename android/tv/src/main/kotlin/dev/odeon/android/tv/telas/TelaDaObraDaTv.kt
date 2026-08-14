@@ -280,8 +280,16 @@ fun TelaDaObraDaTv(
                 text = obra.title,
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = Serifada,
-                    fontSize = 62.sp,
-                    lineHeight = 57.sp,
+                    /// ⚠️ 46sp, e não 62. Com a fita embaixo e a caixa ao lado, a
+                    /// coluna tem ~336dp de altura útil — e 62sp em duas linhas
+                    /// comia um terço dela sozinho. Na TCL o resultado foi «A
+                    /// Centopé…» com a sinopse reduzida a uma linha.
+                    ///
+                    /// Grande não é o que faz um título ser letreiro; **caber
+                    /// inteiro** é. Um nome cortado por reticências não impõe
+                    /// nada.
+                    fontSize = 46.sp,
+                    lineHeight = 46.sp,
                     color = Cores.texto,
                 ),
                 maxLines = 2,
@@ -295,8 +303,10 @@ fun TelaDaObraDaTv(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = Cores.textoApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
@@ -319,58 +329,23 @@ fun TelaDaObraDaTv(
             /// Cinco linhas é o que uma sinopse precisa pra dizer do que é o
             /// filme. O resto é o filme.
             Column {
-            Cascata(1) {
-            Column {
-            obra.overview?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(22.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Cores.texto,
-                    maxLines = 5,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
 
-            if (obra.tags.isNotEmpty()) {
-                Spacer(Modifier.height(20.dp))
-                /// ## ⚠️ `FlowRow`, e o primeiro diagnóstico estava errado
-                ///
-                /// O dono viu «uma pílula sem texto dentro» no fim desta fileira.
-                /// Meu primeiro palpite foi etiqueta com `value` em branco, e eu
-                /// cheguei a filtrar por `isNotBlank()`. **A foto seguinte
-                /// mostrou a pílula vazia no mesmo lugar.**
-                ///
-                /// Ela não é vazia: é a **quinta** etiqueta, cortada pela largura
-                /// da coluna. Esta coluna tem 55% da tela (ver `FRACAO_DO_TEXTO`),
-                /// e uma `Row` não quebra linha — ela transborda e o que passa da
-                /// borda é recortado. Sobrou a borda esquerda da pílula, que lê
-                /// exatamente como um botão sem texto.
-                ///
-                /// ⚠️ O filtro de `isNotBlank` **ficou**, mas rebaixado a rede de
-                /// segurança e não conserto: ele nunca foi o problema, e o
-                /// comentário que dizia que era está corrigido aqui pra não
-                /// mentir pro próximo.
-                ///
-                /// `FlowRow` quebra pra baixo quando não cabe — e agora a coluna
-                /// rola, então a segunda linha de etiquetas não empurra mais os
-                /// botões pra fora da tela. Os dois consertos só funcionam juntos.
-                Text(
-                    text = obra.tags
-                        .filter { it.value.isNotBlank() && it.namespace !in ETIQUETAS_MUDAS }
-                        .take(4)
-                        .joinToString("  ·  ") { it.value }
-                        .uppercase(),
-                    style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
-                    color = Cores.destaqueApagado,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            /// ## ⚠️ Os botões subiram, e sumir foi o que ensinou
+            ///
+            /// Tirando a rolagem, o que passa da altura é **cortado** — e eles
+            /// eram os últimos da coluna. O dono viu na TV: «now the buttons are
+            /// missing». Eu tinha, na mesma rodada, aumentado o título pra 62sp e
+            /// dado mais corpo aos botões: o conteúdo cresceu e o espaço encolheu.
+            ///
+            /// Podia consertar com números — sinopse menor, fita mais fina — e
+            /// seria a quarta vez tratando sintoma. O que a falha ensina é sobre
+            /// **ordem**: numa TV a ação vem antes da leitura. Quem abre uma ficha
+            /// quer assistir; a sinopse é pra quem ainda está decidindo.
+            ///
+            /// Com eles acima da sinopse, o que eventualmente é cortado passa a
+            /// ser o texto — e texto cortado com reticências é uma perda honesta,
+            /// enquanto um botão cortado é uma tela quebrada.
 
-            Spacer(Modifier.height(30.dp))
-            }
-            }
 
             val comecarEm = ondeContinuar(obra.ondeParou, obra.duracaoEmSegundos, obra.finished)
             /// ⚠️ `FlowRow` aqui pelo **mesmo** motivo das etiquetas, e o
@@ -435,6 +410,62 @@ fun TelaDaObraDaTv(
                 }
 
                 BotaoDaSala("voltar", aoVoltar)
+            }
+
+            Cascata(1) {
+            Column {
+            obra.overview?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(22.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Cores.texto,
+                    /// ⚠️ Quatro linhas, e não cinco. Com os botões acima dela a
+                    /// sinopse é a última a caber, e quatro linhas ainda dizem do
+                    /// que é o filme — que é tudo o que ela promete.
+                    maxLines = 4,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+
+            if (obra.tags.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                /// ## ⚠️ `FlowRow`, e o primeiro diagnóstico estava errado
+                ///
+                /// O dono viu «uma pílula sem texto dentro» no fim desta fileira.
+                /// Meu primeiro palpite foi etiqueta com `value` em branco, e eu
+                /// cheguei a filtrar por `isNotBlank()`. **A foto seguinte
+                /// mostrou a pílula vazia no mesmo lugar.**
+                ///
+                /// Ela não é vazia: é a **quinta** etiqueta, cortada pela largura
+                /// da coluna. Esta coluna tem 55% da tela (ver `FRACAO_DO_TEXTO`),
+                /// e uma `Row` não quebra linha — ela transborda e o que passa da
+                /// borda é recortado. Sobrou a borda esquerda da pílula, que lê
+                /// exatamente como um botão sem texto.
+                ///
+                /// ⚠️ O filtro de `isNotBlank` **ficou**, mas rebaixado a rede de
+                /// segurança e não conserto: ele nunca foi o problema, e o
+                /// comentário que dizia que era está corrigido aqui pra não
+                /// mentir pro próximo.
+                ///
+                /// `FlowRow` quebra pra baixo quando não cabe — e agora a coluna
+                /// rola, então a segunda linha de etiquetas não empurra mais os
+                /// botões pra fora da tela. Os dois consertos só funcionam juntos.
+                Text(
+                    text = obra.tags
+                        .filter { it.value.isNotBlank() && it.namespace !in ETIQUETAS_MUDAS }
+                        .take(4)
+                        .joinToString("  ·  ") { it.value }
+                        .uppercase(),
+                    style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
+                    color = Cores.destaqueApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            }
             }
 
             /// ## ⚠️ As cenas subiram, e é o conserto do relato
@@ -554,7 +585,7 @@ fun TelaDaObraDaTv(
                             items(estado.cenas.take(8)) { cena ->
                                 Box(
                                     Modifier
-                                        .size(width = 168.dp, height = 94.dp)
+                                        .size(width = 148.dp, height = 83.dp)
                                         .background(Cores.fundoAfundado),
                                 ) {
                                     AsyncImage(
@@ -689,7 +720,7 @@ private fun Cascata(
 ///
 /// A fita perdeu 22dp de quadro e ganhou o resto da tela de volta. Ela continua
 /// atravessando; o que ela não faz mais é empurrar o título pra fora.
-private val ALTURA_DA_FITA = 150.dp
+private val ALTURA_DA_FITA = 132.dp
 
 /// A caixa da ficha. 210dp é o que sobra pro texto ainda ter coluna de leitura
 /// depois dela — e é grande o bastante pra lombada ser legível a três metros,

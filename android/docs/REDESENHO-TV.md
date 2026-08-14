@@ -2972,3 +2972,38 @@ não se vê não é secundário, é ausente.
 `OK` parou de registrar na última tentativa. O portão passou — 164 testes, lint
 limpo nos quatro —, e cada mudança responde a uma causa nomeada. Mas é a quarta
 vez nesta doc que isso precisa ser dito: **passar no portão não é ter visto.**
+
+### 22.11 Os botões sumiram, e sumir ensinou a ordem certa
+
+«Now the buttons are missing.» Regressão minha, e a causa é direta: **tirei a
+rolagem e o conteúdo cresceu** — na mesma rodada o título foi pra 62sp e os botões
+ganharam corpo. Sem rolagem, o que passa da altura é cortado, e eles eram os
+últimos da coluna.
+
+⚠️ Dava pra consertar com números — sinopse menor, fita mais fina — e seria a
+quarta vez tratando sintoma. O que a falha ensina é sobre **ordem**: numa TV a
+ação vem antes da leitura. Quem abre uma ficha quer assistir; a sinopse é pra quem
+ainda está decidindo.
+
+Com os botões acima da sinopse, o que eventualmente é cortado passa a ser o texto
+— e **texto cortado com reticências é uma perda honesta, enquanto botão cortado é
+uma tela quebrada**.
+
+#### E a foto seguinte cobrou mais dois
+
+`ASSISTIR` voltou. Mas o título saiu como `A Centopé…`, a sinopse encolheu a uma
+linha, e o `voltar` não apareceu.
+
+- **62sp era grande demais.** A coluna tem ~336dp de altura útil com a fita
+  embaixo, e o título em duas linhas comia um terço dela sozinho. Foi pra 46sp:
+  grande não é o que faz um título ser letreiro, **caber inteiro** é. Um nome
+  cortado por reticências não impõe nada.
+- **O `0.28em` do versalete expulsou o segundo botão.** Aquele espaçamento é ar
+  pra um rótulo solto; dentro de uma pílula ele estica a palavra até ela tomar a
+  fileira. Caiu pra `0.14em`, e a folga de `40dp` pra `30dp`.
+- E a fita cedeu mais 18dp, que voltaram pra coluna.
+
+⚠️ **A última rodada não foi fotografada** — o `adb` me levou ao guia. O que está
+**visto** é a foto que mostrou o `ASSISTIR` de volta e os três defeitos acima; o
+que corrige esses três é código que responde a causas medidas naquela foto, mas
+não é foto.

@@ -3470,3 +3470,54 @@ escolhida**, em vez de todas.
 ⚠️ E falta uma bancada honesta: hoje cada medida custa uma navegação de controle
 que erra de tela metade das vezes, e o filme sempre começa com um salto. Sem
 repetibilidade, qualquer conserto daqui pra frente é chute com número do lado.
+
+### 26.8 O `ffprobe` do servidor derruba a última hipótese — e mostra a assimetria de verdade
+
+| | pt-BR (roda liso) | inglês (trava) |
+|---|---|---|
+| contêiner | **matroska** | **mov/mp4** |
+| codec / profile / level | h264 / High / 4.1 | h264 / High / 4.1 |
+| pix_fmt · resolução | yuv420p · 1920×818 | yuv420p · 1920×816 |
+| field_order | progressive | progressive |
+| `r_frame_rate` / `avg` | **24000/1001, CFR** | **24000/1001, CFR** |
+| bitrate | 2.458.828 | 2.278.413 |
+| **áudio** | **ac3, 6 ch, 448 kbps** | **aac, 2 ch, 121 kbps** |
+| encoder | libebml/libmatroska | Lavf58.9.100 |
+
+⚠️ **Os dois são 23,976 CFR e progressivos.** Não existe 12 em lugar nenhum, não
+existe VFR e não existe entrelaçamento. A leitura do §26.5 morre aqui de vez, e
+com dado de fora — não só com a minha medição do §26.7.
+
+⚠️ E o servidor acrescentou uma correção metodológica que vale guardar: **o
+`refs` do `ffprobe` é inútil** neste acervo. Ele devolve `1` nos 9.561 arquivos
+H.264 — é o padrão do decodificador, não o que está no arquivo. Pra saber de
+verdade é preciso ler o SPS com `trace_headers`.
+
+### A assimetria que ninguém tinha visto
+
+O arquivo que **roda liso é o de áudio AC3**. E esta TV, pelo
+`MediaCodecList(REGULAR_CODECS)`, **não declara ac3** — está anotado desde antes
+no `ModeloDoPlayer`: «conferido no log: `a=aac,mp3,opus,vorbis,flac`, sem ac3
+sempre». O `dumpsys media.player` mostra que o `c2.mtk.ac3.decoder` **existe** no
+aparelho; ele só não aparece na lista «regular».
+
+Logo:
+
+| arquivo | áudio | o que o servidor faz | como toca |
+|---|---|---|---|
+| pt-BR | ac3 — **não declarado** | **transcodifica** | liso |
+| inglês | aac — declarado | **direto** | trava |
+
+⚠️ **O que parecia «alguns arquivos são ruins» é outra coisa**: os arquivos que
+parecem bons são os que nós, por acidente, **mandamos o servidor transcodificar**.
+O defeito mora no caminho **direto**.
+
+⚠️ Isso ainda **não fecha**: o Star Wars III é `direto` no selo e não descarta
+(0,00/s). Então «direto» não basta como explicação — falta saber o que o
+007 em inglês tem que o Star Wars não tem. O contêiner é o candidato óbvio
+(**mp4 contra mkv**), e é a próxima pergunta.
+
+⚠️ E há um segundo defeito de brinde, independente deste: **declaramos menos do
+que o aparelho sabe fazer**, e por isso pedimos transcodificação de AC3 sem
+precisar — ffmpeg vivo no servidor por nada. Não mexer nisso antes de entender o
+primeiro, senão o conserto de um esconde o outro.

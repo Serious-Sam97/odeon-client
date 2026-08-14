@@ -3225,3 +3225,74 @@ resultados e o primeiro cartaz recebe o foco.
 ⚠️ **Não conferido**: abrir uma obra a partir do resultado, e o que acontece ao
 voltar dela. E `007: A Serviço Secreto de Sua Majestade` aparece **duas vezes**
 no resultado — é duplicata no acervo, não da busca, mas fica anotado.
+
+## 26. Investigação: o «lagadinho» de alguns filmes na TV
+
+«Alguns filmes, tipo Star Wars: Episódio III, rodam sem lag algum no Android e
+na web, mas na TV fica meio lagadinho estranho. Só alguns.»
+
+Nada foi consertado aqui — isto é o **registro do que foi medido**, incluindo a
+teoria que morreu no meio do caminho.
+
+### O que o aparelho é
+
+| | |
+|---|---|
+| painel | 3840×2160, **um modo só: 60,000004 Hz**, `alternativeRefreshRates=[]` |
+| rede | 5 GHz, RSSI −55, link 780 Mbps |
+| decodificador | `c2.mtk.avc.decoder` (MediaTek mt5896), por hardware |
+
+⚠️ **Um modo só** é o fato que manda em tudo o que vem abaixo: não existe 24 Hz,
+48 Hz nem 120 Hz pra o Android trocar. A TV nem oferece o ajuste «match content
+frame rate» — `settings get secure match_content_frame_rate` devolve `null`.
+
+### O que o player faz (Star Wars III, 75 s)
+
+Plano **direto**, sem transcodificação. Vídeo 1920×816, H.264, BT.709 SDR.
+
+- decodificador entregando **24–25 quadros/s**, sustentado
+- **1 quadro descartado** em 75 s, no arranque
+- fora do arranque, nenhum `Slow dispatch`, nenhum `underrun`, nenhum rebuffer
+- ~7 Mbps de rede consumidos, num link de 780
+
+Ou seja: **não é o app engasgando, não é a rede, não é o decodificador.**
+
+### A cadência na tela, que é onde o defeito mora
+
+Pelos carimbos de apresentação do `SurfaceFlinger`, os quadros alternam entre
+**2 e 3 vsyncs** — 33 ms, 50 ms, 33 ms, 50 ms. É **pulldown 3:2**, o mesmo que
+uma TV faz com filme desde sempre: 23,976 quadros por segundo não cabem inteiros
+num painel de 60 Hz.
+
+E há mais: 60 ÷ 23,976 = 2,5025 vsyncs por quadro. Os 0,0025 se acumulam, e a
+cada **~17 segundos** um quadro é segurado um vsync a mais. Medido em janela
+longa (1.300 quadros, ~55 s): a escorregada aparece 3 a 7 vezes, conforme ela
+saia como um `4` ou como dois `3` seguidos. É o soluço periódico.
+
+### ⚠️ A teoria que morreu
+
+A primeira hipótese foi «os ruins são 23,976 e os bons são 24,000 ou 30». Em
+janela de 5 s um filme mediu 23,94 e outro 24,00, e parecia fechar.
+
+Em janela de 55 s os **três** filhes medidos deram **23,976** e a mesma cadência.
+A janela curta é que estava mentindo. A hipótese não sobreviveu ao próprio teste,
+e fica escrita porque o próximo a investigar não deve gastar o dia nela de novo.
+
+### O que sobra, e o que falta pra fechar
+
+O player trata os três filmes de forma **idêntica**. Então a diferença que o dono
+vê está num destes dois lugares, e não dá pra decidir daqui:
+
+1. **Percepção.** Judder de 3:2 é invisível em cena de mão e corte rápido, e
+   gritante em **panorâmica lenta**. Star Wars III e um 007 dos anos 60 são feitos
+   de panorâmicas lentas.
+2. **Algo que a amostragem não pegou** — engasgo que só aparece minutos adentro,
+   ou em cena de bitrate alto.
+
+⚠️ E há uma pista no relato que ainda não foi puxada: «um dos 007 **em inglês**».
+Se o mesmo filme dublado for liso e o em inglês não, o assunto pode ser a **faixa
+de áudio** e não o vídeo.
+
+⚠️ Sobre o celular ser liso: **não verificado**. A explicação provável é a tela —
+num painel de 120 Hz, 23,976 cai em 5 vsyncs por quadro, quase perfeito. Mas o
+celular do dono não foi medido, então isto é hipótese, não achado.

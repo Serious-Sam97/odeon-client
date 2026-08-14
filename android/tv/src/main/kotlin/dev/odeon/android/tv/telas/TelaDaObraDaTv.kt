@@ -46,7 +46,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
+import dev.odeon.android.ui.locadora.FaceDaCaixa
+import dev.odeon.android.ui.locadora.Pose
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.locadora.CaixaEm3D
 import dev.odeon.android.ui.player.Perfuracoes
 import dev.odeon.android.ui.corDeHex
 import dev.odeon.android.ui.duracaoCompacta
@@ -217,7 +220,16 @@ fun TelaDaObraDaTv(
                 .fillMaxHeight()
                 .fillMaxWidth(FRACAO_DO_TEXTO)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = Sala.overscanH, vertical = Sala.overscanV),
+                /// ⚠️ Folga embaixo do tamanho da fita: ela flutua sobre a
+                /// coluna, e sem isto o último parágrafo rolaria pra debaixo dela
+                /// e nunca chegaria a ser lido.
+                .padding(
+                    start = Sala.overscanH + LARGURA_DA_CAIXA + 44.dp,
+                    end = Sala.overscanH,
+                    top = Sala.overscanV,
+                    bottom = ALTURA_DA_FITA,
+                ),
+
             verticalArrangement = Arrangement.Center,
         ) {
             obra.temporada?.let { t ->
@@ -419,49 +431,6 @@ fun TelaDaObraDaTv(
             /// decodifica doze pontos do arquivo — e fica em cache pra sempre
             /// depois. Segurar a ficha por isso seria trocar três segundos de
             /// espera por uma fileira de fotos.
-            Cascata(3) {
-            if (estado.cenas.isNotEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                RotuloDeSecao("do filme")
-                Spacer(Modifier.height(10.dp))
-                /// ## ⚠️ As cenas viram **película**, e a peça é a do player
-                ///
-                /// Eram retângulos arredondados com vão entre eles — uma galeria
-                /// que podia ser de qualquer app. Agora são quadros colados num
-                /// rolo, com os furos de arrasto em cima e embaixo.
-                ///
-                /// ⚠️ E os furos são os **do player**: o `Perfuracoes` do
-                /// `Tira.kt` era privado e fixo no tamanho da barra fina; ganhou
-                /// medidas e virou público. Nenhuma peça nova — a casa já tinha
-                /// película desenhada, e ela estava trancada dentro de outra tela.
-                Column(
-                    Modifier
-                        .background(Color(0xFF0D0B09), RoundedCornerShape(4.dp))
-                        .padding(vertical = 6.dp),
-                ) {
-                    Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
-                    Spacer(Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        items(estado.cenas.take(8)) { cena ->
-                            Box(
-                                Modifier
-                                    .size(width = 210.dp, height = 118.dp)
-                                    .background(Cores.fundoAfundado),
-                            ) {
-                                AsyncImage(
-                                    model = modelo.capa(cena.imagem),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
-                }
-            }
-            }
 
             /// O recado da locadora vem **depois** das cenas: ele é raro e é
             /// aviso, e aviso não disputa espaço com o que a tela existe pra
@@ -475,6 +444,103 @@ fun TelaDaObraDaTv(
                     color = Cores.destaqueQuente,
                 )
             }
+        }
+        /// ## ⚠️ A caixa 3D, e ela entra **sem respirar**
+        ///
+        /// É a peça com mais identidade da casa e até agora só existia na
+        /// locadora. Aqui ela é a âncora da ficha: capa, lombada, e o volume que
+        /// um pôster plano não tem.
+        ///
+        /// ⚠️ **`giravel = false` e nenhuma animação de repouso**, e isso é a
+        /// medida da §10.1 mandando: uma caixa sozinha custou **97ms por quadro**
+        /// na TCL. Girando continuamente ela sozinha derrubaria a tela pra 10fps.
+        ///
+        /// Parada ela é desenhada uma vez e não custa mais nada — o volume, que é
+        /// o que ela veio dar, não precisa de movimento pra existir. A proposta
+        /// tinha uma respiração de ±3°; ela fica de fora até haver medida que a
+        /// permita.
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = Sala.overscanH),
+        ) {
+            Cascata(0) {
+                CaixaEm3D(
+                    largura = LARGURA_DA_CAIXA,
+                    altura = LARGURA_DA_CAIXA * 1.48f,
+                    espessura = 26.dp,
+                    /// ⚠️ Uma pose fixa e de leve, pra ela ler como **objeto** e
+                    /// não como pôster inclinado. É a mesma caixa da locadora,
+                    /// parada: o volume não precisa de movimento pra existir.
+                    poseControlada = Pose(giroY = -22f, giroX = 4f),
+                ) { lado, luz, poseDoQuadro ->
+                    FaceDaCaixa(
+                        lado = lado,
+                        luz = luz,
+                        pose = poseDoQuadro,
+                        titulo = obra.title,
+                        arte = modelo.capa(obra.artwork["poster"]),
+                        cor = corDeHex(obra.corDominante),
+                        ano = obra.year,
+                    )
+                }
+            }
+        }
+
+        /// ## ⚠️ A película atravessa a tela, e por isso saiu da coluna
+        ///
+        /// Ela nasceu dentro da coluna de texto e **herdou os 55% de largura**
+        /// dela: uma tira de película de meia tela, cortada pela borda de baixo.
+        /// Visto na TCL, e é o defeito clássico de reaproveitar um lugar em vez
+        /// de escolher um.
+        ///
+        /// Um rolo de filme não tem meia largura. Ele agora é irmão da coluna,
+        /// ancorado no pé do `Box`, e atravessa de ponta a ponta — que é o que
+        /// ele é: a fita passando na frente da lâmpada.
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                Cascata(3) {
+                if (estado.cenas.isNotEmpty()) {
+                    Spacer(Modifier.height(28.dp))
+                    RotuloDeSecao("do filme")
+                    Spacer(Modifier.height(10.dp))
+                    /// ## ⚠️ As cenas viram **película**, e a peça é a do player
+                    ///
+                    /// Eram retângulos arredondados com vão entre eles — uma galeria
+                    /// que podia ser de qualquer app. Agora são quadros colados num
+                    /// rolo, com os furos de arrasto em cima e embaixo.
+                    ///
+                    /// ⚠️ E os furos são os **do player**: o `Perfuracoes` do
+                    /// `Tira.kt` era privado e fixo no tamanho da barra fina; ganhou
+                    /// medidas e virou público. Nenhuma peça nova — a casa já tinha
+                    /// película desenhada, e ela estava trancada dentro de outra tela.
+                    Column(
+                        Modifier
+                            .background(Color(0xFF0D0B09), RoundedCornerShape(4.dp))
+                            .padding(vertical = 6.dp),
+                    ) {
+                        Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            items(estado.cenas.take(8)) { cena ->
+                                Box(
+                                    Modifier
+                                        .size(width = 210.dp, height = 118.dp)
+                                        .background(Cores.fundoAfundado),
+                                ) {
+                                    AsyncImage(
+                                        model = modelo.capa(cena.imagem),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
+                    }
+                }
+                }
         }
     }
 }
@@ -581,3 +647,12 @@ private fun Cascata(
         conteudo()
     }
 }
+
+
+/// A altura que a fita ocupa no pé da tela — quadros mais os dois furos.
+private val ALTURA_DA_FITA = 190.dp
+
+/// A caixa da ficha. 210dp é o que sobra pro texto ainda ter coluna de leitura
+/// depois dela — e é grande o bastante pra lombada ser legível a três metros,
+/// que era o argumento da §5.2 pra caixa existir numa TV.
+private val LARGURA_DA_CAIXA = 210.dp

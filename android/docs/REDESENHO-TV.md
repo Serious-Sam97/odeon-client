@@ -2831,3 +2831,36 @@ conferir.
 
 Falta também a **caixa 3D**, que é a segunda parte combinada — e é a que precisa
 de medição antes de entrar, porque a §10.1 mediu 97ms por quadro com uma só.
+
+### 22.7 A fita atravessa, e a caixa entra parada
+
+**A fita saiu da coluna.** Ela nascera dentro do bloco de texto e **herdou os 55%
+de largura dele** — uma película de meia tela, cortada pela borda de baixo. É o
+defeito clássico de reaproveitar um lugar em vez de escolher um.
+
+Um rolo de filme não tem meia largura. Agora ela é irmã da coluna, ancorada no pé
+do `Box`, e atravessa de ponta a ponta. A coluna ganhou folga embaixo do tamanho
+dela: a fita flutua sobre o texto, e sem a folga o último parágrafo rolaria pra
+debaixo e nunca seria lido.
+
+**A caixa 3D entrou, e entrou parada.**
+
+⚠️ `poseControlada` fixa, **sem giro e sem respiração** — e isso é a §10.1
+mandando: uma caixa sozinha custou **97ms por quadro** na TCL. Girando
+continuamente, ela sozinha derrubaria a ficha pra 10fps.
+
+Parada ela é desenhada uma vez e não custa mais nada. E o volume — que é o que ela
+veio dar, e que um pôster plano não tem — **não precisa de movimento pra existir**.
+A proposta previa uma respiração de ±3°; ela fica de fora até haver medida que a
+permita, e isso é decisão, não esquecimento.
+
+É a mesma `CaixaEm3D` da locadora e a mesma `FaceDaCaixa`, com o `ano` indo pra
+lombada. Nenhuma peça nova — de novo.
+
+⚠️ **Não vista rodando.** A TCL saiu da rede antes da instalação, e por `adb` não
+há como acordá-la. O portão passou (`assembleDebug`, 164 testes, lint limpo nos
+quatro), mas isto é a terceira vez nesta doc em que passar no portão não é o mesmo
+que ter funcionado — e a caixa é justamente a peça com custo medido conhecido.
+
+**A conferir quando a TV voltar:** se a caixa aparece com volume à esquerda, se a
+fita atravessa inteira, e se a entrada continua fluida com a caixa em cena.

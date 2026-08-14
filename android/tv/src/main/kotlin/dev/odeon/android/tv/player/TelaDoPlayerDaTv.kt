@@ -838,16 +838,6 @@ private fun Cromo(
                     /// §53, a mesma régua do celular: «com uma faixa só, o botão
                     /// não nasce». Eles ficam **depois** do transporte porque são
                     /// ajuste de sessão, não comando de filme.
-                    if (estado.legendas.isNotEmpty() || estado.faixasDeAudio.size > 1) {
-                        Spacer(Modifier.width(40.dp))
-                    }
-                    if (estado.legendas.isNotEmpty()) {
-                        BotaoDaSala("cc", { menuDeFaixas = TipoDeMenu.LEGENDA })
-                        Spacer(Modifier.width(12.dp))
-                    }
-                    if (estado.faixasDeAudio.size > 1) {
-                        BotaoDaSala("áudio", { menuDeFaixas = TipoDeMenu.AUDIO })
-                    }
                 }
             }
         }
@@ -873,6 +863,42 @@ private fun Cromo(
             ) {
                 BotaoDeSair(aoSair)
             }
+
+        /// ## ⚠️ O `cc` e o `áudio` saíram da fileira de transporte
+        ///
+        /// Relatado pelo dono, olhando a TV: «o botão de play não está alinhado
+        /// com o centro, ele tá mais pra esquerda».
+        ///
+        /// E estava, por aritmética. A fileira tinha **quatro** itens — `10`,
+        /// `play`, `30` e `cc` — centralizados como grupo. Um grupo de quatro
+        /// centrado não põe o segundo no meio: o `cc` pendurado à direita empurra
+        /// tudo, e o disco de play cai à esquerda do centro real da tela.
+        ///
+        /// Somar um espaçador invisível do outro lado consertaria o pixel e
+        /// deixaria a causa de pé — bastaria alguém acrescentar um quinto botão
+        /// pra quebrar de novo.
+        ///
+        /// O que conserta é a **regra**: a fileira do meio tem só o transporte, e
+        /// é simétrica por construção — `10 · play · 30`, o play no eixo. O que
+        /// não é transporte mora nas quinas, como o `sair` já morava. Agora as
+        /// duas quinas de baixo estão ocupadas, e a tela ficou equilibrada de
+        /// propósito e não por acaso.
+        if (aberto && (estado.legendas.isNotEmpty() || estado.faixasDeAudio.size > 1)) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(horizontal = Sala.overscanH, vertical = Sala.overscanV),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (estado.legendas.isNotEmpty()) {
+                    BotaoDaSala("cc", { menuDeFaixas = TipoDeMenu.LEGENDA })
+                }
+                if (estado.faixasDeAudio.size > 1) {
+                    BotaoDaSala("áudio", { menuDeFaixas = TipoDeMenu.AUDIO })
+                }
+            }
+        }
+
         }
 
         /// Quem mais está no mesmo filme agora. Numa TV é notícia útil: é o

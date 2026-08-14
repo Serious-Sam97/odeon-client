@@ -3102,3 +3102,31 @@ E o halo caiu de 6 pra 4dp, com os espaçadores acompanhando.
 **Conferido na TCL:** `▸ assistir` e `voltar` numa linha só, menores que o título,
 com o degradê e o halo intactos. A sinopse voltou a cinco linhas e as etiquetas
 cabem embaixo dela.
+
+## 23. O play não estava no centro, e a causa era aritmética
+
+«Viu que o botão de play não está alinhado com o centro? Ele tá mais pra
+esquerda.»
+
+Estava, e não era erro de pixel. A fileira de transporte tinha **quatro** itens —
+`10`, `play`, `30` e `cc` — centralizados como grupo. ⚠️ **Um grupo de quatro
+centrado não põe o segundo no meio:** o `cc` pendurado à direita empurra o
+conjunto, e o disco cai à esquerda do centro real da tela.
+
+### Por que não um espaçador invisível
+
+Somar 40dp de vão fantasma do outro lado consertaria o pixel e **deixaria a causa
+de pé** — bastaria alguém acrescentar um botão de `áudio`, ou um quinto qualquer,
+pra quebrar de novo, e o próximo a olhar não teria como saber por quê.
+
+O que conserta é a **regra**: a fileira do meio tem só o transporte, e é simétrica
+**por construção** — `10 · play · 30`, com o play no eixo. O que não é transporte
+mora nas quinas, como o `sair` já morava.
+
+Agora as duas quinas de baixo estão ocupadas — `sair` à esquerda, `cc`/`áudio` à
+direita — e a tela ficou equilibrada de propósito, não por acaso.
+
+⚠️ **Não fotografado**, e desta vez a afirmação não depende de foto: uma `Row`
+com `Arrangement.Center` e três itens simétricos põe o do meio no eixo por
+definição de layout. O que a foto acrescentaria é a confirmação de que os cantos
+não brigam com nada — e isso vale conferir.

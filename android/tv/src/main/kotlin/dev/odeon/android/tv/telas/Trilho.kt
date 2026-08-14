@@ -89,6 +89,12 @@ enum class Destino(val rotulo: String, @DrawableRes val icone: Int) {
     GUIA("guia", R.drawable.ic_aba_guia),
     PARA_VOCE("para você", R.drawable.ic_aba_paravoce),
     PERFIL("perfil", R.drawable.ic_aba_perfil),
+
+    /// ⚠️ A busca é destino e **não aparece na fileira**, como o perfil: ela tem
+    /// o próprio item acima da divisória, com o ícone de lupa. Estar no `enum`
+    /// mesmo assim é o que mantém o `when` da tela inicial exaustivo — se um dia
+    /// alguém acrescentar um destino, o compilador cobra a tela.
+    BUSCA("buscar", R.drawable.ic_buscar),
 }
 
 /// O trilho lateral, que abre quando o foco entra nele.
@@ -259,7 +265,7 @@ fun Trilho(
         ///
         /// > «Um campo de texto aqui seria oferecer o pior caminho como se fosse
         /// > o principal.»
-        BotaoDaBusca(aberto = aberto, aoEscolher = aoBuscar)
+        BotaoDaBusca(aberto = aberto, escolhido = atual == Destino.BUSCA, aoEscolher = aoBuscar)
 
         Spacer(Modifier.height(10.dp))
         Divisoria(aberto)
@@ -268,7 +274,7 @@ fun Trilho(
         /// ⚠️ O perfil sai da fileira porque já está no topo. Filtrar em vez de
         /// tirar do `enum` é de propósito: ele **continua** sendo um destino de
         /// navegação, e o `when` da `TelaInicialDaTv` continua exaustivo.
-        Destino.entries.filter { it != Destino.PERFIL }.forEach { destino ->
+        Destino.entries.filter { it != Destino.PERFIL && it != Destino.BUSCA }.forEach { destino ->
             ItemDoTrilho(
                 destino = destino,
                 escolhido = destino == atual,
@@ -422,7 +428,7 @@ private fun RetratoDoTrilho(
 
 /// A busca, que é a do sistema.
 @Composable
-private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
+private fun BotaoDaBusca(aberto: Boolean, escolhido: Boolean, aoEscolher: () -> Unit) {
     val forma = RoundedCornerShape(10.dp)
     Focavel(
         aoEscolher = aoEscolher,
@@ -442,7 +448,11 @@ private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
             Icon(
                 painter = painterResource(R.drawable.ic_buscar),
                 contentDescription = "buscar",
-                tint = if (focado) Cores.destaqueQuente else Cores.textoApagado,
+                tint = when {
+                    focado -> Cores.destaqueQuente
+                    escolhido -> Cores.destaque
+                    else -> Cores.textoApagado
+                },
                 modifier = Modifier.size(20.dp),
             )
             if (aberto) {
@@ -450,7 +460,11 @@ private fun BotaoDaBusca(aberto: Boolean, aoEscolher: () -> Unit) {
                 Text(
                     text = "BUSCAR",
                     style = TipoDaSala.rotulo,
-                    color = if (focado) Cores.texto else Cores.textoApagado,
+                    color = when {
+                        focado -> Cores.texto
+                        escolhido -> Cores.destaque
+                        else -> Cores.textoApagado
+                    },
                     maxLines = 1,
                 )
             }

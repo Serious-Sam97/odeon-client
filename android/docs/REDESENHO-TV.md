@@ -3177,3 +3177,51 @@ dual áudio está escrito e compila, mas não foi fotografado.
 ⚠️ E a foto mostrou de brinde um defeito **antigo**, que não é desta mudança: com
 o cromo aberto, a legenda do filme fica **atrás do botão de play** — ela é
 desenhada pelo `PlayerView`, que não sabe que há cromo em cima.
+
+## 25. A busca virou nossa, e o ◀ do app inteiro estava quebrado
+
+«O buscar no menu lateral está ativando o Gemini, wtf. Deveria levar a uma page
+de busca **nossa**.»
+
+O item `BUSCAR` disparava `GLOBAL_SEARCH`, com `ACTION_ASSIST` de reserva. A
+§5.1 defendia isso: «digitar com D-pad é soletrar», e a busca por voz da TV
+seria melhor. Ela estava certa sobre o custo e **errada sobre a saída** — o que
+o `GLOBAL_SEARCH` abre é decisão do aparelho, e nesta TCL a decisão é o
+assistente da Google. Um botão dentro do Odeon que entrega a pessoa a outro app
+é pior que um botão que não existe.
+
+⚠️ Um `TextField` seria a mesma aposta com outra roupa: quem desenha o IME é a
+fabricante. Por isso o teclado é **desenhado aqui**.
+
+### A tela
+
+`ModeloDaBusca` no `:core` (separado do `ModeloDaBiblioteca`, pra que entrar na
+busca não mexa nos filtros que alguém montou no acervo) e `TelaDaBuscaDaTv` no
+`:tv`: teclado em ordem **alfabética** — num D-pad não há dedos, há um cursor
+que procura a letra, e no alfabeto a procura é dedutiva —, seis colunas, e a
+lista acompanha o que está escrito sem botão de «procurar».
+
+### ⚠️ O defeito que apareceu no caminho, e não era da busca
+
+O ◀ **não andava uma letra pra trás**. Investigando: a `TelaInicialDaTv` punha
+`focusProperties { left = focoDoTrilho }` no `Box` do conteúdo, e
+`focusProperties` **desce pros descendentes** — cada tecla, cada cartaz e cada
+bloco de grade herdava «esquerda é o trilho».
+
+⚠️ Conferido na **biblioteca** antes de consertar: do segundo cartaz de uma
+fileira, ◀ abria o trilho em vez de ir pro primeiro. O defeito era do app
+inteiro e passava despercebido porque numa grade de cartazes quase sempre se
+anda pra direita. O teclado só foi onde ele ficou impossível de ignorar.
+
+O `exit` que já estava lá **sozinho faz o certo**: dispara só quando o foco
+realmente sai do grupo, que é a definição de «cheguei na borda». O `left` saiu.
+
+### Visto na TCL
+
+`◀ ▼ OK` no trilho abre a busca; ◀ anda `b → a` dentro do teclado; `bond`
+devolve a fileira de 007 com cartaz, título e ano; ▶ atravessa do teclado pros
+resultados e o primeiro cartaz recebe o foco.
+
+⚠️ **Não conferido**: abrir uma obra a partir do resultado, e o que acontece ao
+voltar dela. E `007: A Serviço Secreto de Sua Majestade` aparece **duas vezes**
+no resultado — é duplicata no acervo, não da busca, mas fica anotado.

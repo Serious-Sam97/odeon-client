@@ -45,6 +45,7 @@ import dev.odeon.android.ui.desenhaAPoeira
 import dev.odeon.android.ui.desenhaOCone
 import androidx.compose.runtime.LaunchedEffect
 import dev.odeon.android.ui.aovivo.ModeloAoVivo
+import dev.odeon.android.ui.busca.ModeloDaBusca
 
 /// A casa: o trilho à esquerda, o destino à direita.
 ///
@@ -95,6 +96,7 @@ fun TelaInicialDaTv(
     val paraVoce = lembrarModelo("paravoce") { ModeloParaVoce(odeon) }
     val perfil = lembrarModelo("perfil") { ModeloDoPerfil(odeon) }
     val aoVivo = lembrarModelo("aovivo") { ModeloAoVivo(odeon) }
+    val busca = lembrarModelo("busca") { ModeloDaBusca(odeon) }
 
     val focoDoTrilho = remember { FocusRequester() }
 
@@ -199,7 +201,10 @@ fun TelaInicialDaTv(
             rosto = perfil.arte(doPerfil.perfil?.avatar?.arte),
             nivel = doPerfil.perfil?.progresso?.nivel,
             fatiaDoNivel = doPerfil.perfil?.fatiaDoNivel ?: 0f,
-            aoBuscar = { abrirABuscaDoSistema(contexto) },
+            /// ⚠️ A busca virou **destino**, e não mais um `Intent`. Ela
+            /// fecha o trilho pelo mesmo caminho dos outros — o `pediramSair`
+            /// devolve o foco ao conteúdo no quadro seguinte.
+            aoBuscar = { destino = Destino.BUSCA; pediramSair = pediramSair + 1 },
             aoMoverALente = { alturaDaLente = it },
             /// ⚠️ Só a locadora apaga a cabine, e é a §5.2: entrou-se na loja, e
             /// a luz agora é dela — a marquise da fachada vira a fonte da tela.
@@ -240,11 +245,28 @@ fun TelaInicialDaTv(
                 /// existe borda de tela, e a regra dos 5% continua valendo.
                 .padding(end = Sala.overscanH)
                 .focusGroup()
+                /// ## ⚠️ O `left` daqui saiu — 14/08/2026
+                ///
+                /// Ele dizia «esquerda é o trilho», e `focusProperties` **desce
+                /// pros descendentes**: quem herdava era cada cartaz, cada tecla,
+                /// cada bloco da grade. Ou seja, ◀ em qualquer lugar do conteúdo
+                /// pulava pro menu, mesmo havendo um vizinho à esquerda.
+                ///
+                /// Achado no teclado da busca, onde o defeito é gritante — um
+                /// teclado em que ◀ não anda uma letra pra trás é um teclado em
+                /// que não se corrige. Conferido depois na **biblioteca**, e lá
+                /// estava igual: do segundo cartaz de uma fileira, ◀ abria o
+                /// trilho em vez de ir pro primeiro. Passou despercebido porque
+                /// numa grade de cartazes quase sempre se anda pra direita.
+                ///
+                /// ⚠️ O `exit` **sozinho já faz o que se queria**, e faz melhor:
+                /// ele só dispara quando o foco realmente sai do grupo — isto é,
+                /// quando não há mais nada à esquerda dentro do conteúdo. Que é a
+                /// definição de «cheguei na borda».
                 .focusProperties {
                     exit = { direcao ->
                         if (direcao == FocusDirection.Left) focoDoTrilho else FocusRequester.Default
                     }
-                    left = focoDoTrilho
                 },
         ) {
             ConteudoDoDestino(
@@ -256,6 +278,7 @@ fun TelaInicialDaTv(
                 paraVoce = paraVoce,
                 perfil = perfil,
                 aoVivo = aoVivo,
+                busca = busca,
                 aoTocar = aoTocar,
                 aoSintonizarDeFora = aoSintonizarDeFora,
                 aoAbrirObra = aoAbrirObra,
@@ -406,6 +429,7 @@ private fun ConteudoDoDestino(
     paraVoce: ModeloParaVoce,
     perfil: ModeloDoPerfil,
     aoVivo: ModeloAoVivo,
+    busca: ModeloDaBusca,
     aoTocar: (String, String, String, Double, String?, String?) -> Unit,
     aoSintonizarDeFora: (String, String) -> Unit,
     aoAbrirObra: (String) -> Unit,
@@ -425,6 +449,12 @@ private fun ConteudoDoDestino(
         Destino.PARA_VOCE -> TelaParaVoceDaTv(paraVoce, aoAbrirObra)
         Destino.PERFIL -> TelaDoPerfilDaTv(perfil, aoAbrirObra)
 
+        Destino.BUSCA -> TelaDaBuscaDaTv(
+            modelo = busca,
+            aoAbrirObra = aoAbrirObra,
+            saidaEsquerda = saidaEsquerda,
+        )
+
         Destino.AO_VIVO -> TelaAoVivoDaTv(
             modelo = aoVivo,
             aoTocar = aoTocar,
@@ -434,56 +464,3 @@ private fun ConteudoDoDestino(
     }
 }
 
-/// Abre a busca **do sistema**, por voz.
-///
-/// ## Por que não há um campo de texto no lugar disto
-///
-/// A §5.1 do redesenho: «Digitar com D-pad é soletrar. (…) Um campo de texto
-/// aqui seria oferecer o pior caminho como se fosse o principal.»
-///
-/// O que o Odeon já tem pra isso é o `busca/ProvedorDeBusca.kt`, registrado no
-/// manifesto: ele responde as sugestões que a busca da Google TV mostra. Ou
-/// seja, a busca do sistema **já sabe** procurar no acervo — o que faltava era
-/// um lugar no app pra chamá-la.
-///
-/// ## ⚠️ Os dois `Intent`, e por que são dois
-///
-/// `GLOBAL_SEARCH` é o que abre a busca da casa numa Google TV. Nem toda TV a
-/// tem — algumas fabricantes trocam o app de busca ou removem — e aí a segunda
-/// tentativa é o `ACTION_ASSIST`, que é o assistente e cobre o mesmo pedido.
-///
-/// ⚠️ **Se as duas falharem, não acontece nada, e é decisão.** A alternativa
-/// seria um aviso — mas «a busca não abriu» não é acionável por quem está com o
-/// controle na mão, e o §8b vale nos dois sentidos: informar o que não se pode
-/// resolver é ruído. O `runCatching` loga, que é o que permitiu achar o defeito
-/// do canal da home.
-///
-/// ## ⚠️ O que aconteceu na TCL, e não é o que se esperava — 12/08/2026
-///
-/// O botão dispara, o sistema aceita, e a tela que aparece é o **onboarding do
-/// launcher da Google TV** — não uma busca.
-///
-/// Isolado antes de culpar o código: os dois intents resolvem pro app certo
-/// (`com.google.android.katniss`, o `SearchActivityTrampoline`), e disparar
-/// `android.search.action.GLOBAL_SEARCH` **direto pelo `adb`**, sem passar por
-/// aqui, cai exatamente no mesmo onboarding. Ou seja, é estado do aparelho — a
-/// conta da Google TV desta TCL não terminou de ser configurada —, e não o
-/// caminho errado.
-///
-/// Fica anotado assim de propósito: **o botão não foi visto funcionando**. O
-/// README já listava «a busca por voz: o provedor está no manifesto e responde;
-/// ninguém segurou o microfone do controle ainda», e continua listando. Escrever
-/// aqui que a busca funciona seria o defeito que este projeto mais paga.
-private fun abrirABuscaDoSistema(contexto: android.content.Context) {
-    val tentativas = listOf(
-        Intent("android.search.action.GLOBAL_SEARCH"),
-        Intent(Intent.ACTION_ASSIST),
-    )
-    for (intent in tentativas) {
-        val deu = runCatching {
-            contexto.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        if (deu.isSuccess) return
-        android.util.Log.w("Odeon", "busca do sistema recusou ${intent.action}", deu.exceptionOrNull())
-    }
-}

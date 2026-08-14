@@ -3353,3 +3353,63 @@ na busca, o que atrapalha até a navegação.
 ⚠️ E se a suspeita se confirmar, **o conserto provavelmente não é do cliente**: é
 o servidor parar de mandar este arquivo em plano **direto** e transcodificá-lo —
 que é justamente o que o celular e a web já fazem, e por isso são lisos lá.
+
+### 26.4 O Jellyfin virou o experimento de controle — e o defeito é **nosso**
+
+«Tentei o mesmo Star Wars no Jellyfin, mesmo arquivo e mesmo server, e rodou sem
+lag algum.»
+
+O Jellyfin está instalado nesta TCL, então deu pra medir com as mesmas réguas, no
+mesmo aparelho, nos mesmos arquivos.
+
+| | descartes | quando |
+|---|---|---|
+| Jellyfin · Star Wars III | 41 | **todos num estouro de 2 s no arranque**, e zero depois |
+| Jellyfin · 007 ficha A | **0 em 45 s** | — |
+| Jellyfin · 007 ficha B | **1 em 45 s** | — |
+| **Odeon · 007 em inglês** | **26 em 30 s** | **espalhados o filme inteiro**, 1 a 5 por segundo |
+
+⚠️ Mesma TV, mesmos arquivos, mesmo servidor, mesmo decodificador. **Não é o
+arquivo, não é o painel e não é o servidor.** É o nosso player.
+
+⚠️ E a cadência do Star Wars no Jellyfin é **idêntica à nossa** — 23,976 com
+2‑3‑2‑3. O judder do §26 existe nos dois apps por igual; o que o Jellyfin não tem
+é o descarte.
+
+### 26.5 A causa: dizemos ao decodificador que o filme tem **12 quadros por segundo**
+
+Comparando a configuração do codec MediaTek entre os dois apps:
+
+```
+Odeon (corridas que travam):  non-tunnel-render-latency = 833999 ns   (83,4 ms = 1 quadro a 12 fps)
+                              coded.frame-rate.value = 12
+Jellyfin (todas as corridas): non-tunnel-render-latency = 416249 ns   (41,6 ms = 1 quadro a 24 fps)
+                              (nenhuma chave de frame-rate — deixa o stream falar)
+```
+
+E o motor de imagem da TV recebe de nós `FrameRate 12000` no `stepSetPQFormat`.
+
+Um decodificador dimensionado para **metade** da taxa real e alimentado com o
+dobro é exatamente isto: entrega 19–26 quadros/s enquanto recebe 23–30, e
+descarta a diferença.
+
+⚠️ **A correlação é boa dentro do próprio app**: a corrida do Odeon que marcou
+`416249` (24 fps) descartou **9 em 25 s**; as que marcaram `833999` (12 fps)
+descartaram **25 e 26**. O número não é constante do app — muda **por arquivo**.
+
+### 26.6 De onde sai o 12
+
+Nada no nosso código toca em taxa de quadros ou velocidade de reprodução —
+`grep` por `setPlaybackSpeed`, `PlaybackParameters`, `frameRate`, `FRAME_RATE` e
+`operatingRate` nos três módulos não acha nada. Então o 12 **vem do arquivo**: o
+Media3 lê `Format.frameRate` do contêiner e repassa ao `MediaCodec` como dica, e
+o decodificador desta TV **obedece à dica**. O Jellyfin não manda dica nenhuma, e
+o decodificador mede sozinho.
+
+⚠️ **A confirmar com o `ffprobe` já pedido**: se o arquivo em inglês tiver
+`r_frame_rate` ou `avg_frame_rate` estranho (12/1, ou muito diferente um do
+outro), fecha.
+
+⚠️ E o conserto, se fechar, é **nosso e pequeno**: não repassar ao codec uma taxa
+de quadros que não merece confiança. O sintoma é grave, a causa é uma dica ruim
+sendo levada a sério.

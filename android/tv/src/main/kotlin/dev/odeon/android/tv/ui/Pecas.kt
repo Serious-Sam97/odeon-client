@@ -67,7 +67,10 @@ internal fun RotuloDoBotao(rotulo: String, tinta: Color) {
         style = MaterialTheme.typography.titleMedium,
         color = tinta,
         maxLines = 1,
-        modifier = Modifier.padding(horizontal = 34.dp, vertical = 16.dp),
+        /// ⚠️ Mais alto que largo em proporção do que parece: 20dp de folga
+        /// vertical num rótulo de 20sp dá um alvo de ~60dp, que é o mínimo pra um
+        /// botão de TV ter presença ao lado de um título de 38sp.
+        modifier = Modifier.padding(horizontal = 32.dp, vertical = 20.dp),
     )
 }
 

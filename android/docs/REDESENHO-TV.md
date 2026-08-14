@@ -3043,3 +3043,36 @@ com volume à esquerda e a fita fina atravessando o pé.
 folga da fita, quadro da fita, tamanho do título, ordem dos blocos — e cada
 tentativa mexia num número sem perguntar o que estava acontecendo. Quem quebrou o
 ciclo foi quem estava olhando a tela.
+
+### 22.13 O halo era layout, e o botão ganhou corpo de lâmpada
+
+**«O espaçamento entre o botão pra cima e pra baixo está diferente.»**
+
+⚠️ O halo de 6dp que eu tinha posto em volta do botão é **layout**: ele conta como
+altura. Com espaçadores iguais dos dois lados, o resultado na tela fica desigual —
+18 acima viram 24, e o que vem depois começa 6 mais longe do que parece.
+
+Os espaçadores passaram a **descontar o halo**: 12 antes e 16 depois somam os
+mesmos 18+18 visíveis. É a diferença entre medir a caixa e medir o que se vê — e é
+o mesmo tipo de erro do `requiredSize` da insígnia: a peça ocupa mais do que
+mostra.
+
+**«Esses botões ainda não estão legais o bastante.»**
+
+Duas mudanças, as duas na direção da luz:
+
+⚠️ **Degradê vertical no lugar da cor chapada.** Ouro sólido é tinta; ouro que
+clareia em cima e fecha embaixo é **metal com luz caindo nele**. Esta casa inteira
+é sobre luz caindo em coisas — o facho, a marquise, a lente. Focado, o degradê
+inverte pro lado quente: a lâmpada sobe.
+
+**O glifo `▸`**, como o `▸ sintonizar` do ao vivo já fazia. A três metros a seta é
+lida **antes** da palavra, e é ela que diz que este é o botão que começa alguma
+coisa.
+
+E a folga foi pra `32×20`, dando um alvo de ~60dp — o mínimo pra um botão ter
+presença ao lado de um título de 38sp.
+
+⚠️ **Não fotografado.** O destino salvo do app me devolveu ao guia de novo. Os
+dois consertos respondem a causas nomeadas (o halo que ocupa altura, o
+preenchimento que não pertence à casa), mas isto é código, não foto.

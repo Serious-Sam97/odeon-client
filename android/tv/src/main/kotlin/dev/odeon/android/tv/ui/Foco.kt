@@ -212,13 +212,30 @@ fun BotaoDaSala(
             Box(
                 Modifier
                     .padding(6.dp)
+                    /// ⚠️ **Degradê vertical, e não uma cor chapada.**
+                    ///
+                    /// Ouro sólido é tinta; ouro que clareia em cima e fecha
+                    /// embaixo é **metal com luz caindo nele**. É a diferença
+                    /// entre um botão desenhado e um botão iluminado — e esta casa
+                    /// inteira é sobre luz caindo em coisas.
+                    ///
+                    /// Focado ele inverte pro lado quente: a lâmpada sobe.
                     .background(
-                        when {
-                            focado -> Cores.destaqueQuente
-                            principal -> Cores.destaque
-                            else -> androidx.compose.ui.graphics.Color.Transparent
+                        brush = when {
+                            focado -> Brush.verticalGradient(
+                                listOf(Color(0xFFFFE7B0), Cores.destaqueQuente),
+                            )
+                            principal -> Brush.verticalGradient(
+                                listOf(Cores.destaqueQuente, Cores.destaque),
+                            )
+                            else -> Brush.verticalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color.Transparent,
+                                    androidx.compose.ui.graphics.Color.Transparent,
+                                ),
+                            )
                         },
-                        forma,
+                        shape = forma,
                     )
                     .then(
                         if (!aceso) {

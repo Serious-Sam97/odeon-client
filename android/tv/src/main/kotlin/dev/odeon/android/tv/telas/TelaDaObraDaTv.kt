@@ -347,6 +347,16 @@ fun TelaDaObraDaTv(
             /// enquanto um botão cortado é uma tela quebrada.
 
 
+            /// ⚠️ **A folga desconta o halo.**
+            ///
+            /// O botão desenha um halo de 6dp em volta de si, e esse halo é
+            /// layout: ele conta como altura. Com espaçadores iguais em cima e
+            /// embaixo, o resultado na tela é **desigual** — 18 acima viram 24, e
+            /// o que vem depois começa 6 mais longe do que parece.
+            ///
+            /// Os 12dp aqui e os 16 depois somam os mesmos 18+18 visíveis. É a
+            /// diferença entre medir a caixa e medir o que se vê.
+            Spacer(Modifier.height(12.dp))
             val comecarEm = ondeContinuar(obra.ondeParou, obra.duracaoEmSegundos, obra.finished)
             /// ⚠️ `FlowRow` aqui pelo **mesmo** motivo das etiquetas, e o
             /// sintoma era o mesmo que o dono relatou: «os botões estão sem
@@ -372,9 +382,12 @@ fun TelaDaObraDaTv(
                     /// é retomada, que a menos de um minuto do fim é recomeço, e
                     /// que `duração 0` quer dizer «o servidor não sabe».
                     rotulo = when {
+                        /// ⚠️ O glifo, como o «▸ sintonizar» do ao vivo já faz.
+                        /// A três metros a seta é lida **antes** da palavra — e é
+                        /// ela que diz que este é o botão que começa alguma coisa.
                         !estado.temComoTocar -> "sem arquivo"
-                        comecarEm > 0 -> "continuar de ${duracaoCompacta(comecarEm)}"
-                        else -> "assistir"
+                        comecarEm > 0 -> "▸  continuar de ${duracaoCompacta(comecarEm)}"
+                        else -> "▸  assistir"
                     },
                     principal = true,
                     habilitado = estado.temComoTocar,
@@ -411,11 +424,11 @@ fun TelaDaObraDaTv(
 
                 BotaoDaSala("voltar", aoVoltar)
             }
+            Spacer(Modifier.height(16.dp))
 
             Cascata(1) {
             Column {
             obra.overview?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(22.dp))
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodyLarge,

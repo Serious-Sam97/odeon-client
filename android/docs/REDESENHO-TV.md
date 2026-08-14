@@ -3725,3 +3725,45 @@ O que sobra de diferença entre a bancada e o jeito do dono assistir:
 ⚠️ E vale dizer o que isto **não** prova: não prova que o defeito não existe. Ele
 foi medido à mão, 0,51 a 4,21/s, no mesmo arquivo. Prova que ele **não está em
 «abrir o arquivo e tocar»** — nem no arquivo, nem no ponto, nem na legenda.
+
+### 27.5 «Melhorou» — e não fui eu
+
+O dono foi assistir e relatou que os filmes não estão mais perdendo quadro.
+⚠️ **Nada meu consertou isso.** As duas tentativas foram desfeitas (§26.7, §27),
+e o que ficou no app desta rodada — busca, modal de faixas, porta da bancada —
+não toca no caminho de reprodução. Aceitar o crédito aqui seria enterrar a causa
+verdadeira junto com a comemoração.
+
+Duas medidas de hoje, que valem mais que a impressão de qualquer um:
+
+| | |
+|---|---|
+| a TV está de pé há | **15 dias** — não houve reinício que limpasse nada |
+| carga do sistema | **load average 22** num aparelho de 4 núcleos |
+| memória | 2,1 GB usados de 2,3 GB, 185 MB livres |
+
+⚠️ Uma máquina com carga 22 e 185 MB livres perde quadro **às vezes** — e «às
+vezes» é exatamente a forma do defeito relatado, e exatamente o que faz dezessete
+corridas limpas não provarem nada. O defeito não foi consertado; ele não estava
+presente na hora em que se mediu.
+
+### A pergunta sobre queda de qualidade
+
+> «A qualidade de todos os filmes caiu ou é impressão minha?»
+
+Medido no mesmo filme, agora:
+
+```
+Init Vdec OK wxh=1920x832 pic wxh=1920x816 bitdepth:8
+```
+
+**Idêntico** a todas as capturas anteriores — mesma resolução, mesma
+profundidade, mesmo `BT709` faixa limitada, e plano **direto** (nenhuma linha de
+transcodificação no log). O app não está entregando menos pixel do que entregava.
+
+⚠️ O que **não** dá pra descartar daqui: a nossa camada de vídeo é 1920×816 e
+quem amplia pra 3840 é o motor de imagem da TV. E foi visto hoje (§26.5) esse
+mesmo motor receber de nós `FrameRate 12000` no `stepSetPQFormat` — a taxa que
+ele usa pra decidir processamento de movimento. Não está provado que isso mexa em
+nitidez, mas é o único lugar onde o nosso lado fala com o processamento de imagem
+da TV, e fica anotado como o primeiro sítio a olhar se a queixa persistir.

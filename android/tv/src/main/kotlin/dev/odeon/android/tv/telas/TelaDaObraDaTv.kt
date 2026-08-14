@@ -231,7 +231,7 @@ fun TelaDaObraDaTv(
                 /// Fração é uma medida de quem não tem vizinhos. Com a caixa ao
                 /// lado, a coluna precisa de uma largura **sua** — 620dp, que é a
                 /// coluna de leitura que a §5.3 já tinha estabelecido pro guia.
-                .width(620.dp)
+                .width(700.dp)
                 /// ⚠️ **O título saiu da rolagem, e é o terceiro conserto do mesmo
                 /// sintoma.**
                 ///
@@ -248,7 +248,7 @@ fun TelaDaObraDaTv(
                 /// coluna, e sem isto o último parágrafo rolaria pra debaixo dela
                 /// e nunca chegaria a ser lido.
                 .padding(
-                    start = Sala.overscanH + LARGURA_DA_CAIXA + 44.dp,
+                    start = Sala.overscanH + LARGURA_DA_CAIXA + 30.dp,
                     end = Sala.overscanH,
                     top = Sala.overscanV,
                     bottom = ALTURA_DA_FITA,
@@ -288,8 +288,8 @@ fun TelaDaObraDaTv(
                     /// Grande não é o que faz um título ser letreiro; **caber
                     /// inteiro** é. Um nome cortado por reticências não impõe
                     /// nada.
-                    fontSize = 46.sp,
-                    lineHeight = 46.sp,
+                    fontSize = 38.sp,
+                    lineHeight = 40.sp,
                     color = Cores.texto,
                 ),
                 maxLines = 2,
@@ -423,7 +423,7 @@ fun TelaDaObraDaTv(
                     /// ⚠️ Quatro linhas, e não cinco. Com os botões acima dela a
                     /// sinopse é a última a caber, e quatro linhas ainda dizem do
                     /// que é o filme — que é tudo o que ela promete.
-                    maxLines = 4,
+                    maxLines = 5,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
@@ -579,13 +579,13 @@ fun TelaDaObraDaTv(
                             .background(Color(0xFF0D0B09), RoundedCornerShape(4.dp))
                             .padding(vertical = 6.dp),
                     ) {
-                        Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
+                        Perfuracoes(quantos = 30, largura = 6.dp, altura = 3.5.dp)
                         Spacer(Modifier.height(8.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             items(estado.cenas.take(8)) { cena ->
                                 Box(
                                     Modifier
-                                        .size(width = 148.dp, height = 83.dp)
+                                        .size(width = 112.dp, height = 63.dp)
                                         .background(Cores.fundoAfundado),
                                 ) {
                                     AsyncImage(
@@ -598,7 +598,7 @@ fun TelaDaObraDaTv(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Perfuracoes(quantos = 22, largura = 9.dp, altura = 5.dp)
+                        Perfuracoes(quantos = 30, largura = 6.dp, altura = 3.5.dp)
                     }
                 }
                 }
@@ -720,9 +720,12 @@ private fun Cascata(
 ///
 /// A fita perdeu 22dp de quadro e ganhou o resto da tela de volta. Ela continua
 /// atravessando; o que ela não faz mais é empurrar o título pra fora.
-private val ALTURA_DA_FITA = 132.dp
+/// ⚠️ 96dp. A fita é **cenário**, não conteúdo: ela diz «isto é um filme» e
+/// devolve o resto da tela pro que se lê. Com 190 ela empurrava o título pra fora;
+/// com 132 ainda esmagava a sinopse. O corpo vale mais que o enfeite.
+private val ALTURA_DA_FITA = 96.dp
 
 /// A caixa da ficha. 210dp é o que sobra pro texto ainda ter coluna de leitura
 /// depois dela — e é grande o bastante pra lombada ser legível a três metros,
 /// que era o argumento da §5.2 pra caixa existir numa TV.
-private val LARGURA_DA_CAIXA = 210.dp
+private val LARGURA_DA_CAIXA = 165.dp

@@ -60,17 +60,14 @@ internal fun RotuloDoBotao(rotulo: String, tinta: Color) {
     /// escrito em caixa baixa apertada some ao lado de um título em serifada de
     /// 62sp; escrito assim, ele **responde** ao título em vez de sumir.
     Text(
-        text = rotulo.uppercase(),
+        text = rotulo,
         /// ⚠️ O espaçamento do rótulo cai pela metade num botão: `0.28em` é ar
         /// pra um versalete solto, e dentro de uma pílula ele estica a palavra até
         /// ela expulsar a vizinha da fileira — na TCL o `voltar` sumiu por isso.
-        style = TipoDaSala.rotulo.copy(
-            fontSize = 17.sp,
-            letterSpacing = 0.14.em,
-        ),
+        style = MaterialTheme.typography.titleMedium,
         color = tinta,
         maxLines = 1,
-        modifier = Modifier.padding(horizontal = 30.dp, vertical = 18.dp),
+        modifier = Modifier.padding(horizontal = 34.dp, vertical = 16.dp),
     )
 }
 

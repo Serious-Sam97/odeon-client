@@ -21,6 +21,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
 import dev.odeon.android.ui.Cores
 
 /// O foco, que na sala faz o trabalho que o dedo faz no celular.
@@ -157,49 +161,82 @@ fun BotaoDaSala(
     rotulo: String,
     aoEscolher: () -> Unit,
     modifier: Modifier = Modifier,
-    /// O botão que a tela quer que se escolha. Ele é o único que nasce dourado
-    /// mesmo sem foco — «assistir» numa ficha de filme.
     principal: Boolean = false,
     habilitado: Boolean = true,
 ) {
-    /// ⚠️ **Pílula, e não retângulo de cantos moles.**
+    /// ## ⚠️ O botão é **luz**, e não uma cápsula pintada
     ///
-    /// Os 8dp de canto faziam dele uma caixa levemente arredondada — a forma mais
-    /// esquecível que existe. Uma pílula tem silhueta: reconhece-se pelo contorno
-    /// antes de o texto ser lido, que é como um alvo funciona a três metros.
+    /// Ele já foi um retângulo de cantos moles, e depois uma pílula dourada
+    /// chapada com versalete espaçado. O dono reprovou as duas — «simples e feio»
+    /// e depois «feio pra caralho» — e nas duas vezes o problema era o mesmo: um
+    /// preenchimento sólido não pertence a esta casa.
+    ///
+    /// Tudo o que importa aqui se anuncia com **luz**: o facho da cabine, as
+    /// lâmpadas da marquise, a lente do trilho, o anel do foco. O botão principal
+    /// passou a ser a mesma coisa — um halo quente que nasce atrás dele e cresce
+    /// quando ele é escolhido, com a pílula por cima.
+    ///
+    /// ⚠️ E o rótulo voltou à **caixa baixa**. Esta casa escreve em minúscula em
+    /// toda parte: `assistir`, `sintonizar`, `me avise`. O versalete é da voz dos
+    /// **rótulos de seção**, e emprestá-lo pro botão fez ele gritar sem ganhar
+    /// clareza — além de esticar a palavra até expulsar a vizinha da fileira.
     val forma = RoundedCornerShape(50)
     Focavel(
         aoEscolher = aoEscolher,
         modifier = modifier,
         forma = forma,
         escolhivel = habilitado,
+        anel = false,
     ) { focado ->
-        val fundo = when {
-            focado -> Cores.destaqueQuente
-            principal -> Cores.destaque
-            else -> Cores.fundoElevado
-        }
-        val tinta = when {
-            focado || principal -> Cores.fundoAfundado
-            habilitado -> Cores.texto
-            else -> Cores.textoApagado
-        }
-        Box(
-            Modifier
-                .background(fundo, forma)
-                .then(
-                    if (!focado && !principal) {
-                        /// ⚠️ Contorno de 2dp e mais claro que a linha da casa: um
-                        /// botão secundário de 1dp em `Cores.linha` desaparece
-                        /// sobre um fundo escuro com foto atrás — e um botão que
-                        /// não se vê não é secundário, é ausente.
-                        Modifier.border(2.dp, Cores.destaqueApagado.copy(alpha = 0.55f), forma)
-                    } else {
-                        Modifier
+        val aceso = focado || principal
+        Box(contentAlignment = Alignment.Center) {
+            /// O halo. Ele é desenhado **fora** da pílula, e é o que faz o botão
+            /// parecer aceso em vez de pintado.
+            if (aceso) {
+                Canvas(Modifier.matchParentSize()) {
+                    val forca = if (focado) 1f else 0.45f
+                    drawRoundRect(
+                        brush = Brush.radialGradient(
+                            colorStops = arrayOf(
+                                0.00f to Cores.destaqueQuente.copy(alpha = 0.34f * forca),
+                                0.55f to Cores.destaque.copy(alpha = 0.16f * forca),
+                                1.00f to androidx.compose.ui.graphics.Color.Transparent,
+                            ),
+                            center = center,
+                            radius = size.width * 0.78f,
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height),
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .padding(6.dp)
+                    .background(
+                        when {
+                            focado -> Cores.destaqueQuente
+                            principal -> Cores.destaque
+                            else -> androidx.compose.ui.graphics.Color.Transparent
+                        },
+                        forma,
+                    )
+                    .then(
+                        if (!aceso) {
+                            Modifier.border(2.dp, Cores.destaqueApagado.copy(alpha = 0.6f), forma)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
+                RotuloDoBotao(
+                    rotulo = rotulo,
+                    tinta = when {
+                        aceso -> Cores.fundoAfundado
+                        habilitado -> Cores.destaque
+                        else -> Cores.textoApagado
                     },
-                ),
-        ) {
-            RotuloDoBotao(rotulo, tinta)
+                )
+            }
         }
     }
 }

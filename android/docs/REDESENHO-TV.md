@@ -3007,3 +3007,39 @@ linha, e o `voltar` não apareceu.
 **visto** é a foto que mostrou o `ASSISTIR` de volta e os três defeitos acima; o
 que corrige esses três é código que responde a causas medidas naquela foto, mas
 não é foto.
+
+### 22.12 Três instruções, e o fim do vaivém
+
+O dono cortou o ciclo: «você está indo e voltando tentando arrumar esse layout,
+talvez a chave seja pensarmos nas outras coisas» — e deu três instruções.
+
+**Título menor e mais largo.** 46sp → 38sp, e a coluna de 620 pra 700dp. A largura
+veio da caixa, que cedeu de 210 pra 165dp, e do vão, de 44 pra 30. `A Centopéia
+Humana` cabe inteiro agora.
+
+**A fita bem menor.** 132 → 96dp, quadros de 112×63. ⚠️ Ela é **cenário, não
+conteúdo**: diz «isto é um filme» e devolve o resto da tela pro que se lê. Com 190
+empurrava o título pra fora; com 132 ainda esmagava a sinopse — que agora tem
+cinco linhas inteiras.
+
+**O botão.** Ele já foi retângulo de cantos moles, depois pílula dourada chapada
+com versalete espaçado. Reprovado nas duas, e nas duas vezes pelo mesmo motivo:
+**preenchimento sólido não pertence a esta casa.**
+
+Tudo o que importa aqui se anuncia com **luz** — o facho da cabine, as lâmpadas da
+marquise, a lente do trilho, o anel do foco. O botão passou a ser a mesma coisa:
+um halo quente desenhado **fora** da pílula, que cresce quando ele é escolhido.
+
+⚠️ E o rótulo voltou à caixa baixa. Esta casa escreve em minúscula em toda parte —
+`assistir`, `sintonizar`, `me avise`. O versalete é a voz dos **rótulos de seção**,
+e emprestá-lo pro botão fez ele gritar sem ganhar clareza, além de esticar a
+palavra até expulsar a vizinha da fileira.
+
+**Conferido na TCL:** título inteiro, `assistir` e `voltar` lado a lado com o halo,
+sinopse em cinco linhas, etiquetas como ficha técnica (`TERROR · INGLÊS`), a caixa
+com volume à esquerda e a fita fina atravessando o pé.
+
+⚠️ A lição do vaivém fica registrada: eu tratei sintoma quatro vezes seguidas —
+folga da fita, quadro da fita, tamanho do título, ordem dos blocos — e cada
+tentativa mexia num número sem perguntar o que estava acontecendo. Quem quebrou o
+ciclo foi quem estava olhando a tela.

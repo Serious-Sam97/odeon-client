@@ -356,7 +356,7 @@ fun TelaDaObraDaTv(
             ///
             /// Os 12dp aqui e os 16 depois somam os mesmos 18+18 visíveis. É a
             /// diferença entre medir a caixa e medir o que se vê.
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             val comecarEm = ondeContinuar(obra.ondeParou, obra.duracaoEmSegundos, obra.finished)
             /// ⚠️ `FlowRow` aqui pelo **mesmo** motivo das etiquetas, e o
             /// sintoma era o mesmo que o dono relatou: «os botões estão sem
@@ -424,7 +424,7 @@ fun TelaDaObraDaTv(
 
                 BotaoDaSala("voltar", aoVoltar)
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
             Cascata(1) {
             Column {

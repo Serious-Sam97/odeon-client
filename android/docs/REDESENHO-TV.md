@@ -3076,3 +3076,29 @@ presença ao lado de um título de 38sp.
 ⚠️ **Não fotografado.** O destino salvo do app me devolveu ao guia de novo. Os
 dois consertos respondem a causas nomeadas (o halo que ocupa altura, o
 preenchimento que não pertence à casa), mas isto é código, não foto.
+
+### 22.14 O botão errou três vezes, e nenhuma era o tamanho
+
+A foto do dono mostrou o `▸ continuar de 1h14` ocupando **mais altura que o
+título do filme**, com a fileira quebrada em três linhas — `do começo` sozinho lá
+em cima, `voltar` embaixo.
+
+O caminho inteiro deste rótulo, porque ele vale como registro:
+
+| tentativa | o que era | o que o dono disse |
+|---|---|---|
+| 1ª | `labelLarge`, folga `26×14` | «simples e feios» |
+| 2ª | versalete espaçado, `40×20` | «feio pra caralho» — e o `0.28em` expulsava o segundo botão |
+| 3ª | `titleMedium`, `32×20` | «extremamente grandes» |
+| **agora** | 16sp em caixa baixa, folga `20×9` | cabe, e a fileira não quebra |
+
+⚠️ **As três tentativas erradas mexeram em tamanho quando o errado era a
+proporção.** O `titleMedium` do tema de TV é grande de propósito — ele é para
+títulos. Um botão não é um título: ele tem de **responder** ao nome do filme, não
+competir com ele. Foi só quando a foto pôs os dois lado a lado que ficou óbvio.
+
+E o halo caiu de 6 pra 4dp, com os espaçadores acompanhando.
+
+**Conferido na TCL:** `▸ assistir` e `voltar` numa linha só, menores que o título,
+com o degradê e o halo intactos. A sinopse voltou a cinco linhas e as etiquetas
+cabem embaixo dela.

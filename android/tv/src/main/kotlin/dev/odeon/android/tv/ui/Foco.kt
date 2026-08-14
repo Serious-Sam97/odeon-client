@@ -211,7 +211,7 @@ fun BotaoDaSala(
             }
             Box(
                 Modifier
-                    .padding(6.dp)
+                    .padding(4.dp)
                     /// ⚠️ **Degradê vertical, e não uma cor chapada.**
                     ///
                     /// Ouro sólido é tinta; ouro que clareia em cima e fecha

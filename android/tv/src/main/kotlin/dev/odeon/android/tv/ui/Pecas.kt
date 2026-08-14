@@ -64,13 +64,20 @@ internal fun RotuloDoBotao(rotulo: String, tinta: Color) {
         /// ⚠️ O espaçamento do rótulo cai pela metade num botão: `0.28em` é ar
         /// pra um versalete solto, e dentro de uma pílula ele estica a palavra até
         /// ela expulsar a vizinha da fileira — na TCL o `voltar` sumiu por isso.
-        style = MaterialTheme.typography.titleMedium,
+        /// ⚠️ **16sp fixo, e não `titleMedium`.**
+        ///
+        /// O `titleMedium` do tema de TV é grande de propósito — ele é para
+        /// títulos —, e empilhar `32×20` de folga em cima dele fez o botão virar
+        /// um bloco: na foto do dono, o `▸ continuar de 1h14` ocupava mais altura
+        /// que o título do filme, e a fileira quebrou em três linhas.
+        ///
+        /// Um botão não é um título. Ele precisa ser **legível** a três metros, e
+        /// 16sp com folga curta já é — o que ele não pode é competir com o nome do
+        /// filme, que é a coisa que a tela existe pra dizer.
+        style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
         color = tinta,
         maxLines = 1,
-        /// ⚠️ Mais alto que largo em proporção do que parece: 20dp de folga
-        /// vertical num rótulo de 20sp dá um alvo de ~60dp, que é o mínimo pra um
-        /// botão de TV ter presença ao lado de um título de 38sp.
-        modifier = Modifier.padding(horizontal = 32.dp, vertical = 20.dp),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 9.dp),
     )
 }
 

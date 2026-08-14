@@ -82,8 +82,19 @@ for n in $(seq 1 "$CORRIDAS"); do
       --es busca "$BUSCA" --ei indice "$INDICE" --ed em "$EM" >/dev/null
   fi
 
+  # ⚠️ O log é **gravado em fluxo**, não despejado no fim.
+  #
+  # A primeira versão fazia `logcat -d` depois do `sleep`, e numa corrida de três
+  # minutos o anel do logcat girou: as linhas do começo — inclusive a que diz
+  # **qual obra** a bancada abriu — tinham sido comidas, e a corrida saiu «SEM
+  # SUJEITO» sem nada de errado com ela. O `MediaCodec` deste aparelho escreve
+  # duas linhas por segundo por conta própria; janela longa e buffer de anel não
+  # convivem.
+  adb -s "$APARELHO" logcat > "$SAIDA/corrida_$n.txt" 2>&1 &
+  GRAVANDO=$!
   sleep "$DURACAO"
-  adb -s "$APARELHO" logcat -d > "$SAIDA/corrida_$n.txt" 2>&1
+  kill $GRAVANDO 2>/dev/null || true
+  wait $GRAVANDO 2>/dev/null || true
 done
 
 python3 - "$SAIDA" "$CORRIDAS" "$ASSENTAMENTO" <<'PY'
@@ -97,12 +108,24 @@ def seg(t):
 taxas = []
 for n in range(1, corridas + 1):
     txt = open(f"{saida}/corrida_{n}.txt", errors="ignore").read()
-    obra = re.search(r"bancada: obra=(\S+) em=(\S+)", txt)
+    # ⚠️ **Sem sujeito não há medida.** A primeira versão contava qualquer
+    # decodificação, e a primeira corrida de verdade mediu a **prévia do herói da
+    # home** — que decodifica vídeo sozinha, sem ninguém pedir — e imprimiu 0,00
+    # como se fosse o filme. Um número com o sujeito errado é pior que nenhum.
+    abriu = re.search(r"^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+).*bancada: obra=(\S+) em=(\S+)", txt, re.M)
+    if not abriu:
+        print(f"corrida {n}: SEM SUJEITO — a bancada não abriu obra nenhuma "
+              f"(o termo não achou nada, ou o app não tinha sessão)")
+        continue
+    desde = seg(abriu.group(1))
+
+    # ⚠️ E só conta o que veio **depois** de a bancada abrir. É o que separa o
+    # filme da prévia da home, que já estava decodificando quando ela chegou.
     # O `ROB` do MediaCodec é o batimento do decodificador: sem ele não houve vídeo.
-    quadros = [seg(m) for m in re.findall(r"^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+).*ROB\]V, ROB:", txt, re.M)]
-    quedas = [seg(m) for m in re.findall(r"^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+).*drop frame", txt, re.M)]
+    quadros = [t for t in (seg(m) for m in re.findall(r"^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+).*ROB\]V, ROB:", txt, re.M)) if t > desde]
+    quedas = [t for t in (seg(m) for m in re.findall(r"^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+).*drop frame", txt, re.M)) if t > desde]
     if not quadros:
-        print(f"corrida {n}: SEM VÍDEO — a bancada não chegou a tocar")
+        print(f"corrida {n}: SEM VÍDEO — a bancada abriu {abriu.group(2)[:8]} mas nada decodificou")
         continue
     inicio, fim = min(quadros), max(quadros)
     janela = fim - (inicio + assentamento)
@@ -112,8 +135,16 @@ for n in range(1, corridas + 1):
     regime = [q for q in quedas if q > inicio + assentamento]
     taxa = len(regime) / janela
     taxas.append(taxa)
-    quem = obra.group(1)[:8] if obra else "?"
-    print(f"corrida {n}: obra={quem} | {len(quedas)} descartes no total, "
+    # ⚠️ O id vai **inteiro**. Cortado em 8 ele serve pra ler e não serve pra
+    # repetir: passar o pedaço em `--obra` abre uma ficha que não carrega, e a
+    # corrida sai «SEM VÍDEO» sem dizer por quê. Repetir é o ponto da bancada.
+    quem = abriu.group(2)
+    # ⚠️ A obra **não** identifica o que tocou: nesta casa há obra com dois
+    # arquivos (o mesmo filme dublado e legendado), e eles medem diferente. Quem
+    # identifica é o arquivo do plano.
+    arq = re.search(r"plano\(([0-9a-f-]{36})\)", txt[txt.find(abriu.group(0)):])
+    print(f"corrida {n}: obra={quem}\n           arquivo={arq.group(1) if arq else '?'} | "
+          f"{len(quedas)} descartes no total, "
           f"{len(regime)} em regime ({janela:.0f}s) = {taxa:.2f}/s")
 
 if taxas:

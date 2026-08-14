@@ -3647,3 +3647,53 @@ log estão certas.
 ⚠️ **A porta do `Intent` não foi exercitada na TCL**: a TV saiu do `adb` no meio
 («device not found», e o `adb mdns` não a acha mais). Compila, o `release` não a
 contém, mas **ninguém viu ela abrir um filme**. Não é «funciona» até rodar lá.
+
+### 27.1 A bancada rodando — e três defeitos dela, achados no primeiro uso
+
+Ela funcionou de primeira e **mentiu de primeira**, três vezes. Cada conserto
+está no arquivo, mas vale a lista porque todos são o mesmo erro de fundo: medir
+sem saber de quem é a medida.
+
+| o que ela fez | por que | conserto |
+|---|---|---|
+| mediu a **prévia do herói da home** e imprimiu `0,00` como se fosse o filme | a home decodifica vídeo sozinha, e eu contava qualquer decodificação | só conta o que vem **depois** da linha «bancada: obra=…», e recusa a corrida sem ela |
+| disse «nada achado» pra um termo que existe | eu apagava o pedido **antes** da chamada de rede, e isso tirava o `LaunchedEffect` da composição no meio (`LeftCompositionCancellationException`) | apagar **depois** |
+| saiu «SEM SUJEITO» numa janela de 3 min | `logcat -d` no fim, e o anel girou: o `MediaCodec` desta TV escreve duas linhas por segundo | gravar **em fluxo** durante a corrida |
+
+⚠️ E um quarto, que não é dela: **`--indice` não é identidade.** A ordem da busca
+mudou entre corridas e eu medi o pt-BR achando que media o inglês. Quem repete é
+`--obra <id inteiro>`; o id cortado em 8 abre uma ficha que não carrega.
+
+### 27.2 O resultado, e ele não é o esperado
+
+Catorze corridas, com a bancada consertada:
+
+| arquivo | de onde | descartes/s em regime |
+|---|---|---|
+| pt-BR (`a2274591`) | do começo | 0,00 · 0,03 · 0,00 |
+| **inglês (`2531ac55`)** | do começo | 0,00 · 0,00 · 0,00 |
+| pt-BR | aos 25 min | 0,00 · 0,00 · 0,00 |
+| **inglês** | aos 25 min | 0,00 · 0,00 · 0,00 |
+| **inglês** | aos 25 min, **165 s de janela** | 0,00 · 0,01 |
+
+⚠️ **O arquivo que trava não travou.** Nem do começo, nem no ponto em que o dono
+retoma, nem em quase três minutos seguidos. É o mesmo nível do Jellyfin.
+
+E a repetibilidade, que era o ponto: **0,00 a 0,03** em catorze corridas, contra
+**0,11 a 4,21** nas medidas à mão. A bancada faz o trabalho dela.
+
+### 27.3 Então o que as medidas à mão tinham que esta não tem
+
+O defeito **existe** — o dono vê, e eu medi 0,51 a 4,21/s à mão no mesmo arquivo.
+Se abrir e tocar dá zero, a diferença está no **estado da sessão**, não no
+arquivo. O que havia nas corridas à mão e não há aqui:
+
+1. ⚠️ **Legenda escolhida.** Neste mesmo filme eu liguei a legenda `pt-BR` ao
+   testar a modal do §24, e ela ficou. A bancada abre sem legenda nenhuma. É a
+   suspeita mais forte — e é a única mexida que já empurrou o número pro lado
+   certo (§26.7: 0,05 · 0,03 · 0,47 sem as legendas anexadas).
+2. App rodado por muito tempo antes, com telas de busca e cartazes carregados.
+3. Cromo do player aberto, fita de miniaturas carregada, modal aberta.
+
+⚠️ **A bancada precisa de um `--legenda`** pra fechar isso. Sem ele, ela mede um
+jeito de assistir que o dono não usa.

@@ -195,15 +195,33 @@ class AtividadeDaTv : ComponentActivity() {
         LaunchedEffect(pedidoDaBancada, onde) {
             val pedido = pedidoDaBancada ?: return@LaunchedEffect
             if (onde is Onde.Perguntando || onde is Onde.Porta) return@LaunchedEffect
-            pedidoDaBancada = null
 
+            /// ## ⚠️ O pedido só é apagado **depois** da busca
+            ///
+            /// Apagá-lo antes — como o [pedidoDeFora] faz — parecia simétrico e
+            /// matava a própria medição: mexer no estado que é **chave deste
+            /// efeito** o tira da composição, e o `LaunchedEffect` morre no meio
+            /// da chamada de rede. O log dizia
+            /// `LeftCompositionCancellationException: The coroutine scope left
+            /// the composition`, e a bancada relatava «nada achado».
+            ///
+            /// O `pedidoDeFora` pode fazer isso porque o trabalho dele é
+            /// síncrono: ele não tem meio pra ser interrompido.
             val obraId = pedido.obra ?: runCatching {
                 app.odeon
                     .biblioteca(filtros = dev.odeon.android.dados.Filtros(busca = pedido.busca.orEmpty()))
+                    .also { android.util.Log.i("Odeon", "bancada: ${it.size} achados pra ${pedido.busca}") }
                     .getOrNull(pedido.indice)
                     ?.id
+            }.onFailure {
+                /// ⚠️ O erro **vai pro log**. A primeira versão engolia com
+                /// `getOrNull` e o resultado foi uma corrida que dizia «nada
+                /// achado» sem dizer por quê — que é o mesmo defeito que a
+                /// bancada existe pra não cometer.
+                android.util.Log.w("Odeon", "bancada: a busca falhou", it)
             }.getOrNull()
 
+            pedidoDaBancada = null
             if (obraId == null) {
                 android.util.Log.w("Odeon", "bancada: nada achado pra ${pedido.busca}[${pedido.indice}]")
                 return@LaunchedEffect

@@ -84,6 +84,12 @@ android {
 
     buildFeatures {
         compose = true
+
+        /// ⚠️ Ligado por causa da **bancada**: ela precisa de `BuildConfig.DEBUG`
+        /// pra existir só na versão de trabalho. Sem essa trava, uma porta que
+        /// começa a tocar um arquivo por `Intent` ficaria aberta na versão que o
+        /// dono usa — e qualquer app do aparelho poderia empurrar filme na tela.
+        buildConfig = true
     }
 
     compileOptions {

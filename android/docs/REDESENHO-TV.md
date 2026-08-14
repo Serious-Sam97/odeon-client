@@ -3597,3 +3597,53 @@ Nunca medi o **pt-BR dentro do nosso app**. Toda a comparação foi «inglês no
 Odeon» contra «os dois no Jellyfin» e contra a impressão do dono. Se o pt-BR
 também descartar aqui, a história muda de novo — e é a medida mais barata que
 resta.
+
+## 27. A bancada, porque sem ela a investigação virou chute com número do lado
+
+A §26 não travou por falta de hipótese. Travou por falta de **repetibilidade**:
+o mesmo arquivo, no mesmo binário, deu de 0,11 a 4,21 descartes por segundo. Com
+ruído maior que o efeito, toda hipótese testada devolve «talvez».
+
+Duas causas, e as duas são de método:
+
+| | |
+|---|---|
+| **navegação** | cada corrida exigia atravessar o app pelo D-pad, e caía na tela errada metade das vezes — o destino salvo muda entre execuções |
+| **o salto** | toda corrida começava retomando de onde o filme parou, e salto **descarta quadro por definição** |
+
+### O que a bancada faz
+
+`ferramentas/bancada.sh` e uma porta de `Intent` só de debug:
+
+```bash
+ferramentas/bancada.sh --busca majestade --indice 0 --corridas 3
+ferramentas/bancada.sh --obra <id> --em 600 --duracao 60
+```
+
+1. **Sem navegação.** `dev.odeon.android.tv.BANCADA` abre a obra e manda tocar.
+2. **Sem salto.** Começa em `--em` (0 por padrão), então não há retomada.
+3. **Sem o arranque.** Os primeiros **10 s** saem da conta: todo início tem
+   enchimento de buffer e negociação de codec, e contá-los é medir o arranque.
+4. **Diz o que mediu.** A obra resolvida vai pro log antes de tocar — medida sem
+   sujeito não vale nada, e foi assim que perdi tempo achando que media um
+   arquivo quando media outro.
+
+⚠️ **Trancada no `BuildConfig.DEBUG`**, e isto não é zelo decorativo: a porta
+**começa a tocar um arquivo** sem ninguém pedir. Solta na versão de verdade, era
+um jeito de qualquer app do aparelho empurrar vídeo na tela da sala. Ligar o
+`buildConfig` do `:tv` foi só pra ter essa tranca.
+
+⚠️ **Ela toca pela ficha, não por dentro do player.** Quem sabe qual arquivo de
+uma obra tocar é a `TelaDaObraDaTv`; duplicar essa escolha na bancada mediria um
+arquivo que ninguém vê.
+
+### O que está verificado, e o que não está
+
+✅ O **contador** foi conferido contra um log sintético de 40 s com 5 descartes no
+arranque e 12 em regime: devolveu «17 no total, 12 em regime (29 s) = 0,41/s», e
+marcou `SEM VÍDEO` numa corrida sem decodificação. A aritmética e a leitura do
+log estão certas.
+
+⚠️ **A porta do `Intent` não foi exercitada na TCL**: a TV saiu do `adb` no meio
+(«device not found», e o `adb mdns` não a acha mais). Compila, o `release` não a
+contém, mas **ninguém viu ela abrir um filme**. Não é «funciona» até rodar lá.

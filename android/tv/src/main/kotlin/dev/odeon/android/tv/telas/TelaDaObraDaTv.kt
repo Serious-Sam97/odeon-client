@@ -79,6 +79,14 @@ import androidx.compose.foundation.layout.FlowRow
 fun TelaDaObraDaTv(
     modelo: ModeloDaObra,
     aoTocar: (obraId: String, arquivoId: String, titulo: String, comecarEm: Double, capa: String?) -> Unit,
+    /// Quando vem preenchido, a ficha **toca sozinha** neste segundo assim que
+    /// souber qual é o arquivo. É a bancada de medição, e só ela usa isto — ver
+    /// `ACAO_DA_BANCADA` na `AtividadeDaTv`.
+    ///
+    /// ⚠️ Aqui e não no player: quem sabe **qual arquivo** de uma obra tocar é
+    /// esta tela, e duplicar essa escolha na bancada faria a medida acontecer num
+    /// arquivo que a pessoa nunca veria.
+    tocarSozinhoEm: Double? = null,
     aoVoltar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -103,6 +111,13 @@ fun TelaDaObraDaTv(
     /// comportamento que o aparelho desmentiu — as outras duas estão no
     /// `TelaDeLoginDaTv` e no `Trilho`.
     BackHandler { aoVoltar() }
+
+    LaunchedEffect(tocarSozinhoEm, estado.obra?.id, estado.arquivo?.id) {
+        val em = tocarSozinhoEm ?: return@LaunchedEffect
+        val obra = estado.obra ?: return@LaunchedEffect
+        val arquivo = estado.arquivo ?: return@LaunchedEffect
+        aoTocar(obra.id, arquivo.id, obra.title, em, modelo.capa(obra.artwork["poster"]))
+    }
 
     LaunchedEffect(estado.obra?.id) {
         if (estado.obra != null) runCatching { botaoPrincipal.requestFocus() }

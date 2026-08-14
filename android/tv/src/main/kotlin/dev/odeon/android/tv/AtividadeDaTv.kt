@@ -54,6 +54,17 @@ import kotlinx.coroutines.launch
 /// A regra que fecha o desenho: quem **não** liga um `BackHandler` está dizendo
 /// «aqui voltar sai do app». Na raiz isso é certo; em qualquer outro lugar é o
 /// defeito da ficha se repetindo.
+/// O que a bancada pediu: um arquivo, num ponto, sem ninguém apertar nada.
+private data class PedidoDaBancada(
+    val busca: String?,
+    val obra: String?,
+    val indice: Int,
+    val em: Double,
+)
+
+/// A ação que abre a bancada. Só existe em `debug` — ver o `when` de `lerIntencao`.
+private const val ACAO_DA_BANCADA = "dev.odeon.android.tv.BANCADA"
+
 private sealed interface Onde {
     /// Enquanto se pergunta ao `Cofre` se há sessão guardada. Dura um piscar, e
     /// existe pra a TV não mostrar a tela de login pra quem já entrou.
@@ -69,7 +80,9 @@ private sealed interface Onde {
     /// nem onde parar. Fingir que é obrigaria o player de filme a aceitar nulos
     /// em tudo que ele usa pra existir.
     data class CanalDeFora(val canalId: String, val nome: String) : Onde
-    data class Ficha(val obraId: String) : Onde
+    /// [tocarEm] só é preenchido pela bancada: quando vem, a ficha toca sozinha
+    /// naquele segundo em vez de esperar alguém apertar.
+    data class Ficha(val obraId: String, val tocarEm: Double? = null) : Onde
     data class Filme(
         val obraId: String,
         val arquivoId: String,
@@ -91,6 +104,9 @@ class AtividadeDaTv : ComponentActivity() {
     /// A obra que um cartão da home pediu. Chega por `Intent`, e não por estado
     /// da tela — daí ela morar aqui e não dentro do Compose.
     private var pedidoDeFora by mutableStateOf<String?>(null)
+
+    /// O pedido da bancada de medição. Ver [ACAO_DA_BANCADA].
+    private var pedidoDaBancada by mutableStateOf<PedidoDaBancada?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,6 +149,27 @@ class AtividadeDaTv : ComponentActivity() {
         when (i.action) {
             /// `odeon-tv://obra/<id>` — o cartão da fileira do app e o do
             /// «continuar assistindo» do sistema.
+            /// ## ⚠️ A porta da bancada, trancada fora do debug
+            ///
+            /// Medir descarte de quadro exige repetir **a mesma coisa**: mesmo
+            /// arquivo, mesmo ponto, sem salto de retomada. Fazer isso pelo
+            /// controle custou meia sessão e errou de tela na metade das vezes —
+            /// e uma medida que depende de acertar a navegação não é medida, é
+            /// sorte.
+            ///
+            /// ⚠️ `BuildConfig.DEBUG` e não uma flag qualquer: isto **começa a
+            /// tocar um arquivo** sem ninguém pedir. Numa versão de verdade seria
+            /// uma porta pra qualquer app do aparelho empurrar vídeo na tela da
+            /// sala.
+            ACAO_DA_BANCADA -> if (BuildConfig.DEBUG) {
+                pedidoDaBancada = PedidoDaBancada(
+                    busca = i.getStringExtra("busca"),
+                    obra = i.getStringExtra("obra"),
+                    indice = i.getIntExtra("indice", 0),
+                    em = i.getDoubleExtra("em", 0.0),
+                )
+            }
+
             Intent.ACTION_VIEW -> i.data?.lastPathSegment?.let { pedidoDeFora = it }
 
             /// A busca do sistema devolve o id na `Uri` da sugestão escolhida —
@@ -153,6 +190,31 @@ class AtividadeDaTv : ComponentActivity() {
         /// Um cartão da home abre a ficha por cima de onde quer que se esteja —
         /// mas só depois de haver sessão. Sem isto, quem toca no cartão com a TV
         /// deslogada cairia numa ficha que não carrega.
+        /// ⚠️ Espera a casa existir, como o [pedidoDeFora]: pedir filme antes de
+        /// haver sessão cairia na porta de entrada e o pedido se perderia.
+        LaunchedEffect(pedidoDaBancada, onde) {
+            val pedido = pedidoDaBancada ?: return@LaunchedEffect
+            if (onde is Onde.Perguntando || onde is Onde.Porta) return@LaunchedEffect
+            pedidoDaBancada = null
+
+            val obraId = pedido.obra ?: runCatching {
+                app.odeon
+                    .biblioteca(filtros = dev.odeon.android.dados.Filtros(busca = pedido.busca.orEmpty()))
+                    .getOrNull(pedido.indice)
+                    ?.id
+            }.getOrNull()
+
+            if (obraId == null) {
+                android.util.Log.w("Odeon", "bancada: nada achado pra ${pedido.busca}[${pedido.indice}]")
+                return@LaunchedEffect
+            }
+            /// ⚠️ O que foi resolvido vai pro log **antes** de tocar: sem isso a
+            /// medida não sabe dizer qual arquivo mediu, e uma medida sem sujeito
+            /// não vale nada.
+            android.util.Log.i("Odeon", "bancada: obra=$obraId em=${pedido.em}")
+            onde = Onde.Ficha(obraId, tocarEm = pedido.em)
+        }
+
         LaunchedEffect(pedidoDeFora, onde) {
             val pedido = pedidoDeFora ?: return@LaunchedEffect
             if (onde is Onde.Perguntando || onde is Onde.Porta) return@LaunchedEffect
@@ -208,6 +270,7 @@ class AtividadeDaTv : ComponentActivity() {
                     }
                     TelaDaObraDaTv(
                         modelo = modelo,
+                        tocarSozinhoEm = agora.tocarEm,
                         aoVoltar = { onde = Onde.Casa() },
                         aoTocar = { obraId, arquivoId, titulo, comecarEm, capa ->
                             onde = Onde.Filme(obraId, arquivoId, titulo, comecarEm, capa)

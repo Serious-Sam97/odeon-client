@@ -120,6 +120,9 @@ import androidx.compose.ui.focus.onFocusChanged
 fun TelaDoPlayerDaTv(
     modelo: ModeloDoPlayer,
     ondeParou: Double,
+    /// A legenda já escolhida ao abrir. Só a bancada de medição preenche isto —
+    /// quem assiste escolhe na modal, e a escolha começa vazia como sempre.
+    legendaInicial: String? = null,
     aoSair: () -> Unit,
     /// ⚠️ **O arquivo acabou** — e até este parâmetro existir, acabar não era um
     /// acontecimento nesta tela: era a ausência de qualquer um.
@@ -283,7 +286,12 @@ fun TelaDoPlayerDaTv(
             return@Box
         }
 
-        Cromo(modelo = modelo, player = player, aoSair = aoSair)
+        Cromo(
+            modelo = modelo,
+            player = player,
+            legendaInicial = legendaInicial,
+            aoSair = aoSair,
+        )
     }
 }
 
@@ -322,6 +330,9 @@ private fun Superficie(player: Player) {
 private fun Cromo(
     modelo: ModeloDoPlayer,
     player: Player?,
+    /// Ver o parâmetro de mesmo nome em [TelaDoPlayerDaTv]: a escolha mora aqui
+    /// dentro, então é aqui que ela precisa começar preenchida.
+    legendaInicial: String?,
     aoSair: () -> Unit,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
@@ -329,7 +340,7 @@ private fun Cromo(
 
     var aberto by remember { mutableStateOf(true) }
     var menuDeFaixas by remember { mutableStateOf(false) }
-    var legendaEscolhida by remember { mutableStateOf<String?>(null) }
+    var legendaEscolhida by remember { mutableStateOf<String?>(legendaInicial) }
     var posicao by remember { mutableLongStateOf(0L) }
     var duracao by remember { mutableLongStateOf(0L) }
     var tocando by remember { mutableStateOf(true) }

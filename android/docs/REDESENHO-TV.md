@@ -3697,3 +3697,31 @@ arquivo. O que havia nas corridas à mão e não há aqui:
 
 ⚠️ **A bancada precisa de um `--legenda`** pra fechar isso. Sem ele, ela mede um
 jeito de assistir que o dono não usa.
+
+### 27.4 A bancada ganhou `--legenda`, e a suspeita da legenda também caiu
+
+`--legenda pt-BR` liga a legenda ao abrir, pelo mesmo caminho de quem escolhe na
+modal — `legendaInicial` desce até o `Cromo`, onde a escolha mora.
+
+⚠️ **Conferido na tela**, e não só no código: cinco capturas da faixa de baixo
+durante a corrida mostram as legendas aparecendo («Alguns dos meus homens
+passaram para o seu lado há pouco tempo»). Sem essa conferência, uma legenda que
+não casasse com nenhum rótulo daria o mesmo silêncio de uma legenda desligada, e
+eu teria medido o de sempre achando que media outra coisa.
+
+Inglês, aos 25 min, **com legenda**: `0,00 · 0,00 · 0,00`.
+
+### Onde a coisa está agora
+
+Dezessete corridas, todas entre **0,00 e 0,03**: os dois arquivos, do começo e
+aos 25 min, com e sem legenda, até 165 s seguidos. **O defeito não reproduz.**
+
+O que sobra de diferença entre a bancada e o jeito do dono assistir:
+
+1. ⚠️ **Tempo.** Ele assiste uma hora; a maior janela medida é de **165 s**.
+2. **O app usado antes** — home, buscas, cartazes carregados, cromo aberto.
+3. O que mais estivesse acontecendo na casa e na TV naquela hora.
+
+⚠️ E vale dizer o que isto **não** prova: não prova que o defeito não existe. Ele
+foi medido à mão, 0,51 a 4,21/s, no mesmo arquivo. Prova que ele **não está em
+«abrir o arquivo e tocar»** — nem no arquivo, nem no ponto, nem na legenda.

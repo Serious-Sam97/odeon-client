@@ -24,6 +24,7 @@
 #
 #   ferramentas/bancada.sh --busca majestade --indice 0 --corridas 3
 #   ferramentas/bancada.sh --obra <id> --em 600 --duracao 60
+#   ferramentas/bancada.sh --obra <id> --legenda pt-BR --corridas 3
 #
 # A saída é uma linha por corrida com **descartes por segundo em regime**, que é
 # o número que vale — e a mediana no fim.
@@ -36,7 +37,7 @@ ACAO=dev.odeon.android.tv.BANCADA
 # Quanto do começo não conta. Ver o cabeçalho.
 ASSENTAMENTO=10
 
-BUSCA=""; OBRA=""; INDICE=0; EM=0; DURACAO=40; CORRIDAS=3; APARELHO=""
+BUSCA=""; OBRA=""; INDICE=0; EM=0; DURACAO=40; CORRIDAS=3; APARELHO=""; LEGENDA=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +48,9 @@ while [ $# -gt 0 ]; do
     --duracao) DURACAO="$2"; shift 2 ;;
     --corridas) CORRIDAS="$2"; shift 2 ;;
     --aparelho) APARELHO="$2"; shift 2 ;;
+    # ⚠️ Ligar legenda muda o que se mede: as corridas em que o defeito apareceu
+    # tinham legenda, e as da bancada não tinham nenhuma.
+    --legenda) LEGENDA="$2"; shift 2 ;;
     *) echo "argumento desconhecido: $1" >&2; exit 2 ;;
   esac
 done
@@ -76,10 +80,10 @@ for n in $(seq 1 "$CORRIDAS"); do
   # declara no manifesto de propósito: porta de debug não se anuncia.
   if [ -n "$OBRA" ]; then
     adb -s "$APARELHO" shell am start -n $ATIVIDADE -a $ACAO \
-      --es obra "$OBRA" --ed em "$EM" >/dev/null
+      --es obra "$OBRA" --ed em "$EM" ${LEGENDA:+--es legenda "$LEGENDA"} >/dev/null
   else
     adb -s "$APARELHO" shell am start -n $ATIVIDADE -a $ACAO \
-      --es busca "$BUSCA" --ei indice "$INDICE" --ed em "$EM" >/dev/null
+      --es busca "$BUSCA" --ei indice "$INDICE" --ed em "$EM" ${LEGENDA:+--es legenda "$LEGENDA"} >/dev/null
   fi
 
   # ⚠️ O log é **gravado em fluxo**, não despejado no fim.

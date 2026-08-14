@@ -60,6 +60,7 @@ private data class PedidoDaBancada(
     val obra: String?,
     val indice: Int,
     val em: Double,
+    val legenda: String?,
 )
 
 /// A ação que abre a bancada. Só existe em `debug` — ver o `when` de `lerIntencao`.
@@ -82,7 +83,12 @@ private sealed interface Onde {
     data class CanalDeFora(val canalId: String, val nome: String) : Onde
     /// [tocarEm] só é preenchido pela bancada: quando vem, a ficha toca sozinha
     /// naquele segundo em vez de esperar alguém apertar.
-    data class Ficha(val obraId: String, val tocarEm: Double? = null) : Onde
+    data class Ficha(
+        val obraId: String,
+        val tocarEm: Double? = null,
+        /// A legenda que a bancada quer ligada. Só ela usa.
+        val legenda: String? = null,
+    ) : Onde
     data class Filme(
         val obraId: String,
         val arquivoId: String,
@@ -94,6 +100,12 @@ private sealed interface Onde {
         /// É o campo que separa «estou vendo um filme» de «estou num canal», e
         /// sem ele o fim do arquivo não tem a quem perguntar o que vem depois.
         val canalId: String? = null,
+
+        /// ⚠️ A legenda que a bancada pediu, se pediu. Existe porque **medir sem
+        /// legenda é medir um jeito de assistir que ninguém usa**: o defeito que
+        /// procuramos só apareceu em sessões com legenda ligada, e a bancada
+        /// abria sempre sem nenhuma.
+        val legenda: String? = null,
     ) : Onde
 }
 
@@ -167,6 +179,7 @@ class AtividadeDaTv : ComponentActivity() {
                     obra = i.getStringExtra("obra"),
                     indice = i.getIntExtra("indice", 0),
                     em = i.getDoubleExtra("em", 0.0),
+                    legenda = i.getStringExtra("legenda"),
                 )
             }
 
@@ -230,7 +243,7 @@ class AtividadeDaTv : ComponentActivity() {
             /// medida não sabe dizer qual arquivo mediu, e uma medida sem sujeito
             /// não vale nada.
             android.util.Log.i("Odeon", "bancada: obra=$obraId em=${pedido.em}")
-            onde = Onde.Ficha(obraId, tocarEm = pedido.em)
+            onde = Onde.Ficha(obraId, tocarEm = pedido.em, legenda = pedido.legenda)
         }
 
         LaunchedEffect(pedidoDeFora, onde) {
@@ -291,7 +304,10 @@ class AtividadeDaTv : ComponentActivity() {
                         tocarSozinhoEm = agora.tocarEm,
                         aoVoltar = { onde = Onde.Casa() },
                         aoTocar = { obraId, arquivoId, titulo, comecarEm, capa ->
-                            onde = Onde.Filme(obraId, arquivoId, titulo, comecarEm, capa)
+                            onde = Onde.Filme(
+                                obraId, arquivoId, titulo, comecarEm, capa,
+                                legenda = agora.legenda,
+                            )
                         },
                     )
                 }
@@ -321,6 +337,7 @@ class AtividadeDaTv : ComponentActivity() {
                     TelaDoPlayerDaTv(
                         modelo = modelo,
                         ondeParou = agora.comecarEm,
+                        legendaInicial = agora.legenda,
                         aoSair = {
                             /// ## ⚠️ Sair de um **canal** volta pra sintonia
                             ///

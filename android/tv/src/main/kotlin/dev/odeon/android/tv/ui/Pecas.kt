@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -47,12 +48,22 @@ import dev.odeon.android.ui.corDeHex
 /// `Foco.kt`, que é sobre foco, e não sobre tipografia.
 @Composable
 internal fun RotuloDoBotao(rotulo: String, tinta: Color) {
+    /// ## ⚠️ Mais ar, e versalete
+    ///
+    /// «Os botões estão simples e feios», e a causa era medida: `26×14` de folga
+    /// num botão que a três metros tem o tamanho de uma unha. Botão de TV não é
+    /// botão de dedo — ele é lido de longe e apertado de longe, e precisa de
+    /// corpo pra parecer um alvo.
+    ///
+    /// O versalete com espaçamento é a mesma voz dos rótulos desta casa. Um botão
+    /// escrito em caixa baixa apertada some ao lado de um título em serifada de
+    /// 62sp; escrito assim, ele **responde** ao título em vez de sumir.
     Text(
-        text = rotulo,
-        style = MaterialTheme.typography.labelLarge,
+        text = rotulo.uppercase(),
+        style = TipoDaSala.rotulo.copy(fontSize = 17.sp),
         color = tinta,
         maxLines = 1,
-        modifier = Modifier.padding(horizontal = 26.dp, vertical = 14.dp),
+        modifier = Modifier.padding(horizontal = 40.dp, vertical = 20.dp),
     )
 }
 

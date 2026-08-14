@@ -48,6 +48,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
 import dev.odeon.android.ui.locadora.FaceDaCaixa
 import dev.odeon.android.ui.locadora.Pose
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import dev.odeon.android.ui.Serifada
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.locadora.CaixaEm3D
 import dev.odeon.android.ui.player.Perfuracoes
@@ -267,10 +270,22 @@ fun TelaDaObraDaTv(
 
             Cascata(0) {
             Column {
+            /// ⚠️ Serifada de 62sp com entrelinha **menor que o corpo** (0,92).
+            ///
+            /// Um título de duas linhas com entrelinha larga vira duas frases
+            /// soltas; apertado, vira um bloco — que é o que um letreiro é. É a
+            /// mesma regra do herói da biblioteca, e a razão de a serifada existir
+            /// nesta casa: quando o texto **é** o assunto, ele tem peso de objeto.
             Text(
                 text = obra.title,
-                style = MaterialTheme.typography.displayMedium,
-                color = Cores.texto,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = Serifada,
+                    fontSize = 62.sp,
+                    lineHeight = 57.sp,
+                    color = Cores.texto,
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
 
             /// O título original só aparece quando **difere**. Repeti-lo embaixo
@@ -290,7 +305,20 @@ fun TelaDaObraDaTv(
             }
             }
 
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            /// ## ⚠️ A rolagem saiu, e a descrição voltou
+            ///
+            /// Tirar o título da rolagem consertou o título e **comeu a sinopse**:
+            /// o que sobrava de altura pra parte rolante era pouco, e o foco
+            /// abrindo nos botões levava o texto pra cima antes de alguém ler.
+            /// O dono foi direto: «eu gostaria da descrição de volta».
+            ///
+            /// Uma ficha não é um documento — é um cartaz. Ela tem de **caber**,
+            /// e o que não cabe é cortado com reticências, não guardado numa
+            /// rolagem que ninguém vai fazer com um controle na mão.
+            ///
+            /// Cinco linhas é o que uma sinopse precisa pra dizer do que é o
+            /// filme. O resto é o filme.
+            Column {
             Cascata(1) {
             Column {
             obra.overview?.takeIf { it.isNotBlank() }?.let {
@@ -327,43 +355,17 @@ fun TelaDaObraDaTv(
                 /// `FlowRow` quebra pra baixo quando não cabe — e agora a coluna
                 /// rola, então a segunda linha de etiquetas não empurra mais os
                 /// botões pra fora da tela. Os dois consertos só funcionam juntos.
-                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    /// ⚠️ Só o `value`, e não `genero: Crime` — é o que a web
-                    /// faz, e o `Etiqueta` explica por quê. A cor vem do
-                    /// servidor e, quando falta, cai na cor da casa: **nunca**
-                    /// uma cor sorteada, que pareceria classificação vinda do
-                    /// acervo (§18).
-                    /// Rede de segurança: etiqueta sem texto não vira pílula. O
-                    /// §24 vale — o que não tem o que dizer não ocupa lugar —,
-                    /// mas ver o comentário acima: **não** era isto que o dono
-                    /// estava vendo.
-                    ///
-                    /// O `take(6)` vem depois do filtro de propósito: com ele
-                    /// antes, uma etiqueta vazia gastaria uma das seis vagas.
-                    /// ⚠️ **Gênero, e não país nem «filme».**
-                    ///
-                    /// Eram seis pílulas: `Estados Unidos`, `Reino Unido`,
-                    /// `filme`, `Ação`, `Aventura`, `Thriller`. Metade delas não
-                    /// ajuda a escolher — `filme` numa tela de filme é ruído, e o
-                    /// país raramente é o critério de quem está decidindo o que
-                    /// ver hoje à noite.
-                    ///
-                    /// Seis pílulas iguais também achatam o valor de cada uma:
-                    /// quando tudo é etiqueta, nenhuma é destaque.
-                    obra.tags
+                Text(
+                    text = obra.tags
                         .filter { it.value.isNotBlank() && it.namespace !in ETIQUETAS_MUDAS }
                         .take(4)
-                        .forEach { etiqueta ->
-                        Pilula(
-                            texto = etiqueta.value,
-                            cor = corDeHex(etiqueta.color) ?: Cores.destaqueApagado,
-                        )
-                    }
-                }
+                        .joinToString("  ·  ") { it.value }
+                        .uppercase(),
+                    style = dev.odeon.android.tv.ui.TipoDaSala.rotulo,
+                    color = Cores.destaqueApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             Spacer(Modifier.height(30.dp))

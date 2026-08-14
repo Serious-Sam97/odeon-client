@@ -2934,3 +2934,41 @@ tinha poder de veto sobre algo que já havia acontecido.
 E a resposta inteira é registrada em log, pra a próxima vez não custar uma rodada.
 
 **Também não reconferido** — pelo mesmo motivo da §22.8.
+
+### 22.10 A descrição de volta, e o título, as etiquetas e os botões
+
+Quatro pedidos numa mensagem: «gostaria da descrição de volta (…) melhore os
+botões, estão simples e feios, e melhore o design do título e dos bullets».
+
+**A descrição.** ⚠️ Tirar o título da rolagem consertou o título e **comeu a
+sinopse**: o que sobrava de altura pra parte rolante era pouco, e o foco abrindo
+nos botões levava o texto pra cima antes de alguém ler. A rolagem saiu de vez.
+
+Uma ficha não é documento, é **cartaz**: tem de caber. O que não cabe é cortado
+com reticências — cinco linhas, que é o que uma sinopse precisa pra dizer do que é
+o filme —, não guardado numa rolagem que ninguém faz com um controle na mão.
+
+**O título.** Serifada de 62sp com entrelinha **menor** que o corpo (57sp). Um
+título de duas linhas com entrelinha larga vira duas frases soltas; apertado, vira
+um bloco — que é o que um letreiro é.
+
+**As etiquetas.** ⚠️ Eram quatro cápsulas de borda arredondada, cada uma pedindo
+atenção igual. Cápsula é forma de **botão**, e essas não levam a lugar nenhum
+(§53) — prometiam um toque que não existe. Viraram uma linha só em versalete
+dourado apagado, com pontos separando, como uma ficha técnica de cartaz escreve.
+
+**Os botões.** A folga era `26×14` — num botão que a três metros tem o tamanho de
+uma unha. Botão de TV é lido de longe e apertado de longe: precisa de corpo pra
+parecer alvo. Passou pra `40×20`, versalete de 17sp, e o canto de 8dp virou
+**pílula**: uma pílula tem silhueta, reconhece-se pelo contorno antes de o texto
+ser lido.
+
+⚠️ E o contorno do secundário foi de 1dp em `Cores.linha` pra 2dp em dourado
+apagado: 1dp sobre um fundo escuro com foto atrás **desaparece**, e um botão que
+não se vê não é secundário, é ausente.
+
+⚠️ **Nada disto foi fotografado.** As idas ao aparelho acabaram: nesta rodada o
+`adb` me levou ao player, ao lançador, ao assistente de voz e ao «para você», e o
+`OK` parou de registrar na última tentativa. O portão passou — 164 testes, lint
+limpo nos quatro —, e cada mudança responde a uma causa nomeada. Mas é a quarta
+vez nesta doc que isso precisa ser dito: **passar no portão não é ter visto.**

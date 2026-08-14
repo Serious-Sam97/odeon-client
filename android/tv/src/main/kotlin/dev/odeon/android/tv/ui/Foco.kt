@@ -162,7 +162,12 @@ fun BotaoDaSala(
     principal: Boolean = false,
     habilitado: Boolean = true,
 ) {
-    val forma = RoundedCornerShape(8.dp)
+    /// ⚠️ **Pílula, e não retângulo de cantos moles.**
+    ///
+    /// Os 8dp de canto faziam dele uma caixa levemente arredondada — a forma mais
+    /// esquecível que existe. Uma pílula tem silhueta: reconhece-se pelo contorno
+    /// antes de o texto ser lido, que é como um alvo funciona a três metros.
+    val forma = RoundedCornerShape(50)
     Focavel(
         aoEscolher = aoEscolher,
         modifier = modifier,
@@ -184,7 +189,11 @@ fun BotaoDaSala(
                 .background(fundo, forma)
                 .then(
                     if (!focado && !principal) {
-                        Modifier.border(1.dp, Cores.linha, forma)
+                        /// ⚠️ Contorno de 2dp e mais claro que a linha da casa: um
+                        /// botão secundário de 1dp em `Cores.linha` desaparece
+                        /// sobre um fundo escuro com foto atrás — e um botão que
+                        /// não se vê não é secundário, é ausente.
+                        Modifier.border(2.dp, Cores.destaqueApagado.copy(alpha = 0.55f), forma)
                     } else {
                         Modifier
                     },

@@ -574,8 +574,17 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// não está é pior que um que não se marcou — o primeiro faz alguém perder o
     /// programa confiando no app.
     suspend fun marcarLembrete(programaId: Int): Boolean = withContext(Dispatchers.IO) {
-        runCatching { exigirApi().marcarLembrete(programaId).ok }
+        runCatching { exigirApi().marcarLembrete(programaId) }
             .onFailure { android.util.Log.w("Odeon", "lembrete $programaId não marcou: $it") }
+            .onSuccess { android.util.Log.i("Odeon", "lembrete $programaId respondeu ok=${it.ok} em=${it.comeca}") }
+            /// ⚠️ **Chegar sem exceção é sucesso**, e o `ok` é só confirmação.
+            ///
+            /// A primeira versão exigia `ok == true`, e na TCL o botão não virava:
+            /// sem erro no log e sem mudança na tela. Um campo que o servidor
+            /// pode não mandar — ou mandar com outro nome — não deve ter poder de
+            /// veto sobre o que já aconteceu. O `201` é a resposta; o `ok` é o
+            /// aceno.
+            .map { true }
             .getOrDefault(false)
     }
 

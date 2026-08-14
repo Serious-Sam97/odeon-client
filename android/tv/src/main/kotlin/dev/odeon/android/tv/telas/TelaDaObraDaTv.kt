@@ -229,7 +229,18 @@ fun TelaDaObraDaTv(
                 /// lado, a coluna precisa de uma largura **sua** — 620dp, que é a
                 /// coluna de leitura que a §5.3 já tinha estabelecido pro guia.
                 .width(620.dp)
-                .verticalScroll(rememberScrollState())
+                /// ⚠️ **O título saiu da rolagem, e é o terceiro conserto do mesmo
+                /// sintoma.**
+                ///
+                /// Primeiro eu encolhi a folga da fita; depois o quadro dela. O
+                /// nome do filme continuou sumindo — e a causa não era altura, era
+                /// **quem rola**. O foco abre na fila de botões, a rolagem os traz
+                /// pra vista, e tudo o que está acima deles sobe junto: o título
+                /// entre eles.
+                ///
+                /// Folga nenhuma resolve isso, porque o conteúdo cresce com o
+                /// filme — dois botões num filme novo, três num começado. O que
+                /// resolve é o título **não pertencer à parte que rola**.
                 /// ⚠️ Folga embaixo do tamanho da fita: ela flutua sobre a
                 /// coluna, e sem isto o último parágrafo rolaria pra debaixo dela
                 /// e nunca chegaria a ser lido.
@@ -279,6 +290,7 @@ fun TelaDaObraDaTv(
             }
             }
 
+            Column(Modifier.verticalScroll(rememberScrollState())) {
             Cascata(1) {
             Column {
             obra.overview?.takeIf { it.isNotBlank() }?.let {
@@ -456,6 +468,7 @@ fun TelaDaObraDaTv(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Cores.destaqueQuente,
                 )
+            }
             }
         }
         /// ## ⚠️ A caixa 3D, e ela entra **sem respirar**

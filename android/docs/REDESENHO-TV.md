@@ -2892,3 +2892,45 @@ que ter funcionado — e a caixa é justamente a peça com custo medido conhecid
 
 **A conferir quando a TV voltar:** se a caixa aparece com volume à esquerda, se a
 fita atravessa inteira, e se a entrada continua fluida com a caixa em cena.
+
+### 22.8 O título, e o terceiro conserto do mesmo sintoma
+
+Primeiro encolhi a folga da fita. Depois o quadro dela. O nome do filme continuou
+sumindo da ficha.
+
+⚠️ **A causa não era altura, era quem rola.** O foco abre na fila de botões, a
+rolagem os traz pra vista, e tudo o que está acima deles sobe junto — o título
+entre eles. Folga nenhuma resolve isso, porque o conteúdo cresce **com o filme**:
+dois botões num filme novo, três num começado, sinopse de três ou de seis linhas.
+
+O que resolve é o título **não pertencer à parte que rola**. A coluna virou duas:
+o bloco de título e ficha fixo em cima, e só sinopse, etiquetas e botões dentro do
+`verticalScroll`.
+
+⚠️ Levei três tentativas pra parar de tratar o sintoma. As duas primeiras foram
+números — 190dp, depois 150dp, depois 94dp de quadro — e nenhuma podia funcionar,
+porque nenhuma respondia à pergunta «por que ele sobe?». É o mesmo padrão das duas
+medidas ruins da §16.4 e da §21.3: mexer no que dá pra mexer, em vez de descobrir
+o que está acontecendo.
+
+**Conferido na TCL:** a caixa 3D com volume e lombada, a sinopse legível na coluna
+de 620dp, os três botões, e a fita atravessando com os furos.
+
+⚠️ **Não conferido:** o título fixo em si. A navegação por `adb` me levou ao «para
+você» na última tentativa, e eu tinha esgotado as idas ao aparelho. O portão passou
+(164 testes, lint limpo nos quatro), e a mudança responde a uma causa que **foi**
+observada — mas isso não é a foto.
+
+### 22.9 O lembrete: `ok` deixou de ter poder de veto
+
+O botão `☆ me avise` não virava, **sem erro no log e sem mudança na tela** — o pior
+par de sintomas que existe, porque não diz nem que falhou.
+
+A causa: eu exigia `ok == true` da resposta, e `LembreteMarcado.ok` tem `false`
+como padrão. Um campo que o servidor pode não mandar — ou mandar com outro nome —
+tinha poder de veto sobre algo que já havia acontecido.
+
+⚠️ Agora chegar sem exceção **é** sucesso: o `201` é a resposta, o `ok` é o aceno.
+E a resposta inteira é registrada em log, pra a próxima vez não custar uma rodada.
+
+**Também não reconferido** — pelo mesmo motivo da §22.8.

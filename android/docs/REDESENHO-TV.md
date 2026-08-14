@@ -3296,3 +3296,60 @@ de áudio** e não o vídeo.
 ⚠️ Sobre o celular ser liso: **não verificado**. A explicação provável é a tela —
 num painel de 120 Hz, 23,976 cai em 5 vsyncs por quadro, quase perfeito. Mas o
 celular do dono não foi medido, então isto é hipótese, não achado.
+
+### 26.1 O dono deu o controle perfeito: dois arquivos do mesmo filme
+
+«Não é o mesmo filme que fica lagando. Do Serviço Secreto temos **2 files**, um
+em pt-BR e outro em inglês. A versão em inglês que fica assim.»
+
+Com isso o experimento deixou de depender de opinião. E o resultado separa o
+relato em **dois defeitos diferentes** que estavam sendo contados como um.
+
+| | Star Wars III | 007 (arquivo em inglês) |
+|---|---|---|
+| quadros descartados | **1 em 75 s** | **26 em 30 s** |
+| entregues pelo decodificador | 24–25/s, firme | 19–26/s, oscilando |
+| enfileirados na entrada | 23–26/s | 23–**30**/s |
+| na tela | 23,976 fps, cadência 2‑3‑2‑3 limpa | **22,3 fps**, com quadros segurados 4, 5, 6 e até 8 vsyncs |
+
+⚠️ **Star Wars III não perde um quadro.** O que se vê nele é o judder do §26 —
+23,976 num painel que só tem 60 Hz. É físico, e não há nada quebrado no app.
+
+⚠️ **O 007 em inglês perde de verdade**, cerca de um quadro por segundo. É outro
+defeito, e é o que merece conserto.
+
+### 26.2 O que o arquivo em inglês **não** tem de diferente
+
+Medido, e todos deram igual ao filme que roda liso:
+
+- **resolução**: 1920×816 (codificado 1920×832) — igual
+- **codec e profundidade**: H.264, 8 bits — igual
+- **taxa**: 23,976 — igual
+- **rede**: 4,7 Mbps num link de 780. O Star Wars, que roda liso, usa **mais**
+  banda (7 Mbps). Não é rede e não é bitrate médio.
+
+### 26.3 Onde ele perde, e a suspeita que sobrou
+
+A entrada é alimentada a **23–30 quadros/s** e a saída só entrega 19–26. Ou seja:
+o decodificador da TV **não dá conta deste encode** — e o gargalo é decodificação,
+não transporte.
+
+A única diferença estrutural que apareceu na configuração do codec:
+
+```
+c2::u32 output.delay.value = 23
+```
+
+Um buffer de reordenação de **23 quadros** significa pirâmide de B-frames
+profunda — encode «caprichado», barato em bits e **caro em decodificação**. É
+exatamente o tipo de arquivo que engasga num decodificador de TV barata enquanto
+passa liso num celular.
+
+⚠️ **Suspeita, não achado.** Falta o mesmo número lido de um arquivo que o dono
+confirme liso. Tentei quatro vezes chegar no arquivo pt-BR pelo controle e caí em
+item errado nas quatro — as duas fichas do mesmo filme são visualmente idênticas
+na busca, o que atrapalha até a navegação.
+
+⚠️ E se a suspeita se confirmar, **o conserto provavelmente não é do cliente**: é
+o servidor parar de mandar este arquivo em plano **direto** e transcodificá-lo —
+que é justamente o que o celular e a web já fazem, e por isso são lisos lá.

@@ -2857,7 +2857,35 @@ permita, e isso é decisão, não esquecimento.
 É a mesma `CaixaEm3D` da locadora e a mesma `FaceDaCaixa`, com o `ano` indo pra
 lombada. Nenhuma peça nova — de novo.
 
-⚠️ **Não vista rodando.** A TCL saiu da rede antes da instalação, e por `adb` não
+**Vista rodando** (o `adb` voltou depois de reiniciar o servidor):
+
+| | |
+|---|---|
+| a caixa aparece com **volume** | sim — lombada visível, e ela lê como objeto, não como pôster torto |
+| a fita atravessa inteira | sim, de ponta a ponta, com os furos em cima e embaixo |
+| a entrada continua fluida | mediana de 109ms **durante os ~500ms da cascata**, e parada depois |
+
+⚠️ **E a foto cobrou dois preços que a caixa criou**, nenhum previsto na maquete:
+
+**A coluna encolheu.** Ela era `fillMaxWidth(0.55f)`, e quando a caixa entrou à
+esquerda esses 55% passaram a **incluir** os 254dp dela: sobrou pouco mais de um
+terço, e a sinopse quebrava a cada cinco palavras. Fração é medida de quem não tem
+vizinhos. Virou largura própria — 620dp, a mesma coluna de leitura da §5.3.
+
+**O título saía por cima.** Com a folga da fita, a altura útil caía pra ~296dp, e
+não cabiam título, ficha, sinopse, etiquetas e botões. O que acontece então não é
+corte: o foco entra no `assistir`, a rolagem o traz pra vista, e **o nome do filme
+sai pela borda de cima**. A ficha abria sem dizer de que filme é.
+
+Consertado encolhendo o quadro da fita de 118 pra 94dp — ela continua
+atravessando, o que ela não faz mais é empurrar o título pra fora.
+
+⚠️ Este último conserto **não foi reconferido**: a navegação por `adb` me levou ao
+lançador e ao player antes de eu conseguir reabrir a ficha. Os dois primeiros
+achados estão vistos; o terceiro é código que responde a uma causa medida, mas não
+é foto.
+
+~~A TCL saiu da rede antes da instalação~~, e por `adb` não
 há como acordá-la. O portão passou (`assembleDebug`, 164 testes, lint limpo nos
 quatro), mas isto é a terceira vez nesta doc em que passar no portão não é o mesmo
 que ter funcionado — e a caixa é justamente a peça com custo medido conhecido.

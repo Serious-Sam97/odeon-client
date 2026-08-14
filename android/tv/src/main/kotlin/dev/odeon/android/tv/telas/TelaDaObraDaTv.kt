@@ -218,7 +218,17 @@ fun TelaDaObraDaTv(
         Column(
             Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(FRACAO_DO_TEXTO)
+                /// ⚠️ **Largura fixa, e não fração da tela.**
+                ///
+                /// Ela era `fillMaxWidth(FRACAO_DO_TEXTO)` — 55% da tela. Quando
+                /// a caixa entrou à esquerda, esses 55% passaram a incluir os
+                /// 254dp que ela ocupa: sobrou pouco mais de um terço pro texto, e
+                /// na TCL a sinopse quebrava a cada cinco palavras.
+                ///
+                /// Fração é uma medida de quem não tem vizinhos. Com a caixa ao
+                /// lado, a coluna precisa de uma largura **sua** — 620dp, que é a
+                /// coluna de leitura que a §5.3 já tinha estabelecido pro guia.
+                .width(620.dp)
                 .verticalScroll(rememberScrollState())
                 /// ⚠️ Folga embaixo do tamanho da fita: ela flutua sobre a
                 /// coluna, e sem isto o último parágrafo rolaria pra debaixo dela
@@ -230,7 +240,10 @@ fun TelaDaObraDaTv(
                     bottom = ALTURA_DA_FITA,
                 ),
 
-            verticalArrangement = Arrangement.Center,
+            /// ⚠️ Deixou de centralizar. Com a folga da fita embaixo, centrar
+            /// empurrava o título pra fora da borda de cima — visto na TCL, a
+            /// ficha abria já cortada no nome do filme.
+            verticalArrangement = Arrangement.Top,
         ) {
             obra.temporada?.let { t ->
                 Text(
@@ -462,7 +475,9 @@ fun TelaDaObraDaTv(
         Box(
             Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = Sala.overscanH),
+                /// A mesma folga da coluna: a caixa também não pode ficar debaixo
+                /// da fita.
+                .padding(start = Sala.overscanH, bottom = ALTURA_DA_FITA),
         ) {
             Cascata(0) {
                 CaixaEm3D(
@@ -524,7 +539,7 @@ fun TelaDaObraDaTv(
                             items(estado.cenas.take(8)) { cena ->
                                 Box(
                                     Modifier
-                                        .size(width = 210.dp, height = 118.dp)
+                                        .size(width = 168.dp, height = 94.dp)
                                         .background(Cores.fundoAfundado),
                                 ) {
                                     AsyncImage(
@@ -650,7 +665,16 @@ private fun Cascata(
 
 
 /// A altura que a fita ocupa no pé da tela — quadros mais os dois furos.
-private val ALTURA_DA_FITA = 190.dp
+/// ⚠️ 150dp, e o número veio de uma foto.
+///
+/// Com 190 a coluna ficava com ~296dp de altura útil, e não cabiam título, ficha,
+/// sinopse, etiquetas e botões. O que acontece então não é corte: o foco entra no
+/// `assistir`, a rolagem o traz pra vista, e **o título sai por cima da borda** —
+/// a ficha abria sem o nome do filme.
+///
+/// A fita perdeu 22dp de quadro e ganhou o resto da tela de volta. Ela continua
+/// atravessando; o que ela não faz mais é empurrar o título pra fora.
+private val ALTURA_DA_FITA = 150.dp
 
 /// A caixa da ficha. 210dp é o que sobra pro texto ainda ter coluna de leitura
 /// depois dela — e é grande o bastante pra lombada ser legível a três metros,

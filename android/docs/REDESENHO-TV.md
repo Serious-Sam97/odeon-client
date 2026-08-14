@@ -3413,3 +3413,60 @@ outro), fecha.
 ⚠️ E o conserto, se fechar, é **nosso e pequeno**: não repassar ao codec uma taxa
 de quadros que não merece confiança. O sintoma é grave, a causa é uma dica ruim
 sendo levada a sério.
+
+### 26.7 A hipótese do «12 fps» **não sobreviveu**, e o conserto foi desfeito
+
+Escrevi o conserto — renderizador que não repassa ao codec uma taxa de quadros
+implausível — e ele **não mudou nada**. Fica registrado com os números, porque um
+conserto que não conserta desfeito em silêncio é uma armadilha pro próximo.
+
+### ⚠️ Antes de tudo: a medida anterior estava contaminada
+
+Toda corrida começa com um **salto de retomada**, e salto descarta quadro por
+definição. Contar os descartes da corrida inteira mistura o salto com o regime —
+foi assim que o Jellyfin apareceu «com 41 descartes» no §26.4 e o mesmo arquivo
+apareceu com 0 logo depois.
+
+A régua certa é **descartes por segundo depois dos primeiros 10 s**:
+
+| | por segundo, em regime |
+|---|---|
+| **Jellyfin**, 007 ficha A | **0,00** |
+| **Jellyfin**, 007 ficha B | **0,03** |
+| Jellyfin e Odeon, Star Wars III | **0,00** nos dois |
+| **Odeon**, 007 inglês, antes | 0,71 · 0,51 · 2,21 |
+| **Odeon**, 007 inglês, **com o conserto** | 0,36 · 0,58 · 0,40 · 4,21 · 0,11 · 2,22 |
+
+⚠️ As duas distribuições do Odeon **se sobrepõem inteiras**. O conserto não fez
+efeito, e a variação de 0,11 a 4,21 na mesma corrida do mesmo arquivo mostra que
+o `render-latency = 833999` que eu tinha ligado ao arquivo **muda de corrida pra
+corrida** — logo não é propriedade do arquivo, e a leitura do §26.5 estava errada.
+
+⚠️ Também não consegui provar que o renderizador novo chegou a rodar no caminho
+que decodifica: a sonda dentro dele só apareceu uma vez em oito corridas. Sem
+isso, nem «não funcionou» é conclusão limpa — é «não funcionou e não sei se
+chegou a entrar».
+
+### O que **continua** de pé, e é o que importa
+
+O Jellyfin toca os **mesmos arquivos**, na **mesma TV**, no **mesmo
+decodificador**, com 0,00–0,03 descartes por segundo. O Odeon, no melhor caso,
+0,11. **A diferença é nossa** — isso não mudou.
+
+### A próxima suspeita, com uma medida a favor
+
+Anexamos **todas** as legendas do filme como `SubtitleConfiguration` no
+`MediaItem`. Tirando-as, três corridas deram:
+
+```
+0,05/s   0,03/s   0,47/s
+```
+
+Duas delas no nível do Jellyfin. ⚠️ **Não é prova** — a terceira desmente, e três
+corridas com esse ruído não fecham nada. Mas é a primeira mexida que empurrou o
+número pro lado certo, e o caminho a investigar é anexar **só a legenda
+escolhida**, em vez de todas.
+
+⚠️ E falta uma bancada honesta: hoje cada medida custa uma navegação de controle
+que erra de tela metade das vezes, e o filme sempre começa com um salto. Sem
+repetibilidade, qualquer conserto daqui pra frente é chute com número do lado.

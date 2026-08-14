@@ -3521,3 +3521,79 @@ O defeito mora no caminho **direto**.
 que o aparelho sabe fazer**, e por isso pedimos transcodificação de AC3 sem
 precisar — ffmpeg vivo no servidor por nada. Não mexer nisso antes de entender o
 primeiro, senão o conserto de um esconde o outro.
+
+### 26.9 A resposta inteira do servidor derruba a §26.8 também — e o meu experimento não rodou
+
+O servidor mandou o resto, e ele fecha o lado de lá com medida, não com opinião.
+
+**Quadros de referência, lidos do SPS de verdade** (não do `refs` do `ffprobe`,
+que devolve 1 em 100% do acervo):
+
+| | `max_num_ref_frames` | `num_ref_idx_l0_default` |
+|---|---|---|
+| pt-BR (roda liso) | **5** | 4 |
+| inglês (trava) | **4** | 3 |
+| Star Wars III | 4 | 4 |
+
+⚠️ **O sinal está invertido**: quem roda liso é o que tem **mais** quadros de
+referência. E o custo de decodificação medido (1 thread, 60 s de vídeo) é
+**11,52 s no pt-BR contra 11,09 s no inglês** — o que trava é marginalmente
+**mais barato** de decodificar.
+
+⚠️ E o `output.delay = 23` **não vem do bitstream**: a reordenação real medida
+(pts−dts, 120 s) é de **0 quadros nos dois arquivos**. Nada neles justifica um
+buffer de 23. Ele vem do extrator ou do codec da TV — não do encode.
+
+**Decisão de plano, perguntada ao servidor de verdade:**
+
+| cliente | pt-BR (mkv/ac3) | inglês (mov/aac) |
+|---|---|---|
+| TV, se declara ac3 | direct_play | **direct_play** |
+| TV, se **não** declara ac3 | transcode (video=**copy**) | **direct_play** |
+| celular | transcode (video=**copy**) | **direct_play** |
+| web | transcode (video=**copy**) | **direct_play** |
+
+⚠️ **A §26.8 cai.** O arquivo em inglês é `direct_play` nos **quatro** perfis:
+celular e web recebem **exatamente os mesmos bytes** que a TV. «Funciona no
+celular» não é transcodificação. E em nenhum plano o vídeo é recodificado —
+`video=copy` sempre, inclusive no modo `transcode`.
+
+⚠️ **E o pressuposto da §26.8 sobre o ac3 também estava velho.** Medido agora no
+aparelho, o que a TV declara é:
+
+```
+a=mp3,opus,vorbis,ac3,eac3,flac
+```
+
+**Com `ac3`.** O comentário antigo do `ModeloDoPlayer` («sem ac3 sempre») não vale
+mais — mudou no aparelho em algum momento. Logo os **dois** arquivos vão diretos,
+e a assimetria que eu tinha desenhado não existe.
+
+**O controle:** o Star Wars III é gêmeo do 007 inglês em tudo que o servidor
+enxerga — mov, h264 High, SPS ref=4, has_b_frames=2, 1920×816, 23,976 CFR, aac
+2ch, progressivo. Difere num eixo só: **bitrate**.
+
+| | média | pico em 1 s |
+|---|---|---|
+| 007 inglês (trava) | 2,93 Mbps | **8,80 Mbps** |
+| 007 pt-BR (liso) | 2,80 Mbps | **8,59 Mbps** |
+| Star Wars III (não perde quadro) | 1,13 Mbps | **2,41 Mbps** |
+
+⚠️ O pico separa o Star Wars do par do 007, mas **não separa o par entre si**.
+
+### O experimento que eu tentei, e não rodou
+
+Tirei o `aac` das capacidades pra forçar o inglês pelo caminho de sessão (HLS)
+com o mesmo vídeo. O plano saiu com `a=mp3,opus,vorbis,ac3,eac3,flac`, mas as
+três corridas **não chegaram a decodificar quadro nenhum**: a navegação por
+controle caiu em tela errada nas três, e o destino salvo do app muda de lugar
+entre execuções. Desfeito.
+
+⚠️ **Fica registrado como não medido**, e não como negativo.
+
+### O buraco que ninguém tapou ainda
+
+Nunca medi o **pt-BR dentro do nosso app**. Toda a comparação foi «inglês no
+Odeon» contra «os dois no Jellyfin» e contra a impressão do dono. Se o pt-BR
+também descartar aqui, a história muda de novo — e é a medida mais barata que
+resta.

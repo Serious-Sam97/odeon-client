@@ -138,11 +138,120 @@ data class ItemDaBiblioteca(
     val kind: String? = null,
     @SerialName("match_state") val estadoDaIdentificacao: String? = null,
     @SerialName("position_seconds") val ondeParou: Double? = null,
+
+    /// As versões deste filme — os rips que o servidor agrupou numa entrada só.
+    ///
+    /// ## ⚠️ Ela chega **vazia** no caso normal, e isso é o contrato
+    ///
+    /// O servidor **omite a chave** quando o filme tem uma versão só, que é o
+    /// caso de 8.230 das 8.273 entradas. Mandá-la com um item em toda linha seria
+    /// peso por nada — e faz a regra da tela ser a mais simples que existe: *há
+    /// versões, há escolha*.
+    ///
+    /// São **43 grupos no acervo inteiro** (medido pelo servidor em 14/08/2026:
+    /// 8.316 entradas viraram 8.273). O improvement é pequeno em alcance e
+    /// grande em incômodo — dois dos 43 são os 007 que o dono assiste.
+    ///
+    /// ⚠️ A chave do agrupamento é `external_ids->>'tmdb'`: a **identificação**,
+    /// e nunca título+ano. Só `kind='movie'`, e só o que já foi identificado —
+    /// dois `unmatched` não têm chave, e chutar neles seria o §18 ao contrário.
+    /// **Série não ganha versões**: o tmdb é compartilhado pelos episódios, e
+    /// agrupar por ele juntaria a série inteira num cartão.
+    ///
+    /// ⚠️ E `?versions=flat` devolve as 8.316 sem agrupar. A revisão do acervo
+    /// precisa enxergar rip por rip, e agrupamento sem escape esconde
+    /// exatamente de quem precisa ver.
+    @SerialName("versions") val versoes: List<VersaoDaObra> = emptyList(),
+
     /// Repetido em toda linha: é o total de entradas do filtro atual.
     ///
     /// Vem de um `count(*) OVER ()` no servidor, então "300 de 17.498" não custa
     /// uma segunda requisição.
+    ///
+    /// ⚠️ **Ele conta grupos desde 14/08/2026**, e não rips. Foi pedido assim de
+    /// propósito: o cabeçalho da grade escreve `carregadas / total` e a
+    /// paginação para em `quantosNaTela < total`. Se o total contasse 8.316
+    /// enquanto a grade desenha 8.273 cartões, os dois números passariam a falar
+    /// de coisas diferentes e a grade pediria uma página que não existe.
     val total: Int = 0,
+) {
+    /// As versões entre as quais dá pra escolher de verdade.
+    ///
+    /// ⚠️ **Versão sem `id` é descartada aqui**, e não mais adiante: sem ele a
+    /// modal não tem pra onde mandar ninguém. Ver `VersaoDaObra.id` pro porquê
+    /// de o campo ser tolerante em vez de obrigatório.
+    val versoesEscolhiveis: List<VersaoDaObra> get() = versoes.filter { it.id.isNotBlank() }
+
+    /// Há escolha a fazer?
+    ///
+    /// ⚠️ **Uma versão só não abre modal.** Um menu com uma opção é uma pergunta
+    /// que não tem resposta alternativa — é o §24 aplicado a um menu, e é a mesma
+    /// régua do `estado.faixasDeAudio.size > 1` no menu de faixas do player.
+    val temEscolhaDeVersao: Boolean get() = versoesEscolhiveis.size > 1
+}
+
+/// Uma versão de um filme — um dos rips que o servidor agrupou.
+///
+/// ## Por que ela existe
+///
+/// O dono baixou o mesmo filme duas vezes, um em pt-BR e outro em inglês, porque
+/// não achou dual audio. A grade mostrava os dois cartões, e a escolha entre eles
+/// é de **idioma** — que era justamente o que a listagem não mandava. O pedido
+/// inteiro está no §2.1 do `docs/PEDIDOS-AO-SERVIDOR.md`.
+///
+/// ## ⚠️ Ela **não** é o mesmo que [ArquivoDeMidia], e a diferença é o produto
+///
+/// `ArquivoDeMidia` é um arquivo dentro de **uma** obra, e a ficha já sabe
+/// escolher entre eles (`ModeloDaObra.escolherArquivo`). Esta aqui é uma **obra
+/// inteira**: id próprio, progresso próprio, ficha própria.
+///
+/// Confundir as duas é o caminho mais curto pra **fundir** o que só devia ser
+/// **agrupado** — e fundir apagaria o `position_seconds` de uma delas, que é
+/// exatamente a objeção que segurou este pedido desde 04/08/2026.
+@Serializable
+data class VersaoDaObra(
+    /// O id da **obra**, e é por ele que a ficha abre.
+    ///
+    /// ⚠️ Tem `""` como padrão pelo mesmo motivo do `label` da [FaixaDeAudio], e
+    /// aqui o preço de errar é maior: campo obrigatório transformaria uma
+    /// renomeação de JSON em **biblioteca que não carrega**. Com o padrão, a
+    /// versão sem id cai fora em `versoesEscolhiveis`, a modal não abre, e o
+    /// cartão volta a abrir a obra representante — o comportamento de antes deste
+    /// improvement. Degrada, não morre.
+    val id: String = "",
+    @SerialName("media_file_id") val arquivoId: String? = null,
+    val height: Int? = null,
+    @SerialName("size_bytes") val tamanhoEmBytes: Long? = null,
+    @SerialName("duration_seconds") val duracaoEmSegundos: Double? = null,
+
+    /// Os idiomas do áudio, em ISO 639 — `["por"]`.
+    ///
+    /// ## ⚠️ Ela vem **vazia** quando o arquivo não declara, e é o caso do dono
+    ///
+    /// O 007 em inglês deste acervo sai com `[]`: a faixa aac dele não traz
+    /// idioma no contêiner. O servidor **recusa** mandar `und` — que em ISO 639 é
+    /// *undetermined*, o contêiner dizendo que não sabe — e a recusa é a certa:
+    /// escrever «und» como idioma faria a modal oferecer «und» como escolha.
+    ///
+    /// É a mesma leitura que o `rotuloDaFaixa` do player já fazia desde
+    /// 06/08/2026, agora feita do lado de lá.
+    ///
+    /// ⚠️ **A consequência é de produto, e nenhum código daqui a resolve**: a
+    /// modal consegue escrever «Português» e **não** consegue escrever «Inglês».
+    /// Nomear o que não foi declarado é inventar metadado. Quem conserta é o
+    /// acervo — aquele arquivo precisa declarar o idioma da faixa.
+    @SerialName("audio_langs") val idiomasDeAudio: List<String> = emptyList(),
+
+    /// Onde **este** usuário parou nesta versão.
+    ///
+    /// ⚠️ É o campo que salva a modal. Com um dos lados sem idioma declarado,
+    /// «parou em 1:22» é o que de fato distingue as duas pra quem está
+    /// escolhendo — e é a única linha da tela que responde «qual delas eu estava
+    /// vendo». Sem ele a modal seria `818p` contra `816p`, que é uma escolha
+    /// entre dois números com dois pixels de diferença.
+    @SerialName("position_seconds") val ondeParou: Double? = null,
+
+    val finished: Boolean = false,
 )
 
 /// Uma obra **plana** — `WorkListItem` na web, e o que `/api/works` devolve.

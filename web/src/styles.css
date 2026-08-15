@@ -3515,6 +3515,51 @@ label.stacked input {
   backdrop-filter: blur(6px);
 }
 
+/* ------------------------------------------------ a escolha de versão
+
+   Quando o mesmo filme está no acervo em mais de uma versão (pt-BR e inglês
+   baixados separados, por não haver dual audio), o cartão pergunta qual antes de
+   abrir a ficha. Ver `EscolhaDeVersao` no App.tsx.
+
+   ⚠️ A linha tem duas colunas e a da direita pode não existir: `size_bytes` e
+   `height` são nulos em parte do acervo, e aí o `justify-content` fecha o vão em
+   vez de deixar um buraco onde deveria haver dado. */
+
+.versoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+
+.versao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.versao:hover,
+.versao:focus-visible {
+  border-color: var(--accent);
+  background: rgba(224, 176, 98, 0.08);
+}
+
+.versao-nome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* --------------------------------------------- o aviso de "começando" */
 
 .aviso-programa {

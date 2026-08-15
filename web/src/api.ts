@@ -388,8 +388,71 @@ export interface LibraryEntry {
   kind: string | null;
   match_state: string | null;
   position_seconds: number | null;
-  /** Repetido em toda linha — é o total de entradas do filtro atual. */
+
+  /**
+   * As versões deste filme — os rips que o servidor agrupou numa entrada só.
+   *
+   * ⚠️ **A chave é omitida quando há uma versão só**, que é o caso de 8.230 das
+   * 8.273 entradas. São 43 grupos no acervo inteiro (medido em 14/08/2026:
+   * 8.316 entradas viraram 8.273). A regra da tela fica a mais simples que
+   * existe: *há versões, há escolha*.
+   *
+   * ⚠️ O agrupamento é por `external_ids->>'tmdb'` — a identificação, nunca
+   * título+ano. Só `kind='movie'` e só o que já foi identificado. Série não
+   * ganha versões: o tmdb é compartilhado pelos episódios.
+   *
+   * ⚠️ E `?versions=flat` devolve as 8.316 sem agrupar, pra a revisão do acervo
+   * continuar enxergando rip por rip.
+   */
+  versions?: Versao[];
+
+  /**
+   * Repetido em toda linha — é o total de entradas do filtro atual.
+   *
+   * ⚠️ **Conta grupos desde 14/08/2026**, e não rips: a grade escreve
+   * `mostrando / total` e o «carregar mais» calcula `total - mostrando`. Se o
+   * total contasse 8.316 enquanto a grade desenha 8.273 cartões, o botão
+   * prometeria uma página que não existe.
+   */
   total: number;
+}
+
+/**
+ * Uma versão de um filme — um dos rips que o servidor agrupou.
+ *
+ * O dono baixou alguns filmes duas vezes, um em pt-BR e outro em inglês, porque
+ * não achou dual audio. A escolha entre eles é de **idioma**, e é por isso que o
+ * `audio_langs` está aqui. Ver `android/docs/PEDIDOS-AO-SERVIDOR.md` §2.1.
+ *
+ * ⚠️ **Ela não é um `MediaFileSummary`.** Aquele é um arquivo dentro de uma
+ * obra; esta é uma **obra inteira** — id próprio, progresso próprio, ficha
+ * própria. Confundi-las é o caminho pra fundir o que só devia ser agrupado, e
+ * fundir apagaria o `position_seconds` de uma delas.
+ */
+export interface Versao {
+  /** O id da **obra**, e é por ele que a ficha abre. */
+  id: string;
+  media_file_id: string | null;
+  height: number | null;
+  size_bytes: number | null;
+  duration_seconds: number | null;
+  /**
+   * Os idiomas do áudio, em ISO 639 — `["por"]`.
+   *
+   * ⚠️ **Vem vazio quando o arquivo não declara**, e é o caso do 007 em inglês
+   * deste acervo. O servidor recusa mandar `und` (que em ISO 639 quer dizer
+   * *undetermined*), e a recusa é a certa: escrever «und» como idioma faria a
+   * tela oferecer «und» como escolha.
+   *
+   * ⚠️ A consequência é de produto — a escolha consegue dizer «Português» e
+   * **não** consegue dizer «Inglês». Quem conserta é o acervo, declarando o
+   * idioma da faixa no arquivo.
+   */
+  audio_langs: string[];
+  /** Onde **este** usuário parou nesta versão. É o que distingue as duas quando
+   * o idioma não foi declarado. */
+  position_seconds: number | null;
+  finished: boolean;
 }
 
 /** Um canal com o que está no ar nele agora. */

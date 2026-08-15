@@ -45,6 +45,9 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import dev.odeon.android.tv.ui.EscolhaDeVersaoDaSala
 
 /// A biblioteca, na sala.
 ///
@@ -100,6 +103,13 @@ fun TelaDaBibliotecaDaTv(
     /// resultante é a que se espera de fora — episódios ▸ biblioteca ▸ aba
     /// biblioteca ▸ sair.
     BackHandler(enabled = estado.dentroDaSerie) { modelo.sairDaSerie() }
+
+    /// O item cuja escolha de versão está aberta. `null` é a modal fechada.
+    ///
+    /// ⚠️ Guarda o **item**, e não o id: as versões já vieram dentro dele, na
+    /// mesma resposta da grade. Guardar só o id obrigaria a procurá-lo de volta
+    /// na lista a cada recomposição — e a lista cresce quando outra página chega.
+    var escolhendoVersao by remember { mutableStateOf<ItemDaBiblioteca?>(null) }
 
     val temFoco by remember {
         derivedStateOf { estado.itens.isNotEmpty() || estado.episodios.isNotEmpty() }
@@ -288,8 +298,17 @@ fun TelaDaBibliotecaDaTv(
                         /// Série entra; obra solta abre a ficha. É o mesmo
                         /// desdobramento do celular — o `ModeloDaBiblioteca` já
                         /// sabe fazer os dois.
+                        ///
+                        /// ⚠️ E desde 14/08/2026 há um terceiro caso no meio:
+                        /// filme com mais de uma versão **pergunta antes de
+                        /// abrir**. Uma versão só continua caindo direto na
+                        /// ficha, como sempre — ver `temEscolhaDeVersao`.
                         aoEscolher = {
-                            if (item.eSerie) modelo.entrarNaSerie(item) else aoTocar(item)
+                            when {
+                                item.eSerie -> modelo.entrarNaSerie(item)
+                                item.temEscolhaDeVersao -> escolhendoVersao = item
+                                else -> aoTocar(item)
+                            }
                         },
                     )
                 }
@@ -306,6 +325,20 @@ fun TelaDaBibliotecaDaTv(
                     }
                 }
             }
+        }
+
+        /// ⚠️ **Depois da grade e dentro do mesmo `Box`**, pra desenhar por cima.
+        /// Fosse irmã do `BoxWithConstraints`, ela dividiria a tela com a grade
+        /// em vez de cobri-la.
+        escolhendoVersao?.let { aberto ->
+            EscolhaDeVersaoDaSala(
+                item = aberto,
+                aoFechar = { escolhendoVersao = null },
+                aoEscolher = { versao ->
+                    escolhendoVersao = null
+                    aoAbrirObra(versao.id)
+                },
+            )
         }
     }
         }

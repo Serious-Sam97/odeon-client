@@ -3767,3 +3767,154 @@ mesmo motor receber de nós `FrameRate 12000` no `stepSetPQFormat` — a taxa qu
 ele usa pra decidir processamento de movimento. Não está provado que isso mexa em
 nitidez, mas é o único lugar onde o nosso lado fala com o processamento de imagem
 da TV, e fica anotado como o primeiro sítio a olhar se a queixa persistir.
+
+## 28. Versões do mesmo filme viraram um cartão só
+
+> «temos diversos filmes com o mesmo nome, esses são versões que eu não achei em
+> dual audio e baixei 2 vezes, 1 em pt-BR e outro em inglês.»
+
+O Pedido 2 do `PEDIDOS-AO-SERVIDOR.md` estava aberto desde **04/08/2026** com a
+pergunta «duas cópias do mesmo filme devem ser duas entradas?». O dono respondeu
+em 14/08, o servidor foi mudado no mesmo dia, e o cliente acompanhou.
+
+⚠️ **Agrupar não é fundir**, e a distinção é o que destravou o pedido. A objeção
+antiga — «fundi-las apagaria o `position_seconds` de uma delas» — continua de pé
+contra fundir. Aqui nada é fundido: a grade mostra **um cartão**, a modal mostra
+**as duas obras**, e o toque abre a **ficha da obra escolhida**, com o id e o
+progresso dela. As duas continuam existindo no acervo.
+
+### O que o servidor passou a fazer
+
+| | |
+|---|---|
+| chave | `external_ids->>'tmdb'`, só `kind='movie'`, só o que foi identificado |
+| grade | **8.316 → 8.273 cartões** — são **43 grupos** no acervo inteiro |
+| `versions` | chave **omitida** quando há uma versão só |
+| `total` | conta grupos; `?versions=flat` devolve 8.316 sem agrupar |
+| séries | zero ganham versões — o tmdb compartilhado dos episódios não junta nada |
+
+### ⚠️ O achado que mudou o desenho: `audio_langs` só nomeia metade
+
+O pedido dizia que o idioma do áudio era o campo que fazia a modal existir, porque
+sem ele as duas versões do 007 se distinguem por `818p` contra `816p` — dois
+pixels. O servidor entregou o campo, e o 007 saiu assim:
+
+```
+{ "height": 818, "audio_langs": ["por"], "position_seconds": 1558.5 }
+{ "height": 816, "audio_langs": [],      "position_seconds": 4925.8 }
+```
+
+O `[]` é o arquivo em inglês: a faixa aac dele **não declara idioma**, e o
+servidor recusa mandar `und` — que em ISO 639 quer dizer *undetermined*, o
+contêiner dizendo que não sabe. A recusa é a certa, e é a mesma leitura que o
+`rotuloDaFaixa` faz desde 06/08/2026; escrever «und» como idioma faria a modal
+oferecer «und» como escolha.
+
+⚠️ **A consequência é de produto e nenhum código a resolve:** a modal escreve
+«Português» e **não** escreve «Inglês». A versão sem idioma cai na queda
+posicional — «versão 2» —, a mesma do menu de faixas.
+
+Quem faz o trabalho de distinguir, então, é o **`position_seconds`**: uma linha
+diz «parou em 25min» e a outra «parou em 1h22», e quem assistiu reconhece a sua.
+Sem esse campo a modal não teria razão de existir.
+
+⚠️ Se «Inglês» tiver que aparecer de verdade, o conserto é **do acervo** — aquele
+arquivo precisa declarar o idioma da faixa. Não é do app nem do servidor.
+
+### Onde ficou cada coisa
+
+| | |
+|---|---|
+| contrato | `dados/Modelos.kt` (`VersaoDaObra`) e `web/src/api.ts` (`Versao`) |
+| nome do idioma | `ui/Idioma.kt` no `:core`, e a segunda cópia da tabela no `App.tsx` |
+| modal da TV | `EscolhaDeVersaoDaSala`, na forma do `MenuDeFaixasDaSala` |
+| folha do celular | `EscolhaDeVersao` em `TelaDaBiblioteca.kt` |
+| sobreposição da web | `EscolhaDeVersao` no `App.tsx`, sobre o `drawer-backdrop` |
+
+⚠️ O `clients/` ficou **de fora**: o README dele o declara superado em 12/08/2026
+e o `Models.kt` de lá nem tem a biblioteca. São duas cópias do contrato, não três.
+
+Três regras que valem nas três telas: **uma versão só nunca abre modal** (§24 —
+pergunta com uma resposta); o **foco/ordem nasce na versão mais adiantada**, que é
+a resposta pra «qual eu estava vendo»; e **filme terminado não mostra "parou em"**,
+porque a posição de quem viu até o fim é o fim (a mesma régua do `ondeContinuar`).
+
+### 28.1 Visto na TV — e ela cobrou dois defeitos
+
+A TCL voltou à rede e o APK foi instalado. **O que está abaixo foi visto na tela**,
+com captura, e não deduzido.
+
+**Funciona, conferido:**
+
+| | |
+|---|---|
+| o agrupamento | buscar `007` devolve **um** cartão de *A Serviço Secreto* e um de *Cassino Royale*. Antes eram duas fichas visualmente idênticas (§26.3) |
+| a modal | `2 VERSÕES` · `Português · 818p · 2,4 GB · parou em 25min` · `versão 2 · 816p · 2,3 GB · parou em 1h22` |
+| a queda posicional | o arquivo em inglês saiu como **«versão 2»**, como projetado — ele não declara idioma |
+| o foco inicial | nasceu na **`versão 2`**, a mais adiantada. É a regra do «qual eu estava vendo», e ela se pagou na primeira tela |
+| a escolha | abriu a ficha certa: **«continuar de 1h22»**, que é exatamente a versão escolhida |
+
+⚠️ E vale dizer o que a tela provou de graça: o `id` dentro de `versions` **chega**.
+Era o campo menos confirmado do contrato, e a ficha só abre no filme certo se ele
+vier. Veio.
+
+### ⚠️ Defeito 1: a busca abria a versão errada, e era meu
+
+A `TelaDaBuscaDaTv` busca pelo **mesmo `/api/library`** da grade (`ModeloDaBusca`
+chama `odeon.biblioteca`). Ou seja: ela passou a receber as entradas agrupadas no
+instante em que o servidor mudou, e continuava abrindo `aoAbrirObra(item.id)`
+direto — **a segunda versão ficou inalcançável pela busca**, que é pior do que
+era antes do agrupamento.
+
+Foi achado **ao preparar a conferência**, não ao escrever o código: a busca é a
+tela por onde se chega no 007 de verdade, porque ninguém rola 8.273 cartazes.
+
+O conserto tirou a modal de dentro da `TelaDaBibliotecaDaTv` (onde nasceu
+`private`) e a pôs em `ui/EscolhaDeVersao.kt`, que as duas telas usam. É a mesma
+lição do `rotuloDaFaixa` quando saiu do `:app`.
+
+### ⚠️ Defeito 2: o ◀ não fechava a modal, e a causa **não** foi encontrada
+
+O desenho seguia o menu de faixas do player: a modal sem `BackHandler` próprio, e
+a tela de cima com `BackHandler(enabled = modal aberta)`. Na TV **isso não
+funcionou**, e a medida está aqui porque a causa continua aberta:
+
+| | |
+|---|---|
+| sonda dentro do handler | **nada impresso** no `logcat` ao apertar ◀ |
+| a tela | **byte a byte idêntica** em duas capturas seguidas (mesmo MD5) |
+| a modal | continuava viva — o `CENTER` seguinte escolheu a versão focada |
+| o handler da tela de cima | também não rodou (ele teria trocado de aba) |
+| o mesmo ◀ na ficha | **funciona** |
+| o mesmo ◀ nesta busca **sem** a modal | **funciona** |
+
+⚠️ Ou seja: não é o `adb`, não é a tecla e não é a tela. É o `BackHandler` de
+`enabled` variável não sendo chamado quando a modal está composta. O do player,
+que funciona há semanas, é `enabled = true` **fixo**. **A causa exata não foi
+encontrada** — o que foi consertado é o sintoma, e fica escrito pra ninguém achar
+que isto está entendido.
+
+A saída é a que o `Campo.kt` já usa: `onPreviewKeyEvent` no `Column` da modal, que
+é ancestral do item focado e portanto vê a tecla antes de todo o resto. Conferido
+depois: **o ◀ fecha a modal e o `007` continua escrito** no campo da busca.
+
+### ⚠️ O que continua torto, e não foi consertado
+
+- **Ao fechar a modal com ◀, o foco vai pro trilho** — e não pro cartaz de onde
+  se veio. Nada fica morto e o D-pad responde, mas é um salto que ninguém pediu.
+- **A fileira CONTINUAR mostra o mesmo 007 duas vezes** (visto na home, 1º e 4º
+  cartões). É o `/api/continue`, que ficou **de fora do pedido de propósito** —
+  colapsá-lo obrigaria a escolher qual progresso sobrevive na fileira. Está
+  anotado no §2.1 do `PEDIDOS-AO-SERVIDOR.md` como pergunta aberta.
+
+### O resto do portão
+
+| | |
+|---|---|
+| build | `compileReleaseKotlin`, `assembleDebug`, os quatro `lintDebug` — sem erro |
+| testes | **180**, 0 falhas (eram 164; os 16 novos cobrem o contrato e a tabela de idiomas) |
+| a web | `tsc -b` limpo |
+
+⚠️ **O celular e a web não foram vistos rodando.** O código está escrito e
+compila/typecheck, mas a régua da casa é ver na tela, e nestas duas ninguém viu.
+Fica como pendência declarada, não como pronto.

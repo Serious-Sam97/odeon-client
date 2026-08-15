@@ -40,6 +40,7 @@ import {
   type Sala,
   type ScanStatus,
   type ScrubStatus,
+  type Versao,
   type WorkListItem,
 } from "./api";
 
@@ -474,6 +475,9 @@ export default function App() {
   const [sala, setSala] = useState<Sala | null>(null);
   const [detailsOf, setDetailsOf] = useState<string | null>(null);
   const [managing, setManaging] = useState<string | null>(null);
+  /// A entrada cuja escolha de versão está aberta — ver `EscolhaDeVersao`.
+  /// Guarda a **entrada** e não o id: as versões já vieram dentro dela.
+  const [escolhendoVersao, setEscolhendoVersao] = useState<LibraryEntry | null>(null);
   const [serverOpen, setServerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -912,6 +916,7 @@ export default function App() {
                           }
                           onDetails={setDetailsOf}
                           onManage={setManaging}
+                          onChooseVersion={setEscolhendoVersao}
                         />
                       ))}
                     </div>
@@ -930,6 +935,17 @@ export default function App() {
           </>
         )}
       </main>
+
+      {escolhendoVersao && (
+        <EscolhaDeVersao
+          entry={escolhendoVersao}
+          onClose={() => setEscolhendoVersao(null)}
+          onEscolher={(id) => {
+            setEscolhendoVersao(null);
+            setDetailsOf(id);
+          }}
+        />
+      )}
 
       {detailsOf && (
         <Details
@@ -1110,16 +1126,168 @@ function porTemporada(works: WorkListItem[]) {
 /// A série reaproveita o mesmo cartão da obra — mesma proporção de pôster,
 /// mesma tipografia — e se distingue pelo que só ela tem: contagem de
 /// temporadas/episódios e a barra de quanto você já terminou.
+/**
+ * O nome de um idioma em português, a partir do código do contêiner.
+ *
+ * ⚠️ É a **segunda** cópia desta tabela — a outra é `ui/Idioma.kt` do Android.
+ * Não há tipo compartilhado nem código gerado entre a web e o app (a espec
+ * registrou isso como a dívida que a separação dos repositórios comprou), e este
+ * é mais um lugar onde ela aparece.
+ *
+ * Não dava pra evitar pedindo o nome pronto ao servidor: aqui ele manda
+ * **código** de propósito, e traduzir código em nome é desenho — a mesma regra
+ * que deixa a frase do mural e o rótulo do eixo da revista no cliente.
+ *
+ * ⚠️ **Código desconhecido não vira texto**, vira `null`, e a linha omite. Mostrar
+ * `hun` numa escolha é mostrar dado de contêiner com cara de idioma.
+ */
+const IDIOMAS: Record<string, string> = {
+  por: "Português", pt: "Português",
+  eng: "Inglês", en: "Inglês",
+  spa: "Espanhol", es: "Espanhol",
+  fra: "Francês", fre: "Francês", fr: "Francês",
+  deu: "Alemão", ger: "Alemão", de: "Alemão",
+  ita: "Italiano", it: "Italiano",
+  jpn: "Japonês", ja: "Japonês",
+  kor: "Coreano", ko: "Coreano",
+  zho: "Chinês", chi: "Chinês", zh: "Chinês",
+  rus: "Russo", ru: "Russo",
+  ara: "Árabe", ar: "Árabe",
+  nld: "Holandês", dut: "Holandês", nl: "Holandês",
+  swe: "Sueco", sv: "Sueco",
+  dan: "Dinamarquês", da: "Dinamarquês",
+  nor: "Norueguês", no: "Norueguês",
+  fin: "Finlandês", fi: "Finlandês",
+  pol: "Polonês", pl: "Polonês",
+  tur: "Turco", tr: "Turco",
+  hin: "Hindi", hi: "Hindi",
+};
+
+function idiomasEmPortugues(codigos: string[]): string | null {
+  const nomes = [
+    ...new Set(codigos.map((c) => IDIOMAS[c.trim().toLowerCase()]).filter(Boolean)),
+  ];
+  if (nomes.length === 0) return null;
+  if (nomes.length === 1) return nomes[0];
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/**
+ * A escolha de versão, quando o mesmo filme está no acervo mais de uma vez.
+ *
+ * ## Por que ela existe
+ *
+ * O dono baixou alguns filmes **duas vezes** — um em pt-BR e outro em inglês —
+ * porque não achou dual audio, e até 14/08/2026 os dois ocupavam cartões
+ * separados na grade, com a mesma capa e o mesmo ano. Agora o servidor os agrupa
+ * (`LibraryEntry.versions`) e a escolha acontece aqui. O pedido inteiro está no
+ * `android/docs/PEDIDOS-AO-SERVIDOR.md` §2.1.
+ *
+ * ⚠️ **Ela escolhe uma obra, e não um arquivo.** Cada versão tem id, progresso e
+ * ficha próprios — escolher abre a ficha daquela obra, com o botão de assistir de
+ * sempre. Nada é fundido: fundir apagaria o `position_seconds` de uma das duas,
+ * que é a objeção que segurou este pedido desde 04/08/2026.
+ *
+ * ⚠️ **Nem toda versão tem nome.** O 007 em inglês deste acervo não declara idioma
+ * na faixa de áudio, então sai como «versão 2» — queda posicional, a mesma que o
+ * menu de faixas usa. Quem distingue as duas ali é o «parou em».
+ *
+ * A forma reaproveita o `drawer-backdrop` + `modal-programa` do guia ao vivo: é a
+ * sobreposição que esta interface já tem, e o clique no fundo fecha.
+ */
+function EscolhaDeVersao({
+  entry,
+  onClose,
+  onEscolher,
+}: {
+  entry: LibraryEntry;
+  onClose: () => void;
+  onEscolher: (id: string) => void;
+}) {
+  const versoes = (entry.versions ?? []).filter((v) => v.id);
+
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [onClose]);
+
+  return (
+    <div
+      className="drawer-backdrop"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <aside className="modal-programa">
+        <div className="modal-corpo">
+          <header className="drawer-head">
+            <div>
+              <p className="kind-label">{versoes.length} versões no acervo</p>
+              <h2>{entry.title}</h2>
+            </div>
+            <button className="ghost" onClick={onClose}>
+              fechar
+            </button>
+          </header>
+          <div className="versoes">
+            {versoes.map((v, i) => (
+              <LinhaDeVersao key={v.id} versao={v} posicao={i} onEscolher={onEscolher} />
+            ))}
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function LinhaDeVersao({
+  versao,
+  posicao,
+  onEscolher,
+}: {
+  versao: Versao;
+  posicao: number;
+  onEscolher: (id: string) => void;
+}) {
+  const nome = idiomasEmPortugues(versao.audio_langs) ?? `versão ${posicao + 1}`;
+
+  // `818p · 2,3 GB` — item por item; a linha some inteira se não houver nenhum.
+  const tecnico = [
+    versao.height ? `${versao.height}p` : null,
+    versao.size_bytes ? formatSize(versao.size_bytes) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // ⚠️ Filme terminado não tem «parou em»: a posição de quem viu até o fim **é**
+  // o fim. O piso de 5s separa o toque acidental de ter assistido um teco.
+  const parou =
+    versao.position_seconds && versao.position_seconds > 5 && !versao.finished
+      ? `parou em ${formatDuration(versao.position_seconds)}`
+      : null;
+
+  return (
+    <button className="versao" onClick={() => onEscolher(versao.id)}>
+      <span className="versao-nome">
+        {nome}
+        {parou && <span className="muted small">{parou}</span>}
+      </span>
+      {tecnico && <span className="muted small">{tecnico}</span>}
+    </button>
+  );
+}
+
 function EntryCard({
   entry,
   onOpenSeries,
   onDetails,
   onManage,
+  onChooseVersion,
 }: {
   entry: LibraryEntry;
   onOpenSeries: (id: string, title: string) => void;
   onDetails: (id: string) => void;
   onManage: (id: string) => void;
+  onChooseVersion: (entry: LibraryEntry) => void;
 }) {
   const hue = hueFromTitle(entry.title);
 
@@ -1151,7 +1319,25 @@ function EntryCard({
       finished: entry.finished_count > 0,
       tags: null,
     };
-    return <Card work={work} onDetails={onDetails} onManage={onManage} />;
+    /**
+     * ⚠️ **O cartão não muda; muda só pra onde o toque leva.**
+     *
+     * Um filme que existe no acervo em mais de uma versão pergunta qual antes de
+     * abrir a ficha — ver `EscolhaDeVersao`. Uma versão só cai direto na ficha,
+     * como sempre. `Card` continua sem saber que isto existe, o que é o ponto:
+     * versão é assunto da grade, não do cartão.
+     *
+     * O `filter` por `id` é a mesma guarda do Android: versão sem id não tem
+     * ficha pra onde mandar, então ela não conta pro «há escolha».
+     */
+    const versoes = (entry.versions ?? []).filter((v) => v.id);
+    return (
+      <Card
+        work={work}
+        onDetails={versoes.length > 1 ? () => onChooseVersion(entry) : onDetails}
+        onManage={onManage}
+      />
+    );
   }
 
   const visto = entry.work_count > 0 ? (entry.finished_count / entry.work_count) * 100 : 0;

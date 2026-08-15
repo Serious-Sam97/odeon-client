@@ -22,6 +22,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import dev.odeon.android.tv.ui.EscolhaDeVersaoDaSala
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -99,6 +102,21 @@ fun TelaDaBuscaDaTv(
     val primeiraTecla = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { primeiraTecla.requestFocus() } }
 
+    /// O item cuja escolha de versão está aberta.
+    ///
+    /// ## ⚠️ Ela precisa existir **aqui também**, e a TV é que denunciou
+    ///
+    /// Esta tela busca pelo mesmo `/api/library` da grade (`ModeloDaBusca` chama
+    /// `odeon.biblioteca`), então ela passou a receber as entradas **agrupadas**
+    /// assim que o servidor mudou, em 14/08/2026. Sem esta modal ela continuaria
+    /// abrindo `aoAbrirObra(item.id)` direto — e a segunda versão do filme ficaria
+    /// **inalcançável pela busca**, que é pior do que era antes do agrupamento.
+    ///
+    /// Foi achado ao preparar a conferência na TV, e não ao escrever o código: a
+    /// grade da biblioteca funcionava, e a busca é a tela por onde se chega no 007
+    /// de verdade — ninguém rola 8.273 cartazes.
+    var escolhendoVersao by remember { mutableStateOf<ItemDaBiblioteca?>(null) }
+
     Row(modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -160,7 +178,24 @@ fun TelaDaBuscaDaTv(
                 else -> Resultados(
                     itens = estado.itens,
                     capa = modelo::capa,
-                    aoAbrirObra = aoAbrirObra,
+                    /// ⚠️ Filme com mais de uma versão **pergunta qual** antes de
+                    /// abrir, igual à grade. Ver `escolhendoVersao` acima pro que
+                    /// acontecia sem isto.
+                    aoEscolherItem = { item ->
+                        if (item.temEscolhaDeVersao) escolhendoVersao = item
+                        else aoAbrirObra(item.id)
+                    },
+                )
+            }
+
+            escolhendoVersao?.let { aberto ->
+                EscolhaDeVersaoDaSala(
+                    item = aberto,
+                    aoFechar = { escolhendoVersao = null },
+                    aoEscolher = { versao ->
+                        escolhendoVersao = null
+                        aoAbrirObra(versao.id)
+                    },
                 )
             }
 
@@ -249,7 +284,10 @@ private fun Tecla(
 private fun Resultados(
     itens: List<ItemDaBiblioteca>,
     capa: (ItemDaBiblioteca) -> String?,
-    aoAbrirObra: (String) -> Unit,
+    /// ⚠️ Entrega o **item**, e não o id: quem decide o que fazer com ele é a
+    /// tela, porque um filme com mais de uma versão pergunta antes de abrir. Com
+    /// `(String) -> Unit` esta lista não teria como saber que há escolha.
+    aoEscolherItem: (ItemDaBiblioteca) -> Unit,
 ) {
     if (itens.isEmpty()) return
     LazyVerticalGrid(
@@ -270,7 +308,7 @@ private fun Resultados(
                 arte = capa(item),
                 cor = item.corDominante,
                 detalhe = item.year?.toString(),
-                aoEscolher = { aoAbrirObra(item.id) },
+                aoEscolher = { aoEscolherItem(item) },
             )
         }
     }

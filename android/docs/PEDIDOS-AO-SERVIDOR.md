@@ -125,6 +125,136 @@ que foram assistidos numa delas.
 Fora do app isso fica mais evidente que dentro: numa grade de 8.316 entradas dá
 pra não reparar; num widget de três, metade da lista é o mesmo filme.
 
+### 2.1 A resposta de produto veio — **14/08/2026**
+
+A pergunta aberta acima («duas cópias do mesmo filme devem ser duas entradas?»)
+era do dono, e ele respondeu. Vale a explicação inteira, porque ela muda o que se
+pede:
+
+> «temos diversos filmes com o mesmo nome, esses são versões que eu não achei em
+> dual audio e baixei 2 vezes, 1 em pt-BR e outro em inglês.»
+>
+> «Caso a pessoa selecione um filme que tem mais de uma versão, uma modal abre
+> mostrando as versões, daí a pessoa escolhe e aí sim abre a página de ficha do
+> filme com o botão de assistir normal.»
+
+⚠️ **Isto é agrupar, e não fundir** — e a diferença é o que destrava o pedido. O
+«já tentei» acima diz que juntar «não dá e não deveria», e continua certo: fundir
+apagaria o `position_seconds` de uma das duas. No desenho do dono nada é fundido.
+A grade mostra **um cartão**, a modal mostra **as duas obras**, e o toque abre a
+**ficha da obra escolhida** — inteira, com o id dela e o progresso dela. As duas
+continuam existindo no acervo; o que muda é quantas vezes o filme ocupa a grade.
+
+⚠️ E é bom dizer o que isto **não** conserta, pra ninguém achar que conserta: o
+progresso continua por obra. Quem começar na versão em inglês e voltar na pt-BR
+continua recomeçando do zero. A modal apenas passa a **mostrar** em qual das duas
+você parou, o que hoje não dá pra saber sem abrir as duas.
+
+```
+o que preciso: /api/library colapsando os rips do mesmo filme numa entrada só,
+               com as versões dentro dela — e, em cada versão, o idioma do áudio
+
+por quê:       a escolha entre as duas é de **idioma**, e o idioma é justamente
+               o que a listagem não manda. Hoje o único dado que as distingue é
+               `height`: 816p contra 818p. Uma modal que pergunta «qual versão?»
+               e só sabe escrever dois números com dois pixels de diferença pede
+               uma decisão sem dar a informação pra tomá-la — é pior que o
+               cartão duplicado, porque parece uma escolha e não é
+
+o que quebra:  agrupar do lado do cliente não fecha, e são três buracos — os
+               três sem conserto daqui. Estão medidos abaixo
+
+já tentei:     os três, e cada um bate numa parede diferente do contrato atual
+```
+
+### Os três buracos, e por que nenhum tem conserto do lado de cá
+
+**1. A chave de junção não existe na listagem.** `/api/library` não devolve
+`external_ids`; ele existe só em `GET /api/works/{id}` (`web/src/api.ts:561`),
+que é uma requisição **por obra**. Numa grade de 8.316 entradas, inviável. Sobra
+título+ano como heurística — e ela erra exatamente onde o acervo é fraco: dois
+rips com títulos ligeiramente diferentes, ou um deles `unmatched`, cujo «título»
+é o nome do arquivo. ⚠️ Quem tem a identificação é o servidor; adivinhá-la aqui
+seria o app decidir por semelhança de texto o que lá é uma chave.
+
+**2. A paginação desfaz o agrupamento, e mexe no foco.** A grade carrega de 60 em
+60 por `offset`, e o padrão de ordenação do app é `featured`
+(`Filtros.ordem`) — não `title`. Ou seja: as duas cópias **não** são vizinhas, e
+a gêmea de um cartão da página 1 pode chegar na página 3. O cartão teria que
+mudar depois de desenhado, e numa grade de TV mudar a contagem de itens **move o
+foco de lugar**. É a família de defeito que o §25 do `REDESENHO-TV.md` passou o
+dia caçando.
+
+**3. O `total` passaria a mentir.** Ele vem de um `count(*) OVER ()` contando
+entradas **não** agrupadas. O cabeçalho da grade escreve `carregadas / total` e o
+gatilho de paginação é `quantosNaTela < total`. Agrupando só no cliente, os dois
+números passam a falar de coisas diferentes — e o «carregadas» seria o único
+correto.
+
+### A forma pedida
+
+Uma proposta, não uma exigência — o servidor decide como fazer. O que importa é
+que os três buracos acima fechem do lado de lá.
+
+```jsonc
+// GET /api/library — uma entrada por **filme**, e não por rip
+{
+  "id": "eddbfd12-…",          // a versão que representa o cartão
+  "is_series": false,
+  "title": "007: A Serviço Secreto de Sua Majestade",
+  "year": 1969,
+  // … todo o resto da entrada como hoje, sem mudança
+
+  // ⚠️ Ausente (ou omitido) quando o filme tem uma versão só — que é o caso de
+  // quase todo o acervo. Mandá-lo com um item em 17.930 linhas é peso por nada,
+  // e a regra do cliente fica trivial: **há `versions`, há modal**.
+  "versions": [
+    {
+      "id": "eddbfd12-…",         // o work id — é por ele que a ficha abre
+      "media_file_id": "a2274591-…",
+      "height": 816,
+      "size_bytes": 2469606195,
+      "duration_seconds": 8520,
+      "audio_langs": ["por"],     // ⚠️ é este campo que faz a modal existir
+      "position_seconds": 4320,
+      "finished": false
+    },
+    { "id": "a950f840-…", "height": 818, "audio_langs": ["eng"], "…": "…" }
+  ]
+}
+```
+
+E mais três condições, que são o que separa isto de um agrupamento por parecença:
+
+| | |
+|---|---|
+| a chave | a **identificação** (o id externo), nunca título+ano |
+| o alcance | só `is_series = false`. ⚠️ Agrupar série por identificação juntaria episódios |
+| a confiança | só o que o servidor já identificou. Dois `unmatched` não têm chave, e chutar neles é o §18 ao contrário |
+
+⚠️ **E o `total` tem que contar entradas agrupadas**, senão o buraco 3 só muda de
+lado.
+
+⚠️ **Uma saída pra ver os rips separados** — `?versions=flat`, ou o nome que o
+servidor preferir. A revisão do acervo precisa enxergar arquivo por arquivo, e um
+agrupamento sem escape esconde exatamente de quem precisa ver.
+
+### O que o cliente faz quando isto chegar
+
+Duas cópias do contrato à mão, e as duas mudam: `android/core/…/dados/Modelos.kt`
+e `web/src/api.ts`. Três grades desenham: `:tv`, `:app` e a web.
+
+⚠️ O `clients/shared` **não** entra: o README dele o declara superado em
+12/08/2026, e o `Models.kt` de lá nem tem a biblioteca.
+
+### A pergunta que fica aberta, e é a mesma causa
+
+`/api/continue` tem o problema idêntico, e o caso medido está logo acima — o
+widget de três itens com o mesmo filme duas vezes. **Não estou pedindo junto**
+porque ali a decisão é outra: duas versões com progressos diferentes são duas
+coisas pra continuar de verdade, e colapsá-las obrigaria a escolher qual
+progresso sobrevive na fileira. Fica anotado pro dia em que alguém decidir.
+
 ---
 
 ## 3. Um token de arte de vida longa, pra a fileira na home da Google TV
@@ -200,3 +330,108 @@ exige», e vale registrar o que foi conferido e resolvido aqui:
 | as etiquetas da ficha | **já vinham** no `/api/works/{id}`; idem |
 | a capa no controle de mídia | a URL já existia no app — faltava declarar `MediaMetadata` |
 | a mensagem do 403 | é texto do cliente |
+
+---
+
+## 3. O guia conta rips; a biblioteca conta grupos
+
+**Medido em 15/08/2026, contra o acervo de casa, pelo cliente iOS.**
+
+A ponte guia → biblioteca ficou pronta no iPhone: tocar em «Drama 228» leva à
+grade filtrada. Só que a grade abre dizendo **216**.
+
+```
+guia (/api/guia, eixo Drama):              228
+biblioteca (tags=genre:Drama&kind=movie):  216
+biblioteca (tags=genre:Drama, sem kind):   252
+
+das 216 entradas: 11 são grupo de versão
+rips a mais que entradas:                  12
+→ 216 + 12 = 228
+```
+
+**Não é o `kind`.** É o agrupamento de versões implementado no dia 14/08: o
+`/api/guia` conta **rips** e o `/api/library` conta **grupos**. Onze filmes de
+Drama têm segunda versão — um deles tem três — e são exatamente os doze que
+faltam.
+
+### Por que isto não é cosmético
+
+A pílula do guia é uma **promessa de tamanho**: «Drama 228» é o que faz alguém
+tocar. Entregar 216 é a família do §8b — visível, e mentindo baixinho. E como
+quem conta é o servidor, os quatro clientes erram igual: TV, celular, web e iOS.
+
+### O pedido
+
+Que o `/api/guia` (e o `/api/guia/revista`, se ele contar do mesmo jeito) conte
+pela **mesma chave de agrupamento** que o `/api/library` usa — o
+`external_ids->>'tmdb'`. Um filme com dois rips é um filme.
+
+⚠️ **Nenhum cliente deve consertar isto na tela.** Descontar as versões no
+cliente exigiria carregar as 216 entradas só pra corrigir um número de pílula, e
+seria a quarta cópia de uma regra de contagem. É conta de banco, e o banco é um
+só.
+
+---
+
+## 4. A playlist de HLS é `EVENT`, e por isso o player vira transmissão
+
+**Medido em 15/08/2026, contra o acervo de casa, pelo cliente iOS.**
+
+Tocando «007: Cassino Royale» no iPhone, a barra do player não mostrava
+`11:03 / 2:24:00`. Mostrava **«4:44 AM»** — um horário de relógio — com o
+marcador de borda ao vivo, do jeito que um player mostra uma transmissão. Num
+filme de 2006.
+
+O diagnóstico interno dizia o mesmo em outra língua: `duracao=indefinida`.
+
+A playlist, lida direto de `/api/hls/{sessão}/index.m3u8`:
+
+```
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:EVENT      ← aqui
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXTINF:10.010000,
+seg00000.ts?token=…
+#EXTINF:10.010000,
+seg00001.ts?token=…
+#EXTINF:10.010000,
+seg00002.ts?token=…
+                                 ← e não há #EXT-X-ENDLIST
+```
+
+Três segmentos listados, e a lista cresce conforme o ffmpeg produz.
+
+### Por que isto não é escolha do cliente
+
+A RFC 8216 é explícita: numa playlist `EVENT` sem `#EXT-X-ENDLIST`, o cliente
+**não sabe onde o conteúdo termina** e é obrigado a tratá-la como transmissão em
+andamento. Não há bandeira, opção nem gambiarra do lado de cá que faça o AVPlayer
+mostrar «2:24:00» de uma lista que não diz durar 2:24:00.
+
+O custo é o que se perde:
+
+| | |
+|---|---|
+| **arrastar até o minuto 90** | não dá — a janela de busca é só o que já foi publicado |
+| **saber quanto falta** | a barra não tem fim, então não tem proporção |
+| **o relógio na tela** | mostra a hora do dia, que é o §8b: visível, e mentindo |
+
+E isto **não é do `transcode`**: vale para os dois modos que passam por HLS —
+`direct_stream` e `transcode` —, que somam **~70% do acervo** pelo perfil do iOS.
+São quatro clientes com o mesmo teto.
+
+### O pedido
+
+Que a playlist saia **completa e marcada como VOD**: o servidor sabe a duração do
+arquivo e o tamanho do segmento, então sabe listar todos os `#EXTINF` de uma vez,
+fechar com `#EXT-X-ENDLIST` e declarar `#EXT-X-PLAYLIST-TYPE:VOD` — gerando cada
+segmento **quando ele for pedido**, que é o padrão de segmentador sob demanda.
+
+⚠️ **Nenhum cliente deve consertar isto na tela.** Dá pra desenhar uma barra
+própria que saiba a duração da ficha e busque reabrindo a sessão noutro instante
+— e aí seriam quatro barras à mão, quatro vezes a mesma regra, para contornar um
+fato que mora num lugar só.

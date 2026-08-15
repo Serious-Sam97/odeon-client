@@ -53,9 +53,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.dados.ObraDaLista
+import dev.odeon.android.dados.VersaoDaObra
 import dev.odeon.android.ui.Cores
+import dev.odeon.android.ui.duracaoCompacta
+import dev.odeon.android.ui.idiomasEmPortugues
+import dev.odeon.android.ui.tamanhoCompacto
 import dev.odeon.android.ui.MolduraDoCartaz
 import dev.odeon.android.ui.LampadasDaMarquise
 import dev.odeon.android.ui.Luz
@@ -92,6 +98,10 @@ fun TelaDaBiblioteca(
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
     val grade = rememberLazyGridState()
+
+    /// O item cuja escolha de versão está aberta. `null` é a folha fechada.
+    /// Ver `EscolhaDeVersao`, no fim deste arquivo.
+    var escolhendoVersao by remember { mutableStateOf<ItemDaBiblioteca?>(null) }
 
     /// Quando pedir a próxima página.
     ///
@@ -344,8 +354,16 @@ fun TelaDaBiblioteca(
                         /// esta obra», e quem toca numa capa de *Breaking Bad*
                         /// está perguntando outra coisa — quais episódios há, e
                         /// quais já viu.
+                        ///
+                        /// ⚠️ E há um terceiro caso desde 14/08/2026: filme com
+                        /// mais de uma versão no acervo **pergunta qual** antes
+                        /// de abrir a ficha. Ver `EscolhaDeVersao`.
                         aoTocar = {
-                            if (item.eSerie) modelo.entrarNaSerie(item) else aoAbrirObra(item.id)
+                            when {
+                                item.eSerie -> modelo.entrarNaSerie(item)
+                                item.temEscolhaDeVersao -> escolhendoVersao = item
+                                else -> aoAbrirObra(item.id)
+                            }
                         },
                         moldura = moldura,
                     )
@@ -384,6 +402,141 @@ fun TelaDaBiblioteca(
                 aoAbrirBaixados = aoAbrirBaixados,
             )
         }
+        }
+
+        escolhendoVersao?.let { aberto ->
+            EscolhaDeVersao(
+                item = aberto,
+                aoFechar = { escolhendoVersao = null },
+                aoEscolher = { versao ->
+                    escolhendoVersao = null
+                    aoAbrirObra(versao.id)
+                },
+            )
+        }
+    }
+}
+
+/// A escolha de versão, quando o mesmo filme está no acervo mais de uma vez.
+///
+/// ## Por que ela existe
+///
+/// O dono baixou alguns filmes **duas vezes** — um em pt-BR e outro em inglês —
+/// porque não achou dual audio, e até 14/08/2026 os dois ocupavam cartões
+/// separados na grade. Agora o servidor os agrupa (`ItemDaBiblioteca.versoes`), e
+/// esta folha é onde a escolha acontece. O pedido inteiro está no §2.1 do
+/// `docs/PEDIDOS-AO-SERVIDOR.md`.
+///
+/// ⚠️ **Ela escolhe uma obra, e não um arquivo.** Cada versão tem id, progresso e
+/// ficha próprios; o toque abre a ficha daquela obra, com o botão de assistir de
+/// sempre. Nada é fundido — fundir apagaria o progresso de uma das duas.
+///
+/// ## Por que uma folha, se o `TelaDosBaixados` recusa caixa modal
+///
+/// Aquela recusa é sobre **confirmação**: «uma caixa modal pra confirmar o
+/// apagamento de um arquivo é cerimônia que a web não faz». Esta não confirma
+/// nada — ela **oferece uma escolha** que não existe em nenhum outro lugar da
+/// tela, e escolha precisa de superfície. A folha é a forma do Android pra isso, e
+/// ela sai com o gesto de arrastar pra baixo, sem botão de cancelar.
+///
+/// ⚠️ E o rótulo pode não existir: o 007 em inglês deste acervo não declara idioma
+/// na faixa de áudio, então sai como «versão 2» — a queda posicional do
+/// `rotuloDaFaixa`. Quem distingue as duas ali é o «parou em».
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun EscolhaDeVersao(
+    item: ItemDaBiblioteca,
+    aoFechar: () -> Unit,
+    aoEscolher: (VersaoDaObra) -> Unit,
+) {
+    val versoes = item.versoesEscolhiveis
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = aoFechar,
+        containerColor = Cores.fundoElevado,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Cores.texto,
+            )
+            Text(
+                text = "${versoes.size} versões no acervo",
+                style = MaterialTheme.typography.bodySmall,
+                color = Cores.textoApagado,
+            )
+            Column(
+                Modifier.padding(top = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                versoes.forEachIndexed { indice, versao ->
+                    LinhaDeVersao(versao = versao, posicao = indice) { aoEscolher(versao) }
+                }
+            }
+        }
+    }
+}
+
+/// Uma linha da folha: o nome, o que se sabe do arquivo, e onde se parou.
+@Composable
+private fun LinhaDeVersao(
+    versao: VersaoDaObra,
+    posicao: Int,
+    aoTocar: () -> Unit,
+) {
+    /// ⚠️ Queda **posicional** quando o arquivo não declara idioma — a mesma do
+    /// `rotuloDaFaixa` («faixa 1»). Escrever «Inglês» num arquivo que não diz que
+    /// é inglês seria inventar metadado.
+    val nome = idiomasEmPortugues(versao.idiomasDeAudio) ?: "versão ${posicao + 1}"
+
+    /// `818p · 2,3 GB` — item por item; a linha some inteira se não houver nenhum.
+    val tecnico = buildList {
+        versao.height?.let { add("${it}p") }
+        versao.tamanhoEmBytes?.let { add(tamanhoCompacto(it)) }
+    }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+    /// ⚠️ Filme terminado **não** tem «parou em»: a posição de quem viu até o fim
+    /// é o fim, e escrevê-la é a mesma mentira que o `ondeContinuar` conserta na
+    /// ficha. O piso de 5s é o dele — abaixo disso foi toque acidental.
+    val parou = versao.ondeParou
+        ?.takeIf { it > 5 && !versao.finished }
+        ?.let { "parou em ${duracaoCompacta(it)}" }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .background(Cores.fundoAfundado)
+            .clickable(onClick = aoTocar)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = nome,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Cores.texto,
+            )
+            if (parou != null) {
+                Text(
+                    text = parou,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Cores.textoApagado,
+                )
+            }
+        }
+        if (tecnico != null) {
+            Text(
+                text = tecnico,
+                style = MaterialTheme.typography.bodySmall,
+                color = Cores.textoApagado,
+            )
         }
     }
 }

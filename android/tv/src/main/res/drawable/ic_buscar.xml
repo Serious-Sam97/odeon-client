@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A busca — a lupa, e desta vez ela é o desenho certo.
+
+  ⚠️ O comentário do `ic_aba_guia` diz que uma lupa «diria "procure"», e usa isso
+  como argumento pra o guia **não** ser uma. Aqui é justamente o que se quer: o
+  item existe pra abrir a busca do sistema, e procurar é literalmente o que ele
+  faz. Os dois desenhos não brigam — o guia é uma relação, este é uma ação.
+
+  Formas cheias e não traço, como os outros seis. O motivo está no comentário do
+  `Facho.kt` do celular: ícone de traço fino a três metros vira borrão, e a
+  redução de 30dp pra o que a TCL mostra de verdade não perdoa.
+
+  O cabo sai a 45° do aro e é um retângulo girado — não um `path` curvo — pelo
+  mesmo motivo: numa tela de 1920 vista de longe, a diferença entre um cabo
+  reto e um arredondado não existe, e o reto não tem como sair errado em nenhum
+  renderizador.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+   >
+    <!-- O aro. Anel cheio: círculo de fora menos círculo de dentro, com
+         `evenOdd`, que é como se desenha um furo sem precisar de traço. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M10.2,2.4a7.8,7.8 0 1,0 0,15.6a7.8,7.8 0 1,0 0,-15.6zM10.2,5.1a5.1,5.1 0 1,1 0,10.2a5.1,5.1 0 1,1 0,-10.2z" />
+    <!-- O cabo. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15.3,16.9l1.9,-1.9l4.6,4.6l-1.9,1.9z" />
+</vector>

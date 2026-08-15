@@ -15,14 +15,29 @@ de `web/` e `clients/`.
 >
 > **Os pedidos pendentes ao servidor estão em
 > [`docs/PEDIDOS-AO-SERVIDOR.md`](docs/PEDIDOS-AO-SERVIDOR.md)**, no formato da
-> §1b — prontos pro dono levar. São dois, e nenhum bloqueia o app.
+> §1b — prontos pro dono levar. São **quatro** (dois deles do `:tv`), e nenhum
+> bloqueia o app.
 >
-> **O redesenho está em [`docs/REDESENHO.md`](docs/REDESENHO.md)** — a proposta
+> **O redesenho da TV está em [`docs/REDESENHO-TV.md`](docs/REDESENHO-TV.md)** —
+> escrito em 12/08/2026 depois de o `:tv` rodar na TCL e de o dono mostrar cinco
+> telas do celular. Sete levas, da cabine de projeção ao mural. A **T0** (o
+> módulo `:cenario`), a **T1** (o trilho vira cabine), a **T2** (o player), a
+> **T3** (a locadora) e a **T4** (a biblioteca) estão feitas e conferidas na
+> TCL; **T5 e T6 seguem proposta**, uma a uma.
+>
+> **O redesenho do celular está em [`docs/REDESENHO.md`](docs/REDESENHO.md)** — a proposta
 > de fases pra o app deixar de ser funcional-e-plano e passar a se parecer com o
 > Odeon, com o que só dá pra fazer no celular. É proposta, não plano aprovado.
 
-**Estado: a v1 inteira está feita, o redesenho R1–R9 entrou, e o segundo
-redesenho — «dar vida» — entrou nas três levas.**
+**Estado: a v1 inteira está feita, o redesenho R1–R9 entrou, o segundo
+redesenho — «dar vida» — entrou nas três levas, e em 12/08/2026 nasceram o
+`:core`, o `:tv` — o Odeon numa TCL com Google TV — e o `:cenario`, que é a
+**T0** do redesenho da TV.**
+
+O `:tv` foi **visto rodando numa TCL Smart TV Pro**, tela a tela, no mesmo dia
+em que nasceu: login, as seis abas com dado de verdade, a ficha, e um filme
+tocando. Ver a seção [«A sala»](#a-sala-o-tv-numa-tcl-com-google-tv) — inclusive
+os **oito** defeitos que só o aparelho encontrou.
 
 O segundo é sobre o dourado: o app usava a cor da casa como **tinta** (zero
 brilhos, halos ou gradientes) e a web usa como **luz** (dezenove). Ver a §0b do
@@ -73,7 +88,13 @@ rolagem sair de 60fps no emulador, e o emulador não segura 60fps nesta grade
 entre as versões. Precisa de aparelho de verdade ou de `androidx.benchmark`. Os
 números estão no `docs/REDESENHO.md` §0 e no comentário do `Cartaz`.
 
-`assembleDebug` ✅ · **29 testes** ✅ · `lintDebug` limpo ✅
+`assembleDebug` ✅ · **155 testes** (105 no `:core`, 22 no `:cenario`, 28 no
+`:app`) ✅ · `lintDebug` limpo nos **quatro** módulos, com **zero** exceções em
+`lint.xml` ✅
+
+⚠️ A conta mudou de lugar, não de tamanho: os testes de `Projecao` e de
+`Insignia` foram junto com as peças pro `:cenario` na T0. Teste que fica onde o
+código não está é teste que ninguém roda quando mexe no código.
 
 ⚠️ O parágrafo que estava aqui até 04/08/2026 dizia «fase 1 escrita, não rodada
 em aparelho — nenhuma tela foi vista rodando». Ficou desatualizado por seis fases
@@ -149,10 +170,359 @@ uma versão de verdade no mesmo aparelho em vez de substituí-la.
 
 ---
 
-## O que tem aqui
+## A sala: o `:tv`, numa TCL com Google TV
+
+**Estado: instalado e rodando numa TCL Smart TV Pro (Android 14), conferido tela
+a tela em 12/08/2026 — login, as seis abas com o acervo de verdade, a ficha da
+obra, e um filme tocando em `direct_play`.**
+
+O que falta está na última seção, e é curto: HLS, a fileira na home aparecendo, a
+busca por voz, e a troca de faixa.
+
+### ⚠️ O que o aparelho encontrou em 20 minutos, e o build não encontrou nunca
+
+Esta é a seção mais útil deste arquivo, e ela existe pra justificar a régua do
+projeto — «vistas rodando em aparelho, tela a tela, não só compiladas». Os três
+defeitos abaixo passaram por `assembleDebug`, por `lintDebug` e pelos 155 testes
+sem um aviso:
+
+| | o que se viu na TCL | onde estava |
+|---|---|---|
+| **o D-pad não saía do primeiro campo** | ▼▼▲ e o foco parado no mesmo retângulo. Usuário, senha e o botão **inalcançáveis** — a tela de login não dava pra usar | `BasicTextField` consome as setas verticais pro cursor, mesmo em `singleLine`. Conserto em `ui/Campo.kt` |
+| **o teclado cobria a senha** | o IME da TCL ocupa a metade de baixo; o campo ficava atrás dele — e o comentário do arquivo **afirmava o contrário** | `imePadding()` + `verticalScroll`, mais `adjustResize` e `setDecorFitsSystemWindows(false)` |
+| **o letreiro quebrava no meio da palavra** | `o acerv / o da / casa` — a coluna tinha 184dp e a fonte, 56sp | largura fixa e as quebras escritas à mão, em `TelaDeLoginDaTv.kt` |
+| **o foco ficava no endereço depois de achar** | a procura dava certo e o passo seguinte custava fechar o teclado, descer e ele reabrir | um `LaunchedEffect(servidorConfirmado)` que salta pro usuário |
+
+O primeiro é o que importa: ele não é um defeito de aparência, é o app **sem
+saída**. E é invisível num celular por um motivo estrutural — lá não há setas, o
+dedo escolhe o campo. Nenhum teste de unidade tem como encontrá-lo, e nenhuma
+leitura de código encontrou.
+
+Cada um está anotado no arquivo onde foi consertado, com o número medido junto.
+
+### A segunda leva de defeitos, com sessão de verdade
+
+Com o login feito, o app inteiro abriu — e o aparelho cobrou mais seis. Nenhum
+deles aparece num build verde:
+
+| | o que se viu na TCL | conserto |
+|---|---|---|
+| **o trilho era inalcançável** | ◀ no primeiro cartão ia pro **último da mesma fileira** e travava lá. Cinco das seis telas não tinham como ser abertas pelo controle | desvio explícito no item mais à esquerda — `saidaPraEsquerda`, em `ui/Pecas.kt` |
+| **a home da TV ficava vazia** | `SecurityException: Selection not allowed for content://android.media.tv/preview_program` — o `TvProvider` recusa cláusula `WHERE` | apagar por URI de canal e linha a linha, em `home/CanalDaHome.kt` |
+| **o título invadia o pôster** | a escala de foco crescia **só a arte**, 12% por cima das duas linhas de texto logo abaixo | a escala passou pro cartão inteiro |
+| **os ícones do trilho saíam errados** | `◈ ✦ ☺` viraram triângulos e um arco cortado: a fonte da TCL não tem esses glifos | vetores — os mesmos `ic_aba_*.xml` do celular |
+| **a sinopse saía do véu** | a coluna de texto era `1050dp` numa tela de **960dp** — mais larga que a TV | fração única, dividida com o degradê |
+| **«voltar» na ficha saía do app** | relatado pelo dono: a tecla caía na home da Google TV em vez de voltar pra biblioteca | havia **um** `BackHandler` no módulo inteiro, no player. Agora são quatro |
+
+O último merece nota à parte porque **não foi achado por mim**: foi o dono
+apertando «voltar» numa ficha. Eu tinha percorrido as seis telas e o player sem
+apertar aquela tecla fora do player — e o comentário do `AtividadeDaTv` afirmava
+que ela era «tratada por `BackHandler` em cada tela, uma por uma», o que nunca
+foi verdade. A pilha certa está escrita lá agora:
+
+    episódios ▸ biblioteca ▸ ficha ▸ casa ▸ (aba ≠ biblioteca) ▸ sair
+
+⚠️ O da home é o mais instrutivo dos seis: ele **só foi visto porque o
+`publicar` embrulha tudo num `runCatching` que loga**. Sem aquela linha, a
+fileira simplesmente não existiria e não haveria nada no `logcat` — §8b pago com
+juros.
+
+E o do trilho é o mais caro: duas correções «óbvias» falharam antes da que
+funcionou, e as duas estão registradas em `ui/Pecas.kt` porque **parecem
+certas** — `focusProperties { exit }` num `focusGroup`, e `left` no contêiner.
+
+### O que já foi conferido na TCL
+
+| | |
+|---|---|
+| instala, abre, não quebra | ✅ primeiro quadro em 1,7s |
+| o D-pad percorre o formulário | ✅ servidor → usuário → senha → botão, conferido por `uiautomator` |
+| a descoberta do servidor | ✅ contra o **servidor de verdade**, `https://odeon-api.serious-sam.dev` — a dica voltou «achei em …» |
+| o esquema explícito é respeitado | ✅ escrito `https://`, ele não tentou o http, como o `EnderecoDoServidor` promete |
+| a rede do `:core` na TV | ✅ OkHttp, Retrofit e TLS atravessaram inteiros |
+| **as seis abas** | ✅ biblioteca (8.316 obras), locadora, mural, guia, para você, perfil — todas com dado de verdade |
+| o D-pad no conteúdo | ✅ trilho ⇄ grade ⇄ fileiras, conferido por `uiautomator` |
+| a ficha da obra | ✅ selo `direto`, etiquetas, cenas, e «continuar de 2min» vindo do `ondeContinuar` |
+| **o filme toca** | ✅ `direct_play`, retomado em 2min, `state=PLAYING`, sem erro |
+| o cromo do player | ✅ some sozinho, e ◀▶ pulam 10s **sem** acender a interface |
+| a sessão de mídia | ✅ o sistema achou (`findMediaButtonSession OK`) — o ▶ do controle chega ao player |
+| `fazQuantoTempo` | ✅ o mural escreveu «há 3 dias» com o dado real |
+| a home do Google TV | ⚠️ publica sem erro depois do conserto; a fileira em si **não foi vista** — o canal precisa de um aval do sistema que se dá com o controle |
+
+### ⚠️ O custo de desenho da caixa 3D na TCL — medido
+
+A §10 do redesenho dizia «não sei o custo de desenho na TCL». Agora sabe, e o
+número reprova **a prateleira**, não a peça.
+
+A prateleira da locadora do `:tv` foi trocada por `CaixaEm3D` em tamanho de sala
+e medida com `dumpsys gfxinfo` — catorze `▶` a 0,45s dentro de **uma fileira
+só**, pra não medir carregamento de imagem. O mesmo gesto na biblioteca, que tem
+cartaz plano, serviu de controle:
+
+| | quadros | jank | **50º percentil** |
+|---|---|---|---|
+| biblioteca — cartaz plano | 47 | 44,7% | **42ms** |
+| estante — caixa 3D | 37 | **100%** | **200ms** |
+
+200ms é 5 fps. E `Slow bitmap uploads` deu **zero** contra `Slow UI thread` 37 de
+37: não é rede nem pôster, é composição — seis faces por caixa, cada uma com um
+`BoxWithConstraints`, vezes quatro caixas na tela.
+
+⚠️ **Isso não é argumento contra o `:cenario`.** Uma cópia da caixa dentro do
+`:tv` seria exatamente igual de lenta: o custo é da peça, não da fronteira de
+módulo. A prateleira voltou ao cartaz plano, e a caixa 3D reaparece na T3 **no
+palco**, onde é uma só na tela — número que ainda não foi medido.
+
+O que **funcionou** é igualmente medido: a caixa a três metros ficou boa, e a
+lombada passou a ser legível de verdade — título, tarja dourada, miniatura e
+`2024 · DVD`. O comentário do `TelaDaLocadoraDaTv` afirmava o contrário («a
+distância de três metros achata») e nunca tinha sido visto. Está corrigido lá.
+
+### A T1: o trilho virou a cabine de projeção — 12/08/2026
+
+A leva 1 do redesenho da TV, vista rodando na TCL. O trilho deixou de ser seis
+ícones com uma barrinha dourada:
+
+| | |
+|---|---|
+| **o retrato**, no topo | avatar, anel de progresso e selo do nível — a `Insignia` do `:cenario`, a **mesma** que o celular desenha |
+| **a busca**, como ícone | abre a busca do sistema. §5.1: «digitar com D-pad é soletrar» |
+| **a lente** | o destino escolhido ganhou um disco de luz com halo no lugar da barrinha de 3dp — o mesmo objeto que corre sobre a película do player |
+| **o feixe** | abre da lente pra direita, com poeira em suspensão, atrás do conteúdo |
+| **a piscada** | os dez quadros do arco, do `:cenario`, disparados pela **troca de destino** e não pelo foco |
+
+⚠️ **O que o aparelho cobrou está na §10.3 do redesenho, e são quatro coisas** —
+o retrato nasceu vazio, a poeira virou um campo de estrelas sobre os pôsteres, o
+perfil escolhido ficava sem lente nenhuma, e a busca não foi vista funcionando.
+As três primeiras estão consertadas; a quarta está isolada e é do aparelho.
+
+O D-pad foi percorrido item a item com `uiautomator`: os **sete** alcançáveis, e
+para nas duas pontas. Não é dedução de build verde — é o defeito mais caro que
+este módulo já teve, e ele ganhou dois itens novos nesta leva.
+
+### A T2: a cortina abre a sessão — 12/08/2026
+
+A leva 2, vista rodando na TCL:
+
+| | |
+|---|---|
+| **a cortina** | as lâmpadas piscam, o pano vermelho aparece com o nome do filme, e abre. A §6.1 chama de «a peça de maior retorno do documento», e no escuro com a tela inteira ela é o que o documento prometeu |
+| **a película** | a `Tira` do tamanho da sala — cenas de verdade, perfurações, o já visto em cor cheia, a lente sobre o ponto atual |
+| **o 10/30** | era ±10; agora é assimétrico, como o celular |
+| **o ponto do plano** | a pílula «transcodificando» virou um ponto colorido ao lado do título |
+
+O cromo foi refeito depois que o dono o viu: fileira centralizada, o ▶/⏸ clássico
+com o disco dourado do `:cenario`, o `10s` à esquerda do play e o `sair` no canto
+do rodapé. Junto entraram um defeito consertado — passar o foco pelo botão de
+salto **já buscava**, e o foco nem andava — e a película que aparece sozinha ao
+buscar com o cromo apagado, pra acompanhar sem tapar o filme. Ver §10.5.
+
+⚠️ **Uma coisa da §6.2 não saiu: a lente ficar parada no centro com a película
+correndo por baixo.** Duas tentativas foram medidas na TCL e as duas falharam —
+a primeira porque `Modifier.width` é preferência e não ordem (a lente saiu 240px
+fora do centro), a segunda sem diagnóstico fechado. Fazer sair pede mudar a
+`Tira` por dentro, e a T0 decidiu que as peças se movem e não se reescrevem.
+Está na §10.4 do redesenho como pendência **medida**.
+
+### A T3: a locadora virou uma loja — 12/08/2026
+
+| | |
+|---|---|
+| **a fachada** | arandela de latão com facho, `locadora` em serifada acesa, `ACERVO DA CASA` em versalete — e **nenhum título de tela**, que é o ponto da §5.2 |
+| **as plaquinhas** | penduradas por pino e fio, tortas pra lados opostos, com a contagem escrita à mão |
+| **as estantes** | madeira com lábio iluminado, etiqueta de papel colorido presa com fita, `8 de 179` no canto |
+| **a caixa no palco** | escolher **pega a caixa na mão**; `◀ ▶` giram, `OK` abre |
+| **o trilho** | vira silhueta na locadora, e a marquise da loja assume a luz |
+
+O `Cenografia.kt` do celular atravessou inteiro pro `:cenario` — 402 linhas, um
+import de `material3`, medido antes de mover. A `Tabua` veio junto, promovida de
+`private`: uma prateleira de madeira não é do celular nem da TV, é do lugar.
+
+⚠️ **O custo da caixa no palco foi medido**: 97ms por quadro girando, contra 200
+das oito na prateleira e 42 do cartaz plano. O dono viu e aprovou o giro. Está na
+§10.9 com o número e o que ele não resolve.
+
+### A T4: a biblioteca ganhou teto e primeira dobra — 13/08/2026
+
+| | |
+|---|---|
+| **a marquise** | fileira de lâmpadas douradas no **teto da tela**, borda a borda — a terceira aparição do projetor |
+| **o herói** | arte 16:9 na primeira dobra, título em serifada, `faltam 24min`, barra de progresso — e ele **encolhe** de 306dp pra 104 ao descer, virando cabeçalho fino em vez de sumir |
+| **as contagens** | `60 de 8.316`, carregado dourado e total apagado; `CONTINUAR ─── 17` com o número na ponta da régua |
+
+⚠️ **A marquise tem outro compasso na sala.** No celular a faixa de luz corre sem
+parar; aqui ela pisca **uma vez** na entrada — com os dez quadros do arco, os
+mesmos do facho — e depois respira. A §5.1 chama a alternativa de «epilepsia, não
+identidade», e a fileira aqui atravessa 1920px numa tela que fica aberta.
+
+⚠️ Dois erros meus, os dois pegos em foto: o separador de milhar saía do `Locale`
+do aparelho e virou `8,316` numa TV em inglês — em português isso se lê «oito
+vírgula três» —, e o herói era item da grade e **rolava pra fora** em vez de
+encolher. Estão na §10.12 do redesenho.
+
+### O que ainda falta ver em aparelho
+
+- **HLS**. O que foi visto tocar foi `direct_play`. O caminho de transcodificação
+  — e com ele o `deslocamentoMs`, que é a parte mais sutil do `ModeloDoPlayer` —
+  ainda não passou por uma TV. Precisa de uma obra que o servidor recuse servir
+  direto.
+- **a fileira na home**. Ela publica sem erro; falta ver o cartão aparecendo na
+  primeira tela, e o aval que a Google TV pede pra deixar um canal visível.
+- **a busca por voz**. O provedor está no manifesto e responde; ninguém segurou o
+  microfone do controle ainda.
+- **troca de faixa de áudio e legenda**. O filme conferido tem uma faixa só, e
+  por isso o botão de áudio nem nasceu (§53) — o que é o comportamento certo, e
+  também significa que aquele caminho não foi exercitado.
+
+### Como está dividido, e por que agora são **quatro** módulos
 
 ```
-app/src/main/kotlin/dev/odeon/android/
+:core    → o que não desenha: `dados/`, os dez `Modelo*.kt`, a paleta, a Serifada
+:cenario → o que desenha e não é de nenhum aparelho: a caixa 3D, a película,
+           a cortina, o facho, a projeção, as tintas da capa
+:app     → o celular e o tablet: toque, PiP, download, Cast, haptics
+:tv      → a sala: D-pad, foco explícito, dez pés, e a home do Google TV
+```
+
+O `:core` é a promessa que o `settings.gradle.kts` fazia por escrito — «quando
+houver um `:tv`, o `:core` nasce dessa necessidade e não da previsão dela» —
+sendo paga. E ela saiu barata porque foi esperada: medido **antes** de mover,
+`dados/` e os dez `Modelo*.kt` tinham **zero** imports de Compose de UI. Foi um
+`git mv` e uma linha de dependência.
+
+O `:app` inteiro sobreviveu à mudança com **duas** linhas alteradas, e as duas
+pelo mesmo motivo — o Kotlin recusa *smart cast* de propriedade pública vinda de
+outro módulo. Está anotado em `TelaDoPlayer.kt`.
+
+#### O `:cenario`, a segunda extração — 12/08/2026
+
+Ele é a **T0** do [`docs/REDESENHO-TV.md`](docs/REDESENHO-TV.md), e nasceu de um
+alvo concreto: o `:tv` precisa da caixa 3D, da película, da cortina e do facho, e
+os quatro moravam no `:app`.
+
+A divisão anterior separou por **quem desenha**. Esta separa por **pra quem se
+desenha** — e o achado é que há coisa que desenha e não é de nenhum dos dois
+aparelhos. Uma caixa de VHS em três quartos é a mesma caixa a trinta centímetros
+e a três metros; o que muda é o tamanho e como se aponta pra ela.
+
+⚠️ **Ela saiu mais cara que a primeira, e o número está medido.** A do `:core`
+foi `git mv` e uma linha. Esta foi:
+
+| | |
+|---|---|
+| 11 arquivos movidos inteiros | `CaixaEm3D`, `Palco`, `Contracapa`, `TintasDaCapa`, `Projecao`, `Tira`, `Cortina`, `Insignia`, `Animacao`, `Chegada`, `Midia` |
+| 1 arquivo **partido** | `Facho.kt` — a luz foi pro `Arco.kt`; a `BarraDoFacho`, que é a barra de baixo do celular, ficou |
+| 1 função **extraída** | `FaceDaCaixa` (+ dois ajudantes), 580 linhas que estavam `internal` dentro da tela da locadora |
+| 25 chamadas de `material3` | quase todas `Text`, resolvidas por um invólucro (`Texto.kt`) e não por 21 reescritas |
+
+A `Serifada` desceu junto pro `:core`, e com ela morreu a `SerifadaDaSala` do
+`:tv` — um segundo `FontFamily` sobre o **mesmo** `.ttf`, que o comentário dele
+já temia em voz alta. O `Tipo` **não** desceu, e é decisão: 11sp de rótulo a três
+metros não é um rótulo discreto, é um rótulo ilegível.
+
+⚠️ **O celular atravessou sem uma diferença de desenho**, e isso foi conferido
+por comparação de pixel e não por leitura: locadora, palco e perfil, antes e
+depois, subtraídos. Palco **0**, perfil **0**, locadora 3.448 — dos quais 3.414
+são o selo mostrando `3` em vez de `2`, porque o nível subiu durante a sessão.
+
+O caminho até esse zero está na §10.2 do redesenho, e vale a leitura: **quatro**
+erros seguidos no invólucro de texto, todos com build verde, 155 testes passando
+e lint limpo. Os quatro foram achados subtraindo screenshots.
+
+### Compilar e instalar
+
+```bash
+docker exec odeon-android ./gradlew :tv:assembleDebug
+docker exec odeon-android ./gradlew :core:testDebugUnitTest :tv:lintDebug
+```
+
+O APK sai em `tv/build/outputs/apk/debug/tv-debug.apk` — **18,7 MB**, contra 22,9
+do celular. A diferença é o que a sala não carrega: Glance, Cast e o Media3 de
+download.
+
+⚠️ **O Palette saiu desta lista em 12/08/2026**, e a linha dizia o contrário até
+então. Ele entrou no `:cenario` junto com a `TintasDaCapa`, que é quem tira as
+duas cores da lombada da capa — sem ele a caixa da estante volta a ser cinza de
+interface. São ~60 KB, e é o que fez o APK ir de 18 para 18,7.
+
+Numa TCL não há porta USB pra depuração, então o caminho é **adb pela rede**:
+
+1. na TV, `Ajustes › Sistema › Sobre` e aperte **sete vezes** em «Versão do
+   build» — é o que liga as opções de desenvolvedor
+2. `Ajustes › Sistema › Opções do desenvolvedor` → ligue **Depuração por USB**
+   (o nome mente: numa TV é ela que abre a porta 5555 da rede)
+3. anote o IP em `Ajustes › Rede`
+
+```bash
+docker exec odeon-android adb connect 192.168.0.50:5555
+# a TV mostra um diálogo de autorização — aceite nela, com o controle
+docker exec odeon-android ./gradlew :tv:installDebug
+```
+
+O app aparece na fileira de apps da home como **Odeon**, com o banner deitado —
+e não na gaveta de apps do celular, porque o que ele declara é
+`LEANBACK_LAUNCHER` e não `LAUNCHER`.
+
+O debug instala como `dev.odeon.android.tv.debug`. O id de produção é
+`dev.odeon.android.tv`, e **não** `dev.odeon.tv`: esse último já é do app de TV
+do `clients/`, o do Kotlin Multiplatform, e reusá-lo faria os dois brigarem pela
+mesma instalação.
+
+### O que a sala tem que o celular não tem
+
+| | |
+|---|---|
+| **a fileira na home** | «continuar assistindo» aparece na **primeira tela** da TV, junto do que o resto dos apps deixou pela metade. É o `WatchNext` do sistema, não uma fileira nossa |
+| **o canal do app** | uma fileira «Odeon» que a pessoa pode fixar |
+| **a busca por voz** | segurar o microfone do controle e falar «Alien» acha no acervo — sem digitar, que numa TV é o ponto inteiro |
+| **o controle remoto** | play, pause e avanço do controle chegam ao player pela sessão de mídia |
+
+### O que ela deliberadamente não tem
+
+| | por quê |
+|---|---|
+| **baixados** | a TV está sempre na rede que serve o filme. Uma aba que abre sempre vazia é pior que aba nenhuma (§24) |
+| **Cast** | mandar pra TV, **da** TV |
+| **a caixa em três quartos da locadora** | ela existe pra ser **pegada** — o dedo a levanta e o aparelho vibra. Sem mão e sem giroscópio, sobra um desenho bonito que a distância de três metros achata |
+| **PiP** | é o motivo de o `minSdk` ser 26 no celular, e não tem equivalente aqui |
+
+### ⚠️ A dívida que já se sabe
+
+As artes da fileira da home carregam `?token=` na URL, e quem baixa a imagem
+**não é este app** — é o processo do launcher, dias depois. Quando o token de
+mídia rodar, as artes já publicadas passam a devolver 401 e a fileira fica com os
+retângulos vazios.
+
+O paliativo está feito: republicar a cada abertura do app reescreve as URLs com o
+token da vez. O conserto de verdade é do servidor — uma rota de arte com token
+longo, de leitura só — e está em `docs/PEDIDOS-AO-SERVIDOR.md`.
+
+---
+
+## O que tem aqui
+
+São **três** módulos desde 12/08/2026 — ver «A sala» acima pro porquê. A árvore
+abaixo é a do `:app`; o que dela foi pro `:core` está marcado com `→ :core`.
+
+```
+core/src/main/kotlin/dev/odeon/android/    tudo que não desenha
+  dados/                    o contrato, a rede, o cofre, o barramento
+  ui/Cores.kt               a paleta da casa, dividida com a TV
+  ui/{Medida,Virada,Cor}.kt as contas que as duas telas fazem igual
+  ui/**/Modelo*.kt          os dez ViewModel, inclusive as 914 linhas do player
+core/src/main/res/font/     a serifada de display, embutida (ver abaixo)
+
+tv/src/main/kotlin/dev/odeon/android/tv/   a sala
+  OdeonTv.kt                o Application da TV
+  AtividadeDaTv.kt          a única Activity, e o `when` de onde se está
+  ui/Sala.kt                overscan, escala de foco, a tipografia de 10 pés
+  ui/Foco.kt                o vocabulário do D-pad: escala, halo, texto que acende
+  telas/                    login, trilho, as seis abas, a ficha
+  player/                   o cromo por D-pad, sobre o mesmo ModeloDoPlayer
+  home/                     o canal e o «continuar» na home do Google TV
+  busca/                    o Odeon dentro da busca por voz do sistema
+
+app/src/main/kotlin/dev/odeon/android/     o celular e o tablet
   OdeonApp.kt               o Application: guarda o Cofre e o Repositório
   AtividadePrincipal.kt     a única Activity, e a intenção é que continue sendo
   dados/
@@ -162,15 +532,14 @@ app/src/main/kotlin/dev/odeon/android/
     OdeonApi.kt             as 5 rotas (de 113) que a fase 1 fala
     Rede.kt                 UM OkHttp, e o porquê disso
     RepositorioOdeon.kt     procurar servidor, entrar, listar
+                            ⬆ os cinco foram todos pro `:core`
   ui/
-    Tema.kt                 a paleta e a escala tipográfica, ambas da web
+    Tema.kt                 a escala tipográfica do celular (a paleta → :core)
     Rotulo.kt               RotuloDeSecao: versalete, régua, número à direita
     AppOdeon.kt             a raiz: as quatro abas, e quem fica fora delas
     login/                  tela + modelo
     biblioteca/             tela + modelo
-app/src/main/res/font/      a serifada de display, embutida (ver abaixo)
-app/src/main/assets/        a licença OFL, que a fonte exige viajar junto
-app/src/test/…              os testes do EnderecoDoServidor
+app/src/test/…              os testes das telas que ficaram aqui
 app/lint.xml                o que o lint pode calar, e por quê
 gradle/libs.versions.toml   as versões, todas medidas
 Dockerfile                  a caixa de ferramentas

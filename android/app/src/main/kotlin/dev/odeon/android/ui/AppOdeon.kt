@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -832,11 +833,36 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
 
                     /// Uma sobreposição de tela cheia dispensa o esqueleto — o
                     /// mesmo caminho que o player já toma.
+                    ///
+                    /// ## ⚠️ O corpo é **móvel**, e é isso que impede o «reload»
+                    ///
+                    /// Quando `sobreposicaoCheia` vira, o corpo troca de pai —
+                    /// sai de dentro do `EsqueletoComAbas` pro ramo sem abas. O
+                    /// Compose casa árvore por posição: sem o `movableContentOf`,
+                    /// essa troca **remontava a tela inteira** a cada abrir e
+                    /// fechar do palco da locadora. O logcat mostrou as ~50
+                    /// caixas de todas as estantes montando de novo, a
+                    /// coreografia de chegada re-rodava, e o dono viu na hora:
+                    /// «os DVDs dão uma pulada como se a locadora tivesse dado
+                    /// reload». O defeito ficou invisível por dias porque o
+                    /// `rememberScrollState` é *saveable* — a rolagem sobrevivia
+                    /// à remontagem e escondia o crime.
+                    ///
+                    /// O `movableContentOf` move a subárvore com estado e tudo em
+                    /// vez de recriá-la. O `rememberUpdatedState` no meio é
+                    /// porque o `corpo` é uma lambda nova por recomposição, e o
+                    /// `remember` do móvel congelaria a primeira pra sempre.
+                    val corpoAtual by rememberUpdatedState(corpo)
+                    val corpoMovel = remember {
+                        androidx.compose.runtime.movableContentOf { m: MolduraDoCartaz ->
+                            corpoAtual(m)
+                        }
+                    }
                     val abaAtual = if (sobreposicaoCheia) null else alvo.aba
                     if (abaAtual != null) {
                         EsqueletoComAbas(
                             faces = facesDasAbas(alvo) { onde = it },
-                            conteudo = { corpo(moldura) },
+                            conteudo = { corpoMovel(moldura) },
                             /// A gaveta do canto — o único pedaço de cromo que
                             /// existe em toda aba. Ela fica **fora** do
                             /// `conteudo` porque as telas rolam e ela não:
@@ -854,7 +880,7 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                             },
                         )
                     } else {
-                        corpo(moldura)
+                        corpoMovel(moldura)
                     }
                 }
             }

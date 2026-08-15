@@ -5,9 +5,26 @@ Quatro alvos, dois codebases.
 | alvo | módulo | estado |
 |---|---|---|
 | Celular Android | `composeApp` | ✅ APK compila e roda |
-| Android TV | `tv` | ✅ APK compila |
+| Android TV | `tv` | ⚠️ **superado** — ver a nota abaixo |
 | iOS / iPad | `composeApp` (framework) + `iosApp` | ✅ projeto pronto, compila pro simulador |
 | Web | `../web` | ✅ (M0–M3) |
+
+> ## ⚠️ O `tv` daqui foi superado em 12/08/2026
+>
+> O app de TV em uso é o **`:tv` do projeto `android/`** — nativo, sobre o mesmo
+> `:core` do app de celular. Ver o `android/README.md`.
+>
+> Este `tv` continua no repositório e continua compilando; ele não é apagado
+> porque a espec (§4 do `docs/APP-ANDROID.md`) escreveu que «o KMP fica parado
+> onde está, e a espec não propõe apagá-lo».
+>
+> O que mudou é qual dos dois é verdade. Este fala com o `shared`, que é a
+> **segunda** cópia à mão do contrato da API — 166 linhas de modelo contra as
+> 1.278 do `dados/Modelos.kt` do `android/`. Ou seja: ele compila, e não conhece
+> a maior parte do que o servidor passou a servir.
+>
+> ⚠️ Os dois **não** dividem `applicationId`: este é `dev.odeon.tv`, o novo é
+> `dev.odeon.android.tv`. Dá pra ter os dois instalados na mesma TV pra comparar.
 
 ## Como está organizado
 

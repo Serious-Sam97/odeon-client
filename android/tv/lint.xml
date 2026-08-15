@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O que o lint pode calar neste módulo, e o motivo.
+
+  Vale aqui a mesma nota do `app/lint.xml`: é por **caminho**, e não
+  `lint { disable += ... }` no Gradle, porque desligar no módulo inteiro é a
+  diferença entre "esta pasta tem um motivo" e "não queremos mais ouvir sobre
+  isso". O `abortOnError` continua ligado.
+
+  E há uma dívida agradecida ao lint neste módulo em particular: foi ele que
+  reprovou o `uses-feature` de leanback no `:app` — a linha que dizia manter o
+  app fora da TV e fazia o contrário. O manifesto daqui é o outro lado dessa
+  mesma regra, e agora ela é amiga.
+-->
+<lint>
+
+    <!--
+      Mesmo caso do `:app`, mesma medição: sem o `-v26` o merge de recursos
+      descarta a pasta e o AAPT reprova com `resource mipmap/ic_launcher not
+      found`. Ver o comentário dentro do próprio `ic_launcher.xml`.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+
+    <!--
+      ## `VectorRaster` no banner
+
+      O aviso manda limitar vetor a 200x200 «pra manter o desenho rápido», e a
+      régua dele é **ícone**. O banner não é ícone: ele é 320x180 por
+      **exigência** do Android TV, e essas medidas não são escolha nossa — ver o
+      comentário dentro do próprio `banner.xml`.
+
+      O custo que o aviso mira também não se aplica: ele existe pra vetor
+      complexo redesenhado a cada quadro de uma lista. Este é desenhado **uma
+      vez**, pelo launcher, fora do nosso processo, e tem onze caminhos.
+    -->
+    <issue id="VectorRaster">
+        <ignore path="src/main/res/drawable/banner.xml" />
+    </issue>
+
+    <!--
+      ## `DiscouragedApi` no `screenOrientation`
+
+      O aviso diz que orientação fixa passa a ser ignorada a partir do Android 16,
+      porque «apps devem se adaptar a vários tamanhos e proporções».
+
+      Ele está certo, e está falando com outro app. Uma TV **não gira** — não há
+      retrato pra que este app se adapte. A linha existe pro caso oposto: há
+      Google TV em projetor e em monitor girado que reportam orientação de
+      retrato, e sem ela o app abriria de pé numa tela que está deitada.
+
+      Ser ignorado do Android 16 em diante é aceitável: o pior caso é voltar ao
+      comportamento que já é o certo em 99% dos aparelhos.
+    -->
+    <issue id="DiscouragedApi">
+        <ignore path="src/main/AndroidManifest.xml" />
+    </issue>
+
+</lint>

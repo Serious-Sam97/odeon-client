@@ -246,8 +246,21 @@ O que não existe:
 | a caixa na mão: `voando → na-mao → abrindo → midia` | ❌ há o verso, não há o palco |
 | escassez barrando a abertura da caixa | ❌ |
 
-**A profundidade 3D não entra nesta conta**: a §3 da espec já decidiu que a
-estante do app é 2D e que o giro vira `flip`. Isso está feito e não é falta.
+**A profundidade 3D saiu desta conta por outro motivo — 06/08/2026.** A frase que
+estava aqui dizia que a §3 já decidira que a estante do app é 2D e que o giro
+vira `flip`. Deixou de ser verdade: o `Projecao.kt` deu ao app uma câmera única
+com oito vértices e quatro homografias por `setPolyToPoly`, e a caixa passou a
+ter **seis faces** e giro de 360° no palco. O app não ficou devendo 3D — ele
+alcançou o da web.
+
+E a conta virou nos dois sentidos. O que o app fez em cima disso **a web não
+tinha**, e voltou pra cá em 09/08:
+
+| do app | pra web |
+|---|---|
+| a cenografia («a loja da esquina, 21h»): arandela, plaquinha, etiquetas, nota do caixa | ✅ `Cenografia.tsx` |
+| a lombada de duas tintas tiradas da capa | ✅ `tintas.ts`, com histograma no lugar da `Palette` |
+| o resumo como recibo no fim da visita | ✅ **parcial e de propósito** — o recado ao vivo ficou no topo, porque a web tem um e o app não |
 
 ### §7 Guia — **quase inteiro, e travado por outra tela**
 

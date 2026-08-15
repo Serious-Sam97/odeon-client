@@ -13,6 +13,14 @@ import { duracao, ficha, paraLista } from "./Details";
 import { RuidoDeFita } from "./RuidoDeFita";
 import MenuDVD from "./MenuDVD";
 import { useArrastoDeFileira } from "./arrasto";
+import {
+  Arandela,
+  EtiquetaDePrazo,
+  EtiquetaPendurada,
+  NotaDoCaixa,
+  PlaquinhaDaEstante,
+} from "./Cenografia";
+import { useTintasDaCapa } from "./tintas";
 
 /// Por que uma caixa que não está com você não abre — **aqui dentro**.
 ///
@@ -374,22 +382,38 @@ export default function Locadora({
     [prateleiras],
   );
 
+  /// O prazo da casa, pra etiqueta de preço na tábua e pro rodapé da nota. Ele
+  /// vem das opções da loja, e sem ele nenhuma das duas é desenhada.
+  const prazoDias = loja?.opcoes?.prazo_dias ?? 0;
+
   return (
     <div className="locadora">
       <header className="loja-porta">
+        <Arandela />
         <h2>Locadora</h2>
+
+        {/* As duas contagens viraram papel pendurado. O terceiro número — o
+            acervo — desceu pra nota do caixa, que é onde o app o imprime: no
+            balcão da saída, junto do prazo da casa.
+
+            ⚠️ **O buraco continua sendo dito**, e é a única parte desta linha
+            que não podia virar enfeite: "3 fora" é o que faz a caixa que sumiu
+            ler como escassez em vez de defeito. Sem ela, quem viu 40 ontem
+            conclui que a loja quebrou. */}
+        {!carregando && total > 0 && (
+          <div className="porta-etiquetas">
+            <EtiquetaPendurada numero={total} rotulo="na prateleira" angulo={-3} />
+            <EtiquetaPendurada numero={sorteadas} rotulo="nesta semana" angulo={2.5} />
+          </div>
+        )}
+
         <p className="muted small">
           {carregando
             ? "acendendo as luzes…"
             : total
-              ? // O buraco é dito, e não deduzido. "37 de 40, 3 estão fora" é a
-                // frase que faz a caixa que sumiu ler como escassez em vez de
-                // defeito — e sem ela a pessoa que viu 40 ontem conclui que a
-                // loja quebrou. As três contagens são coisas diferentes: o que
-                // está na prateleira, o que a semana sorteou, e o acervo.
-                `${total} caixas na prateleira` +
-                (sorteadas > total ? `, ${sorteadas - total} fora` : "") +
-                ` · ${sorteadas} nesta semana, de ${noAcervo} no acervo`
+              ? sorteadas > total
+                ? `${sorteadas - total} fora`
+                : ""
               : sorteadas
                 ? "a prateleira está vazia — está tudo emprestado"
                 : "nada com capa por aqui"}
@@ -404,7 +428,7 @@ export default function Locadora({
 
       {erro && <p className="error">{erro}</p>}
 
-      {loja && <Balcao loja={loja} recado={recado} />}
+      <RecadoDaLoja recado={recado} />
 
       {/* O que está em mãos, sempre visível — independente da rotação.
           Uma caixa emprestada que a semana não expôs não pode sumir: com ela
@@ -417,6 +441,8 @@ export default function Locadora({
             caixas={emMaos}
             fora={fora}
             ehVhs={ehVhs}
+            indice={0}
+            prazoDias={prazoDias}
             onPegar={(c, r) => setNaMao({ caixa: c, origem: r })}
           />
         </div>
@@ -434,6 +460,8 @@ export default function Locadora({
               caixas={comecadas}
               fora={fora}
               ehVhs={ehVhs}
+              indice={1}
+              prazoDias={prazoDias}
               onPegar={(c, r) => setNaMao({ caixa: c, origem: r })}
             />
           )}
@@ -444,6 +472,8 @@ export default function Locadora({
               caixas={lancamentos}
               fora={fora}
               ehVhs={ehVhs}
+              indice={2}
+              prazoDias={prazoDias}
               onPegar={(c, r) => setNaMao({ caixa: c, origem: r })}
             />
           )}
@@ -473,9 +503,25 @@ export default function Locadora({
           caixas={p.caixas}
           fora={fora}
           ehVhs={ehVhs}
+          /* +3: as três estantes do balcão já gastaram as três primeiras cores
+             da papelaria, e reiniciar aqui poria duas plaquinhas iguais
+             encostadas. */
+          indice={i + 3}
+          prazoDias={prazoDias}
           onPegar={(c, r) => setNaMao({ caixa: c, origem: r })}
         />
       ))}
+
+      {/* A NOTA DO CAIXA: o fim da visita. Depois de todas as estantes, porque
+          é na saída que o caixa entrega o papel — e porque o resumo que morava
+          no topo era um saldo lido antes de a pessoa ver a loja. */}
+      {loja && !carregando && (
+        <NotaDoCaixa
+          loja={loja}
+          noAcervo={noAcervo}
+          comoVoltou={(chave) => COMO_VOLTOU[chave] ?? chave}
+        />
+      )}
 
       {noMenu && (
         <MenuDVD
@@ -531,65 +577,27 @@ export default function Locadora({
 /// A regra do §24 vale aqui inteira: **linha limpa some**. Um balcão que diz
 /// "nenhuma fita fora · nenhuma devolução" em todas as visitas ensina a não
 /// olhar pro balcão, e aí o dia em que houver algo também não será lido.
-function Balcao({ loja, recado }: { loja: Prateleira; recado: string | null }) {
-  /// Quem aparece no balcão: quem está com fita **ou** quem tem fama.
-  ///
-  /// A segunda metade é a R30. *"As pessoas saberem quem devolveu zoado"* não
-  /// funciona se o número só existir enquanto a pessoa está com alguma coisa na
-  /// mão — a fama tem que sobreviver à devolução, senão ninguém carrega nada.
-  const gente = loja.pessoas.filter(
-    (p) => p.na_mao > 0 || p.zoadas > 0 || p.rebobinou > 0 || p.no_meio > 0,
-  );
-  if (!recado && gente.length === 0 && loja.devolvidas.length === 0) return null;
-
+/// O recado ao vivo — e **só** ele.
+///
+/// ## O balcão se partiu em dois, e a divisória é o tempo
+///
+/// Até aqui esta função desenhava tudo: os chips de pessoa, o seu limite, as
+/// devoluções e o recado. Com a cenografia, o saldo desceu pra `NotaDoCaixa` —
+/// você anda pelas estantes e o caixa te entrega a notinha na saída.
+///
+/// ⚠️ **O recado não desceu junto, e essa é a decisão que importa.** Ele dura
+/// seis segundos e é o pedido de volta chegando: *"um bloqueio só vira porta se
+/// quem está com a fita souber que bateram nela"*. No pé de oito estantes, um
+/// aviso de seis segundos é um aviso que ninguém vê — e aí o bloqueio volta a
+/// ser parede, que é exatamente o que ele existe pra evitar.
+///
+/// Saldo se lê na saída; notícia tem hora. São dois lugares porque são dois
+/// tempos.
+function RecadoDaLoja({ recado }: { recado: string | null }) {
+  if (!recado) return null;
   return (
     <div className="loja-balcao">
-      <div className="balcao-topo">
-        {gente.map((p) => (
-          <span key={p.id} className="membro-chip">
-            {p.display_name}
-            {p.na_mao > 0 && <i>{p.na_mao}</i>}
-            {/* Quantas fitas dela alguém teve que rebobinar, e quantas ela
-                rebobinou dos outros. Zero **some** em vez de virar "0" — a
-                regra do §24: linha limpa não vira linha. */}
-            {p.zoadas > 0 && (
-              <u title={`${p.zoadas} ${p.zoadas === 1 ? "fita que alguém teve" : "fitas que alguém teve"} que rebobinar`}>
-                ✕{p.zoadas}
-              </u>
-            )}
-            {p.rebobinou > 0 && (
-              <s title={`rebobinou ${p.rebobinou} ${p.rebobinou === 1 ? "fita" : "fitas"} dos outros`}>
-                ⟲{p.rebobinou}
-              </s>
-            )}
-          </span>
-        ))}
-        <span className="balcao-limite">
-          {loja.posso_pegar > 0
-            ? `você pode pegar mais ${loja.posso_pegar}`
-            : "você está no limite — devolva uma pra pegar outra"}
-        </span>
-      </div>
-
-      {recado && <p className="balcao-recado">{recado}</p>}
-
-      {loja.devolvidas.length > 0 && (
-        <ul className="balcao-devolucoes">
-          {loja.devolvidas.map((d) => (
-            <li key={`${d.caixa_id}-${d.devolvido_em}`}>
-              <b>{d.titulo}</b>
-              <span>
-                {/* Quem devolveu como. Fato sobre pessoa real, sem métrica
-                    inventada — e é isto que a R24 vai ler. */}
-                {d.devolvido_por === "prazo"
-                  ? `venceu na mão de ${d.quem_nome}`
-                  : `${d.quem_nome} devolveu ${COMO_VOLTOU[d.devolvido_como]}`}
-                {d.atrasada && <i className="atrasada">atrasada</i>}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="balcao-recado">{recado}</p>
     </div>
   );
 }
@@ -602,6 +610,8 @@ function Estante({
   ehVhs,
   onPegar,
   atrasoBase = 0,
+  indice = 0,
+  prazoDias = 0,
 }: {
   nome: string;
   legenda: string;
@@ -612,12 +622,19 @@ function Estante({
   /// De quanto tempo esta estante começa a ser abastecida (R41). Zero pras
   /// estantes do balcão, que já estão na tela quando as outras chegam.
   atrasoBase?: number;
+  /// Qual estante ela é na loja. Não é ordem, é **papelaria**: a plaquinha e a
+  /// etiqueta de prazo ciclam a cor por este número, pra a loja ter a mistura
+  /// de papéis de uma locadora de verdade em vez de cinco plaquinhas iguais.
+  indice?: number;
+  /// O prazo da casa, pra etiqueta de preço na tábua. Sem prazo do servidor,
+  /// sem etiqueta.
+  prazoDias?: number;
 }) {
   const arrastar = useArrastoDeFileira();
   return (
     <section className="estante">
       <div className="placa">
-        <span>{nome}</span>
+        <PlaquinhaDaEstante nome={nome} indice={indice} />
         <i>{legenda}</i>
       </div>
       <div className="prateleira">
@@ -633,11 +650,74 @@ function Estante({
             />
           ))}
         </div>
-        <div className="tabua" />
+        {/* A etiqueta de preço mora NA tábua, e não flutuando ao lado dela: numa
+            locadora ela é adesivada na madeira da prateleira, junto do preço da
+            fileira que está em cima. */}
+        <div className="tabua">
+          <EtiquetaDePrazo dias={prazoDias} indice={indice} />
+        </div>
       </div>
     </section>
   );
 }
+
+/// O selo do formato no pé da capa — **a marca, e não a palavra**.
+///
+/// A primeira versão era um retângulo com `DVD` escrito dentro, e o dono
+/// reprovou olhando o app: *"a logo do DVD na capa frontal deve ser essa
+/// exata"*. A marca do disco é um wordmark dentro de uma elipse com a caixinha
+/// `VIDEO` embaixo — é ela que toda capa de keep case carrega no pé, e um
+/// retângulo com texto não se parece com ela em nada.
+///
+/// Desenhada em SVG e não em imagem, pela régua de zero bytes que já rendeu o
+/// avatar por hash e a marquise: ela escala de 100px de capa na estante a
+/// 600px no palco sem borrar, e não precisa de arte que alguém produza.
+///
+/// A fita ganha o tratamento equivalente do estojo dela — `VHS` sobre a tarja,
+/// com o `VIDEO CASSETE` miúdo embaixo.
+function SeloDeFormato({ vhs }: { vhs: boolean }) {
+  return (
+    <span className="selo-formato" aria-hidden="true">
+      <svg viewBox="0 0 100 54" role="presentation">
+        {/* A elipse do wordmark. No disco ela é a marca; na fita, a tarja
+            achatada do estojo — mesma família, materiais diferentes. */}
+        {vhs ? (
+          <rect x="2" y="2" width="96" height="30" rx="3" fill="#fff" />
+        ) : (
+          <ellipse cx="50" cy="17" rx="48" ry="16" fill="#fff" />
+        )}
+        <text
+          x="50"
+          y="17"
+          className="selo-marca"
+          textAnchor="middle"
+          dominantBaseline="central"
+        >
+          {vhs ? "VHS" : "DVD"}
+        </text>
+        {/* A caixinha de baixo: preta com a palavra em branco, como no impresso. */}
+        <rect x="20" y="36" width="60" height="16" rx="2" fill="#0a0a0c" />
+        <text
+          x="50"
+          y="44.5"
+          className="selo-tipo"
+          textAnchor="middle"
+          dominantBaseline="central"
+        >
+          {vhs ? "CASSETE" : "VIDEO"}
+        </text>
+      </svg>
+    </span>
+  );
+}
+
+/// Os nomes de canal que a aba `SOM` imprime. É a mesma tabela do `ficha()` da
+/// ficha, em versalete — o encarte impresso escreve `5.1`, não `6 canais`.
+const CANAIS_DA_ABA: Record<number, string> = { 1: "MONO", 2: "ESTÉREO", 6: "5.1", 8: "7.1" };
+
+/// As cores das abas do encarte impresso — amarelo, verde, azul, roxo. Fixas
+/// por posição: o verso da mesma caixa é sempre igual.
+const TINTAS_DA_ABA = ["#e3c14e", "#8fbf5a", "#5fa8cf", "#b07fc7"];
 
 /// Quanto uma caixa espera depois da anterior da mesma estante.
 ///
@@ -702,6 +782,10 @@ function CaixaNaEstante({
   /// só nela: devolver uma fita não faz a loja inteira cair de novo.
   atraso?: number;
 }) {
+  /// As duas tintas da lombada, tiradas da capa. Ela nasce no fallback da cor
+  /// dominante e troca quando a paleta sai — a caixa nunca espera por cor.
+  const tintas = useTintasDaCapa(caixa.poster ? api.artworkUrl(caixa.poster) : null, caixa.cor);
+
   const classe = [
     "caixa",
     vhs ? "vhs" : "dvd",
@@ -718,7 +802,12 @@ function CaixaNaEstante({
   return (
     <button
       className={classe}
-      style={{ ["--cor" as string]: caixa.cor, ["--atraso" as string]: `${atraso}ms` }}
+      style={{
+        ["--cor" as string]: caixa.cor,
+        ["--atraso" as string]: `${atraso}ms`,
+        ["--tinta-cima" as string]: tintas.cima,
+        ["--tinta-baixo" as string]: tintas.baixo,
+      }}
       // O retângulo de onde a caixa saiu: é dele que o voo até o centro parte.
       // Sem isto ela apareceria pronta no meio da tela, que é o que se queria
       // justamente evitar.
@@ -779,6 +868,17 @@ interface Verso {
   episodios: string[];
   linhas: string[];
   cenas: string[];
+  /// As quatro abas coloridas do pé do verso, como `[rótulo, valor]`.
+  ///
+  /// São as mesmas `linhas` da ficha, mas separadas em rótulo e valor — a
+  /// fileira de abas do encarte impresso precisa dos dois, e uma string já
+  /// juntada não dá pra desjuntar. **Cada aba só diz o que o arquivo tem**:
+  /// nada de selo Dolby num AAC, nada de aba de legenda que ninguém mediu.
+  abas: [string, string][];
+  /// O papel de fundo do verso: a arte da obra esmaecida por trás do texto.
+  /// Encarte impresso **nunca é preto liso**, e uma sinopse curta numa caixa
+  /// alta deixava meia contracapa vazia.
+  fundo: string | null;
   /// Filme: dá pra tocar. Série: leva pra coleção.
   paraTocar: WorkListItem | null;
 }
@@ -836,6 +936,10 @@ function NaMao({
   onAbrirMenu: (c: Caixa) => void;
   onAbrirColecao: (id: string, titulo: string) => void;
 }) {
+  /// As duas tintas da capa, de novo. O `tintas.ts` guarda o que já extraiu, e
+  /// esta caixa acabou de sair de uma estante — então aqui é leitura de cache,
+  /// não uma segunda extração.
+  const tintas = useTintasDaCapa(caixa.poster ? api.artworkUrl(caixa.poster) : null, caixa.cor);
   const [verso, setVerso] = useState<Verso | null>(null);
   const [fase, setFase] = useState<
     "voando" | "na-mao" | "abrindo" | "midia" | "guardando" | "fita" | "tocando"
@@ -1100,6 +1204,11 @@ function NaMao({
               i.episode_number ? `${i.episode_number}. ${i.title}` : i.title,
             ),
           linhas,
+          // A caixa de coleção não tem arquivo só — ela tem 21. As abas dizem o
+          // que UM arquivo é, então na coleção elas não nascem: seria afirmar
+          // sobre 21 coisas o que se mediu numa.
+          abas: [],
+          fundo: quadros.map((i) => i.still).find((s): s is string => !!s) ?? null,
           // Quadros de episódios diferentes: é a única fonte de "cenas" que
           // não é a mesma imagem repetida.
           cenas: quadros
@@ -1120,6 +1229,28 @@ function NaMao({
         sinopse: w.overview,
         episodios: [],
         linhas,
+        // As quatro que o servidor AFIRMA, na ordem do encarte. `filter` e não
+        // placeholder: uma aba vazia seria a tela inventando o que não mediu.
+        abas: (
+          [
+            w.runtime_seconds ? ["DURAÇÃO", duracao(w.runtime_seconds).toUpperCase()] : null,
+            arquivo?.height
+              ? ["VÍDEO", [`${arquivo.height}p`, arquivo.video_codec?.toUpperCase()].filter(Boolean).join(" ")]
+              : null,
+            arquivo?.audio_codec
+              ? [
+                  "SOM",
+                  [arquivo.audio_codec.toUpperCase(), arquivo.audio_channels ? CANAIS_DA_ABA[arquivo.audio_channels] ?? `${arquivo.audio_channels}CH` : null]
+                    .filter(Boolean)
+                    .join(" "),
+                ]
+              : null,
+            arquivo?.size_bytes
+              ? ["TAMANHO", `${(arquivo.size_bytes / 1e9).toFixed(1).replace(".", ",")} GB`]
+              : null,
+          ] as ([string, string] | null)[]
+        ).filter((a): a is [string, string] => !!a),
+        fundo: w.artwork.backdrop ?? null,
         cenas: [w.artwork.backdrop].filter((s): s is string => !!s),
         paraTocar: arquivo ? paraLista(w, arquivo, null) : null,
       };
@@ -1350,12 +1481,31 @@ function NaMao({
             .join(" ")}
           style={{
             ["--cor" as string]: caixa.cor,
+            // As mesmas duas tintas da estante. Sem isto, a caixa perderia a
+            // lombada impressa justo ao ser tirada da prateleira — e é na mão
+            // que ela é grande o suficiente pra alguém reparar nela.
+            ["--tinta-cima" as string]: tintas.cima,
+            ["--tinta-baixo" as string]: tintas.baixo,
             transform: `rotateX(${giro.x.toFixed(1)}deg) rotateY(${giro.y.toFixed(1)}deg)`,
           }}
         >
+          {/* A LOMBADA IMPRESSA. Título no bloco de cima, e embaixo do fio
+              dourado a miniatura da capa emoldurada e o `1998 · DVD`.
+
+              A miniatura é **selo impresso**, não papel esticado: a versão
+              esticada foi mockada no app e reprovada. E ela só existe na caixa
+              grande — nos 11px de lombada de um keep case na estante, uma
+              moldura seria um cisco. */}
           <span className="lombada">
             <span className="lomb-titulo">{caixa.titulo}</span>
-            <span className="lomb-selo">{vhs ? "VHS" : "DVD"}</span>
+            {caixa.poster && (
+              <span className="lomb-miniatura">
+                <img src={api.artworkUrl(caixa.poster)} alt="" draggable={false} />
+              </span>
+            )}
+            <span className="lomb-selo">
+              {[caixa.ano, vhs ? "VHS" : "DVD"].filter(Boolean).join(" · ")}
+            </span>
           </span>
           <span className="topo" />
           <span className="fundo" />
@@ -1384,6 +1534,7 @@ function NaMao({
             <img src={api.artworkUrl(caixa.poster)} alt="" draggable={false} />
             <span className="brilho" />
             <span className={vhs ? "tampa" : "dobradica"} />
+            <SeloDeFormato vhs={vhs} />
             {/* A mesma cinta da estante. Sem ela, pegar uma caixa alugada
                 fazia a marca sumir justo quando ela vira o objeto principal
                 da tela — e a caixa na mão passava a parecer disponível. */}
@@ -1396,6 +1547,20 @@ function NaMao({
           </span>
 
         <div className="contracapa">
+          {/* O PAPEL DE FUNDO. Encarte impresso nunca é preto liso: a arte da
+              obra vai esmaecida por trás do texto inteiro, com um véu por cima
+              pra a leitura continuar mandando.
+
+              ⚠️ A opacidade foi calibrada em duas rodadas no app — 0,10 ficou
+              "quase preto", 0,34 ainda pouco, e parou em 0,50. Somada ao véu, o
+              que se vê na tela é bem menos que o número. Não "corrigir" pra
+              baixo sem olhar uma foto. */}
+          {verso?.fundo && (
+            <span className="verso-papel">
+              <img src={api.artworkUrl(verso.fundo)} alt="" draggable={false} />
+            </span>
+          )}
+
           <header className="verso-topo">
             <h3>{caixa.titulo}</h3>
             <p>
@@ -1410,40 +1575,95 @@ function NaMao({
           {/* Sinopse E lista: é o que um box tem atrás. A lista deixou de ser
               substituta da sinopse quando o reparo deu sinopse a 114 das 115
               séries — se continuasse alternativa, viraria código morto. */}
-          {(!verso || verso.sinopse || verso.episodios.length === 0) && (
-            <p className="verso-sinopse">
-              {verso ? (verso.sinopse ?? "Sem sinopse — a caixa veio sem o texto de trás.") : "…"}
-            </p>
-          )}
+          {/* SINOPSE À ESQUERDA, CENA À DIREITA — lado a lado, e não empilhados.
 
-          {verso && verso.episodios.length > 0 && (
-            <div className="verso-episodios">
-              <h4>Nesta caixa</h4>
-              <ol>
-                {verso.episodios.map((e) => (
-                  <li key={e}>{e}</li>
+              É a diagramação do encarte, e é a da foto do app: o texto ocupa a
+              coluna larga e a cena emoldurada senta ao lado dele, na altura da
+              primeira linha. Empilhados, a cena empurrava as abas pra fora da
+              caixa em sinopse comprida. */}
+          <div className="verso-corpo">
+            {(!verso || verso.sinopse || verso.episodios.length === 0) && (
+              <p className="verso-sinopse">
+                {verso ? (verso.sinopse ?? "Sem sinopse — a caixa veio sem o texto de trás.") : "…"}
+              </p>
+            )}
+
+            {verso && verso.episodios.length > 0 && (
+              <div className="verso-episodios">
+                <h4>Nesta caixa</h4>
+                <ol>
+                  {verso.episodios.map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* Uma cena, e não três. A moldura dourada é a mesma da miniatura da
+                lombada — é ela que amarra as duas faces. */}
+            {verso && verso.cenas.length > 0 && (
+              <span className="verso-cena">
+                <img src={api.artworkUrl(verso.cenas[0])} alt="" draggable={false} />
+              </span>
+            )}
+          </div>
+
+          {/* AS ABAS COLORIDAS — a fileira que dá vida ao pé do verso, como o
+              encarte impresso tem. As cores são fixas por posição e não
+              sorteadas: o verso da mesma caixa é sempre igual. */}
+          {verso && verso.abas.length > 0 && (
+            <div className="verso-specs">
+              <b>ESPECIFICAÇÕES TÉCNICAS DO FILME</b>
+              <div className="specs-abas">
+                {verso.abas.map(([rotulo, valor], i) => (
+                  <span key={rotulo} className="spec-aba" style={{ ["--aba" as string]: TINTAS_DA_ABA[i % TINTAS_DA_ABA.length] }}>
+                    <b>{rotulo}</b>
+                    <i>{valor}</i>
+                  </span>
                 ))}
-              </ol>
+              </div>
             </div>
           )}
 
-          {verso && verso.cenas.length > 0 && (
-            <div className={`verso-cenas${verso.cenas.length === 1 ? " unica" : ""}`}>
-              {verso.cenas.map((c) => (
-                <img key={c} src={api.artworkUrl(c)} alt="" />
-              ))}
-            </div>
-          )}
+          {/* A ADVERTÊNCIA, em letra de bula — e ela é **verdadeira**: são as
+              regras desta locadora, no tom do juridiquês que toda capa
+              carregava. A da fita manda rebobinar porque rebobinar existe aqui
+              de fato; a do disco lembra do menu. */}
+          <p className="verso-advertencia">
+            ADVERTÊNCIA: esta cópia pertence ao acervo da casa e é servida pelo Odeon para
+            exibição doméstica.{" "}
+            {vhs
+              ? "A fita é um objeto só — o ponto onde ela parar chega junto a quem a pegar depois. Rebobine antes de devolver."
+              : "O disco dispensa rebobinar — o menu lembra as cenas. A caixa volta sozinha à estante na devolução."}
+          </p>
 
+          {/* O RODAPÉ: código de barras · marca da casa · botão. Três colunas,
+              como no encarte — e é a última linha do verso.
+
+              ⚠️ A `verso-ficha` (a lista `2H29 · 1080p · H264 · 2,8 GB`
+              separada por pontos) **sai quando as abas existem**. As duas
+              diziam a mesma coisa em dois desenhos, uma embaixo da outra: a
+              versão colorida é a do encarte, e duas fichas técnicas no mesmo
+              verso é ruído, não redundância. Sem abas — a caixa de coleção — a
+              lista continua sendo a única, e fica. */}
           <div className="verso-rodape">
-            <ul className="verso-ficha">
-              {verso?.linhas.map((l) => (
-                <li key={l}>{l}</li>
-              ))}
-            </ul>
+            {verso && verso.abas.length === 0 && verso.linhas.length > 0 && (
+              <ul className="verso-ficha">
+                {verso.linhas.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+            )}
 
             <div className="verso-acao">
               <CodigoDeBarras semente={caixa.id} />
+              {/* A marca da casa, como toda distribuidora estampava no pé do
+                  verso. Ela muda com o formato porque a fita e o disco vinham
+                  de selos diferentes. */}
+              <span className="verso-marca">
+                <b>ODEON</b>
+                <i>{vhs ? "HI-FI · VIDEO CASSETE" : "HOME VIDEO"}</i>
+              </span>
               {caixa.serie ? (
                 <button className="cartaz-play" disabled={!comigo} onClick={abrir}>
                   {comigo ? "▸ ver a série" : "▸ pegue emprestado"}

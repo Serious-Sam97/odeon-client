@@ -58,17 +58,18 @@ import dev.odeon.android.ui.Tipo
 ///
 /// O limite sozinho **não** segura o balcão em pé: ele é contexto de quem já
 /// está olhando, não notícia.
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun Balcao(prateleira: Prateleira, recado: String?) {
-    /// Quem aparece: quem tem fita **ou** quem tem fama.
+    /// ## ⚠️ Os chips de pessoa e o limite saíram daqui — 07/08/2026
     ///
-    /// A segunda metade é o que faz a reputação existir. O comentário da web é
-    /// a regra: «a fama tem que sobreviver à devolução, senão ninguém carrega
-    /// nada» — se o número sumisse junto com a fita, devolver zoado seria de
-    /// graça.
-    val gente = prateleira.pessoas.filter { it.temOQueDizer }
-    if (recado == null && gente.isEmpty() && prateleira.devolvidas.isEmpty()) return
+    /// Eles moram na **nota do caixa**, no fim da rolagem — o desenho da «loja
+    /// da esquina» que o dono aprovou: quem está com o quê e quanto você ainda
+    /// pode pegar são o *resumo* da visita, e resumo se recebe na saída. As
+    /// três contagens da fama (fora, `✕`, `⟲`) continuam lá, com a mesma regra
+    /// de sempre — o placar não pode contar só o defeito.
+    ///
+    /// O balcão ficou sendo o que é notícia: o recado ao vivo e o que voltou.
+    if (recado == null && prateleira.devolvidas.isEmpty()) return
 
     /// O corte por **data**, e não por contagem — ver `ehDeHoje`.
     val deHoje = prateleira.devolvidas.filter { ehDeHoje(it.devolvidoEm) }
@@ -79,54 +80,6 @@ fun Balcao(prateleira: Prateleira, recado: String?) {
     var mostrarAntes by rememberSaveable { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        /// ## Os chips e o limite dividem a linha, e é de propósito
-        ///
-        /// «você pode pegar mais 3» ocupava uma linha inteira logo abaixo dos
-        /// chips — e as duas coisas são o mesmo assunto: quem está com o quê. O
-        /// limite é a **sua** linha no placar que os chips desenham pros outros.
-        ///
-        /// O `FlowRow` faz o resto: em telas estreitas ou com muita gente na
-        /// loja, ele cai pra linha de baixo sozinho, e aí volta a ser o que era
-        /// antes — sem que ninguém tenha escrito duas versões do layout.
-        if (gente.isNotEmpty() || prateleira.devolvidas.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                gente.forEach { pessoa ->
-                    ChipDePessoa(
-                        nome = pessoa.nome,
-                        naMao = pessoa.naMao,
-                        zoadas = pessoa.zoadas,
-                        rebobinou = pessoa.rebobinou,
-                    )
-                }
-
-                /// O limite, e as duas frases dizem coisas diferentes.
-                ///
-                /// «Pegar mais 2» é permissão; «devolva uma pra pegar outra» é o
-                /// caminho de saída. A segunda existe porque um limite sem saída
-                /// é uma parede — e o §8b manda o não vir com o motivo junto.
-                ///
-                /// ⚠️ O «você» saiu da primeira frase e **ficou na segunda**. Ao
-                /// lado de chips que dizem `rudney` e `sam`, «pegar mais 3» já se
-                /// lê como sendo seu — é a linha sem nome. Mas a frase do limite
-                /// atingido é um não, e um não precisa saber com quem fala.
-                Text(
-                    text = if (prateleira.possoPegar > 0) {
-                        "pegar mais ${prateleira.possoPegar}"
-                    } else {
-                        "você está no limite — devolva uma pra pegar outra"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (prateleira.possoPegar > 0) Cores.textoApagado else Cores.destaque,
-                    /// Centrado na altura do chip: o chip tem 30dp com o rosto
-                    /// dentro, e o texto sozinho encostaria no topo da linha.
-                    modifier = Modifier.align(Alignment.CenterVertically),
-                )
-            }
-        }
-
         /// O recado ao vivo do barramento. Some sozinho em 6s — é notícia, não
         /// estado. Ver `ModeloDaLocadora.ouvirOBarramento`.
         recado?.let {
@@ -178,67 +131,6 @@ fun Balcao(prateleira: Prateleira, recado: String?) {
                     }
                 }
             }
-        }
-    }
-}
-
-/// Um chip: o rosto, o nome e as três contagens.
-///
-/// ## As três contagens, e por que as duas últimas existem juntas
-///
-/// | | |
-/// |---|---|
-/// | **`N`** | fitas na mão agora |
-/// | **`✕N`** | fitas dela que **alguém teve que rebobinar** |
-/// | **`⟲N`** | fitas dos outros que **ela** rebobinou |
-///
-/// A terceira não é enfeite de simetria: «um placar que só conta o defeito faz
-/// de todo mundo réu», diz o contrato da web. Sem o `⟲`, o balcão vira um mural
-/// de acusação.
-///
-/// **Zero some.** Nenhuma das três vira «0» — §24, e aqui ele importa mais que
-/// em qualquer outro lugar do app: um `✕0` pendurado no nome de alguém é uma
-/// acusação de nada.
-@Composable
-private fun ChipDePessoa(nome: String, naMao: Int, zoadas: Int, rebobinou: Int) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(Cores.fundoElevado)
-            .border(1.dp, Cores.linha, RoundedCornerShape(percent = 50))
-            .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        /// A marca do nome — a **mesma** da insígnia do canto e do avatar do
-        /// perfil. Sai do mesmo hash, então a pessoa tem a mesma cor no chip do
-        /// balcão e no placar do perfil, e é isso que faz um rosto de 22dp
-        /// identificar alguém.
-        MarcaDoNome(nome = nome, tamanho = 22.dp)
-
-        Text(text = nome, style = Tipo.pilula, color = Cores.texto)
-
-        /// Na mão agora. É a contagem que muda toda hora, e por isso é a única
-        /// desenhada como **pastilha cheia** — as outras duas são histórico.
-        if (naMao > 0) {
-            Text(
-                text = "$naMao",
-                style = Tipo.pilula,
-                color = Cores.fundo,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(Cores.destaque)
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-            )
-        }
-
-        /// A fama. Vermelho no que ela deve, verde no que ela pagou — e as duas
-        /// cores são as que o app já usa pra perigo e acerto, não um par novo.
-        if (zoadas > 0) {
-            Text("✕$zoadas", style = Tipo.pilula, color = Cores.perigo)
-        }
-        if (rebobinou > 0) {
-            Text("⟲$rebobinou", style = Tipo.pilula, color = Cores.certo)
         }
     }
 }

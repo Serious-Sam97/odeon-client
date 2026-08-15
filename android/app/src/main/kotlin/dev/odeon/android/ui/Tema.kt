@@ -4,122 +4,35 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import dev.odeon.android.R
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.runtime.CompositionLocalProvider
 
-/// A paleta, e ela é a mesma da web.
+/// ⚠️ **A paleta não está mais aqui.** Ela foi pro `:core` quando a TV nasceu,
+/// em `core/.../ui/Cores.kt`, e o comentário de lá explica por quê — o resumo é
+/// que uma cor não desenha, e a alternativa era o `:tv` copiar o dourado.
 ///
-/// Os valores saem letra por letra do `web/src/styles.css`. Não é preciosismo:
-/// o Odeon é um produto só visto de dois lugares, e um dourado diferente no
-/// celular faria parecer outro app do mesmo dono.
+/// O pacote é o mesmo (`dev.odeon.android.ui`), então `Cores.destaque` continua
+/// se escrevendo igual em toda tela deste módulo. Nenhum `import` mudou.
 ///
-/// | | |
-/// |---|---|
-/// | `fundo` | `--bg` |
-/// | `fundoElevado` | `--bg-raised` — o que sobe: cartões, folhas, diálogos |
-/// | `fundoAfundado` | `--bg-sunken` — o que desce: trilhos, poços, o fundo do fundo |
-/// | `linha` | `--line` |
-/// | `texto` | `--fg` |
-/// | `textoApagado` | `--fg-muted` |
-/// | `destaque` | `--accent` — o filamento aceso |
-/// | `destaqueQuente` | `--accent-hot` — o topo da luz: toque e foco |
-/// | `destaqueApagado` | `--accent-dim` — o filamento apagado: réguas, bordas |
-/// | `perigo` | `--danger` |
-/// | `certo` | `--ok` |
-object Cores {
-    val fundo = Color(0xFF0A0A0C)
-    val fundoElevado = Color(0xFF131318)
-    val fundoAfundado = Color(0xFF050507)
-    val linha = Color(0xFF23232C)
-    val texto = Color(0xFFECEEF4)
-    val textoApagado = Color(0xFF8B8D9A)
-    val destaque = Color(0xFFE0B062)
-    val destaqueQuente = Color(0xFFFFD98A)
-    val destaqueApagado = Color(0xFF8A6A3A)
-    val perigo = Color(0xFFFF6B6B)
-    val certo = Color(0xFF4ADE80)
+/// O que ficou aqui é o que **é** deste módulo: a escala tipográfica do celular
+/// e o esquema do Material 3 de toque. A TV tem os dela.
 
-    /// ## O papel, e as duas tintas que vivem sobre superfície clara
-    ///
-    /// Este app é escuro do começo ao fim, e estas três cores são a exceção —
-    /// elas existem só onde a tela desenha **um objeto de papel**: a foto de cena
-    /// pendurada no varal da ficha, e o bilhete do «continuar».
-    ///
-    /// ⚠️ **Não são «o tema claro».** Não há tema claro aqui, e nem deve haver:
-    /// a sala é escura por decisão, e clarear a interface inteira desfaria o
-    /// facho, a cortina e a lâmpada do plano de uma vez. O que estas cores dizem
-    /// é outra coisa — que naquele retângulo há papel, e papel não é preto.
-    ///
-    /// O branco é sujo de propósito (`F2ECE0`, não `FFFFFF`): foto revelada e
-    /// ingresso de bilheteria amarelam, e um branco puro no meio de uma tela
-    /// escura vira um buraco de luz em vez de um objeto.
-    val papel = Color(0xFFF2ECE0)
-    val tintaDoPapel = Color(0xFF5C5548)
-    val tintaDoBilhete = Color(0xFF241A09)
-
-    /// ⚠️ **O vermelho da cortina é matéria, não significado.**
-    ///
-    /// O app já tem um vermelho — o `perigo` —, e ele é **semântico**: quer
-    /// dizer «isto deu errado» ou «isto vence». O pano do cinema é a primeira
-    /// cor deste app que não quer dizer nada: ela é a cor de uma coisa, como a
-    /// madeira da prateleira da locadora.
-    ///
-    /// Por isso são dois nomes próprios e não um `perigo.copy(...)`: no dia em
-    /// que alguém mexer no vermelho de erro, a cortina não pode mudar de tom
-    /// junto. E no dia em que alguém procurar «que vermelho é este», o nome
-    /// responde.
-    ///
-    /// Os dois tons são a prega: o claro é onde a luz da marquise bate, o fundo
-    /// é a dobra. Pano de uma cor só lê como retângulo.
-    val cortina = Color(0xFF84252A)
-    val cortinaFunda = Color(0xFF4A1114)
-}
-
-/// A serifada de display, e por que ela viaja dentro do APK.
+/// ⚠️ **A `Serifada` também não está mais aqui.** Ela desceu pro `:core` na T0
+/// do `docs/REDESENHO-TV.md` (§3.3), em `core/.../ui/Serifada.kt`, e o
+/// comentário de lá explica por quê — o resumo é que uma família de fonte não
+/// desenha, e o `:tv` já tinha uma segunda declaração dela sobre o mesmo `.ttf`.
 ///
-/// A web declara `--font-display: ui-serif, Georgia, "Noto Serif", "Times New
-/// Roman", serif` e a usa em **53 lugares** — título de obra, título do player,
-/// o número da afinidade, o relógio do "ao vivo". O app era sem serifa em 100%
-/// da tela, e é essa a razão de as duas telas parecerem de produtos diferentes
-/// mesmo carregando a mesma paleta: na web um título é letreiro de cinema, aqui
-/// era item de lista.
+/// O pacote é o mesmo (`dev.odeon.android.ui`), então `Serifada` continua se
+/// escrevendo igual em toda tela deste módulo. Nenhum `import` mudou.
 ///
-/// ## Por que embutida, e não a serifa do sistema
-///
-/// `ui-serif` não existe no Android, e havia três caminhos:
-///
-/// | | por que não |
-/// |---|---|
-/// | `FontFamily.Serif` | existe e custa 0 KB, mas resolve pra coisa diferente em cada fabricante — e um letreiro que muda de aparelho pra aparelho torna o screenshot, que é a régua deste projeto, uma prova fraca |
-/// | Downloadable Fonts | 0 KB no APK, mas exige Play Services **e rede**. Num app cujo argumento é a fase 6, o título do filme baixado apareceria sem serifa justamente offline |
-/// | embutir | ⬅️ determinística, e funciona sem rede |
-///
-/// **Noto Serif** porque ela está nomeada na própria `--font-display` da web —
-/// ou seja, é o que boa parte dos navegadores já resolve lá — e porque a
-/// altura-de-x grande dela é o que segura título sobre arte de pôster.
-///
-/// ## O tamanho, medido e não estimado
-///
-/// O `.ttf` estático (peso 600, Latino+Grego+Cirílico, hinted) tem **739 KB** —
-/// bem acima dos ~200 KB que o `docs/REDESENHO.md` chutou. O que importa é o
-/// APK, e esse número está no README, medido antes e depois.
-///
-/// Um peso só, de propósito: cada peso adicional é outro arquivo inteiro, e a
-/// fonte variável resolveria isso em um só — mas `FontVariation` é de API 26,
-/// exatamente o `minSdk` deste app, e nascer colado no piso da versão é onde
-/// mora o defeito que só aparece no aparelho mais velho.
-///
-/// A licença (OFL) viaja em `assets/OFL-NotoSerif.txt`. Ela exige que o texto
-/// acompanhe a distribuição, e este repositório é público.
-val Serifada = FontFamily(
-    Font(R.font.noto_serif_semibold, FontWeight.SemiBold),
-)
+/// ⚠️ O `Tipo`, logo abaixo, **ficou** — e é decisão, não esquecimento. Ele e o
+/// `TipoDaSala` do `:tv` são os mesmos papéis com números que têm que divergir:
+/// 11sp de rótulo a três metros de distância não é um rótulo discreto, é um
+/// rótulo ilegível. Uma fonte é a mesma às duas distâncias; um corpo não é.
 
 /// Os papéis que o Material 3 não tem nome pra dar.
 ///
@@ -263,6 +176,25 @@ fun TemaOdeon(conteudo: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = EsquemaEscuro,
         typography = TipografiaOdeon,
-        content = conteudo,
-    )
+    ) {
+        /// ⚠️ **As peças do `:cenario` desenham texto e não têm tema.**
+        ///
+        /// Elas usam o `Texto` de lá, que não pode ler `LocalTextStyle` porque
+        /// `LocalTextStyle` é do `material3` — e o `:cenario` não depende de
+        /// nenhum dos dois Material, que é a régua que o faz compilar nos dois
+        /// lados.
+        ///
+        /// Esta linha empresta o estilo daqui pra lá. Sem ela as peças caem em
+        /// `TextStyle.Default`, e todo campo que uma chamada não escreve muda —
+        /// a lombada da caixa, que declara corpo e peso e nunca declarou
+        /// entrelinha, sai 13px fora do lugar.
+        ///
+        /// Emprestar é melhor que reconstruir: eu tentei reconstruir o
+        /// `bodyLarge` à mão e as telas discordaram entre si. Ver o comentário
+        /// do `LocalLetraDoHospedeiro`.
+        CompositionLocalProvider(
+            LocalLetraDoHospedeiro provides LocalTextStyle.current,
+            content = conteudo,
+        )
+    }
 }

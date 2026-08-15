@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  A busca do sistema, e o que este arquivo liga a quê.
+
+  Numa Google TV, segurar o botão do microfone do controle e falar "Alien" abre
+  uma busca **do sistema** — a mesma caixa que procura no YouTube e na Play
+  Store. Ela pergunta aos apps instalados, e um app que não responde
+  simplesmente não aparece no resultado.
+
+  ## As duas linhas que fazem o Odeon responder
+
+  - `searchSuggestAuthority` aponta pro `ProvedorDeBusca`, que é quem devolve as
+    obras. Sem ela o app é "buscável" e não sugere nada, que é o mesmo que nada.
+  - `searchSuggestIntentAction` diz o que fazer quando alguém escolhe uma
+    sugestão: `VIEW`, com a `Uri` que a própria sugestão carrega — o mesmo
+    `odeon-tv://obra/<id>` dos cartões da home.
+
+  ⚠️ `includeInGlobalSearch` é o que põe o Odeon na busca **de fora** do app. Sem
+  ele, este arquivo só serviria pra uma caixa de busca dentro do Odeon — que
+  numa TV é justamente a coisa que ninguém quer usar, porque digitar com D-pad é
+  soletrar.
+
+  `queryAfterZeroResults="false"`: quando "alienn" não devolve nada, o sistema
+  para de perguntar em vez de consultar o servidor de casa a cada letra a mais.
+-->
+<searchable xmlns:android="http://schemas.android.com/apk/res/android"
+    android:label="@string/nome_do_app"
+    android:hint="@string/dica_da_busca"
+    android:includeInGlobalSearch="true"
+    android:queryAfterZeroResults="false"
+    android:searchSuggestAuthority="dev.odeon.android.tv.busca"
+    android:searchSuggestIntentAction="android.intent.action.VIEW"
+    android:searchSuggestSelection=" ?" />

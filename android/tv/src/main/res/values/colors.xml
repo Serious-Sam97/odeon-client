@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  As cores que o **sistema** precisa em XML, e não o app.
+
+  Pelo mesmo motivo do `:app`: a paleta de verdade é a `Cores` do `:core`, em
+  Kotlin. Estas três são as que o Android lê antes de haver Compose — o fundo da
+  janela, o fundo do ícone, e o dourado do carretel e do banner.
+
+  Todas saem do `web/src/styles.css`, pela `Cores`. Elas são **cópia**, e é a
+  única cópia da paleta que este projeto aceita: um `<color>` de XML não tem como
+  ler um `object` de Kotlin. Mudar uma aqui sem mudar lá faz a TV abrir numa cor
+  e continuar em outra.
+
+  Nota de sintaxe herdada do `:app`: as variáveis do CSS aparecem abaixo **sem os
+  dois hifens iniciais**, porque o XML proíbe dois hifens seguidos dentro de um
+  comentário e escrevê-los faz o `mergeResources` falhar.
+-->
+<resources>
+    <!-- a variável `bg` -->
+    <color name="fundo">#0A0A0C</color>
+    <!-- a variável `accent`: o dourado do filamento -->
+    <color name="destaque">#E0B062</color>
+    <!-- a variável `bg-sunken`: o fundo do ícone e do banner, um degrau mais fundo -->
+    <color name="fundo_do_icone">#050507</color>
+</resources>

@@ -80,6 +80,21 @@ serialization = "1.11.0"
 # também aceita a instância compartilhada — é a terceira coisa a usar a mesma.
 coil = "3.5.0"
 
+# O agendador do lembrete de ao vivo.
+#
+# ⚠️ Ele entra porque a pergunta «o programa que você marcou começa em 10 minutos»
+# só pode ser respondida com o app **fechado** — e nenhuma das peças que esta casa
+# já tinha faz isso. O `AlarmManager` sozinho agendaria, mas alguém precisa
+# **descobrir** os lembretes novos: eles são marcados na TV, e o celular não fica
+# sabendo. Um trabalho periódico é a única forma de o celular perguntar.
+work = "2.10.0"
+
+# Extrai as cores vivas da capa, pra lombada da caixa 3D — decisão do dono em
+# 06/08/2026: «A opção C, pode adicionar a dependência». Medida em 06/08/2026:
+# a última é 1.1.0-alpha01, e a estável é esta — alpha por causa de duas cores
+# numa lombada seria dívida sem juros a receber.
+palette = "1.0.0"
+
 # ------------------------------------------------------------------- Media3
 #
 # Declarado aqui, **ainda não ligado** no `app/build.gradle.kts` — a fase 0 não
@@ -99,6 +114,43 @@ media3 = "1.10.1"
 
 # O SDK do Cast do Google. Ver o comentário em `play-services-cast-framework`.
 playServicesCast = "22.1.0"
+
+# ----------------------------------------------------------------------- TV
+#
+# Medidas em 12/08/2026 no Google Maven, com o mesmo comando do resto do
+# arquivo. As duas são **estáveis**, o que aqui não era garantido: a linha de TV
+# do AndroidX passou anos inteira em alpha.
+#
+# ## `tv-material` é o Material3 da sala, e não o do celular
+#
+# Ele existe porque os componentes de toque não têm o que a TV precisa: um
+# `Card` de celular não sabe o que é estar **focado**, porque no celular não há
+# foco — há dedo. O `androidx.tv` traz a mesma família de componentes com o
+# estado de foco de primeira classe, mais as escalas e bordas que respondem a
+# ele.
+#
+# ⚠️ **Não** entra o `tv-foundation`. Ele foi descontinuado: o que ele tinha de
+# útil — as listas com foco — foi absorvido pelo `compose.foundation` comum, e
+# depender dele hoje é depender de um artefato que não recebe mais correção.
+#
+# ⚠️ E ele **não convive** com o `material3` de celular na mesma tela. É por isso
+# que a espec (§4) recusou servir os dois alvos no mesmo módulo — «misturá-lo
+# com Material3 de celular no mesmo módulo é briga constante» — e é por isso que
+# o `:tv` é um módulo, e não uma pasta do `:app`.
+androidxTv = "1.1.0"
+
+# O que põe o Odeon **na home do Google TV**, e não só na gaveta de apps.
+#
+# A home da TCL é uma pilha de fileiras, e cada fileira é um canal que um app
+# publicou. Sem este artefato o Odeon é um ícone que alguém precisa procurar;
+# com ele, «continuar assistindo» aparece na primeira tela junto do resto.
+#
+# São duas coisas diferentes lá dentro, e o app usa as duas:
+#
+#   - **canal próprio** — a fileira "Odeon", que a pessoa escolhe fixar
+#   - **Watch Next** — a fileira do *sistema*, que não é de app nenhum e é onde
+#     a TV junta o que está pela metade em todo lugar
+tvprovider = "1.1.0"
 
 # ------------------------------------------------------------------- widget
 #
@@ -140,8 +192,10 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 
+androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 # O BOM alinha as versões de todo artefato do Compose entre si. Com ele, as
 # linhas de `compose-*` abaixo vão sem versão de propósito — duas versões de
@@ -149,9 +203,32 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+
+# O `ui-text` avulso — pro `:core`, e pelo mesmo motivo que o `ui-graphics` está
+# lá: `TextStyle` e `FontFamily` são **valores**, não desenho. Ele traz
+# `androidx.compose.ui.text.*` e mais nada — nenhum `Modifier`, nenhum
+# composable. Ver o comentário da dependência em `core/build.gradle.kts`.
+androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+# O `foundation` avulso — pro `:tv`, que **não** pode ter o `material3` de
+# celular (ver `tv/build.gradle.kts`) mas precisa de `LazyRow`, `Canvas` e
+# `focusable`. No `:app` ele não aparece porque o `material3` já o arrasta.
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+
+# O `animation-core` avulso — pro `:cenario`, e é o **-core** de propósito.
+#
+# Medido nas oito peças antes de escolher o artefato: as doze importações de
+# animação delas são todas `androidx.compose.animation.core.*` — `Animatable`,
+# `keyframes`, `tween`, `spring`, `exponentialDecay`. Nenhuma é do `animation`
+# cheio, que é onde moram `AnimatedVisibility` e as transições de conteúdo.
+#
+# O `foundation` acima já o arrasta transitivamente. Declarar mesmo assim é o
+# que faz a régua do `:cenario` ser legível no próprio arquivo de build em vez
+# de depender de uma dependência de segunda ordem não escrita.
+androidx-compose-animation-core = { group = "androidx.compose.animation", name = "animation-core" }
 
 # A barra de navegação que muda de forma conforme a tela.
 #
@@ -206,11 +283,17 @@ play-services-cast-framework = { group = "com.google.android.gms", name = "play-
 
 glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 
+androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "androidxTv" }
+androidx-tvprovider = { group = "androidx.tvprovider", name = "tvprovider", version.ref = "tvprovider" }
+
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+
+# O `:core` — ver `core/build.gradle.kts` pro que entra nele e o que não entra.
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 # O `kotlin` acima é 2.4.10 e **não** é palpite: é o que o AGP 9.3.1 embute,

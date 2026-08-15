@@ -23,6 +23,15 @@
   --danger: #ff6b6b;
   --ok: #4ade80;
 
+  /* Papel e a tinta que se escreve nele. São os três valores do `Cores` do app
+     (`Tema.kt`), e chegam aqui com a cenografia da locadora — mas não são dela:
+     o bilhete da ficha e o rótulo da fita já pintavam este mesmo papel à mão,
+     cada um com o seu hex. Ter o material num lugar só é o que faz a nota do
+     caixa parecer impressa na mesma gráfica que o resto da casa. */
+  --papel: #f2ece0;
+  --tinta-papel: #5c5548;
+  --tinta-bilhete: #241a09;
+
   /* Marquise: serifa de display no que é obra, sans no que é interface.
      Fonte do sistema de propósito — zero bytes, e um servidor que roda numa
      tailnet não deveria depender de CDN de fonte pra desenhar a tela. */
@@ -3506,6 +3515,51 @@ label.stacked input {
   backdrop-filter: blur(6px);
 }
 
+/* ------------------------------------------------ a escolha de versão
+
+   Quando o mesmo filme está no acervo em mais de uma versão (pt-BR e inglês
+   baixados separados, por não haver dual audio), o cartão pergunta qual antes de
+   abrir a ficha. Ver `EscolhaDeVersao` no App.tsx.
+
+   ⚠️ A linha tem duas colunas e a da direita pode não existir: `size_bytes` e
+   `height` são nulos em parte do acervo, e aí o `justify-content` fecha o vão em
+   vez de deixar um buraco onde deveria haver dado. */
+
+.versoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+
+.versao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.versao:hover,
+.versao:focus-visible {
+  border-color: var(--accent);
+  background: rgba(224, 176, 98, 0.08);
+}
+
+.versao-nome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* --------------------------------------------- o aviso de "começando" */
 
 .aviso-programa {
@@ -4096,11 +4150,19 @@ label.stacked input {
   margin-bottom: var(--s5);
 }
 
+/* A plaquinha MORDE o topo da madeira — papel preso na estante, não rótulo
+   flutuando acima dela. Os 22px de respiro do `.prateleira` existem pra isto.
+
+   E a contagem vai pro canto direito da madeira, onde o lojista penduraria o
+   inventário: ela continua sendo dita, agora sem disputar a linha com o nome. */
 .placa {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 14px;
-  margin-bottom: 2px;
+  position: relative;
+  z-index: 1;
+  margin: 0 14px -16px;
 }
 
 .placa span {
@@ -4147,14 +4209,324 @@ label.stacked input {
 
 /* A tábua encosta na base das caixas. Com folga embaixo o conjunto lê como
    imagem colada; encostada, lê como objeto apoiado. */
+/* ⚠️ A ESTANTE VIROU MÓVEL — e a tábua sozinha era o defeito.
+
+   Era um rótulo dourado flutuando sobre caixas soltas com uma faixa fina por
+   baixo: as caixas pairavam sobre o preto, o que desfaz metade do que a
+   prateleira promete. No desenho aprovado (e é o que o app já faz) a estante é
+   um **móvel**: fundo de madeira com veio, a tábua grossa que pega luz, e o
+   friso escuro na base.
+
+   O veio são riscos verticais quase invisíveis, por repetição e não por imagem
+   — o mesmo truque da fibra da corda do varal. Zero bytes. */
+.prateleira {
+  border-radius: 4px 4px 0 0;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.07) 0 2px,
+      transparent 2px 14px
+    ),
+    linear-gradient(#6b4e32, #5a4028 55%, #44311e);
+  padding-top: 22px;
+}
+
+/* A tábua grossa: o tampo que pega luz e a testa na sombra. */
 .tabua {
   height: 14px;
-  border-radius: 0 0 3px 3px;
   margin-top: -1px;
-  background: linear-gradient(#3d3025, #241c14 38%, #0e0b08);
-  box-shadow:
-    0 -1px 0 #59462f inset,
-    0 20px 34px -20px #000;
+  background: linear-gradient(#7a5a38, #4a3520);
+  box-shadow: 0 20px 34px -20px #000;
+  /* Ela carrega a etiqueta de preço, então deixa de ser só uma faixa: é a
+     madeira onde se adesiva coisa. */
+  position: relative;
+}
+
+/* O friso da base — a sombra sob o tampo, que é o que dá espessura ao móvel. */
+.tabua::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 6px;
+  background: #2e2114;
+  border-radius: 0 0 4px 4px;
+}
+
+/* ------------------------------------------ a cenografia: «a loja da esquina, 21h»
+
+   Quatro peças que vieram do app (`Cenografia.kt`), onde o dono escolheu este
+   conceito entre vinte: as prateleiras ficam, e o resto da tela vira matéria —
+   madeira, papel, luz. Nenhuma delas inventa material novo: o papel é o
+   `--papel` do bilhete, a luz é o `--accent-hot` da marquise. É o que faz a
+   locadora parecer do mesmo prédio que o cinema. */
+
+/* A ARANDELA. A luz da casa chegando ao topo da loja: o título embaixo dela não
+   tem brilho próprio — quem brilha é a lâmpada, e o texto está NA luz. */
+/* ⚠️ A largura é a do letreiro que ela ilumina, e não a da página.
+
+   A primeira versão deixou a arandela ocupar a linha inteira com as peças em
+   `left: 50%` — e a foto mostrou a lâmpada acesa no meio do nada, com o título
+   «Locadora» no escuro, à esquerda. Uma arandela que ilumina o vazio ao lado do
+   que ela deveria acender não é cenografia, é um enfeite solto.
+
+   Com a caixa do tamanho do título, o `left: 50%` das peças passa a ser o
+   centro DELE. A luz acende o que tem que acender, e continua sendo uma conta
+   só — sem número mágico de deslocamento. */
+.arandela {
+  position: relative;
+  width: 260px;
+  height: 46px;
+  margin-bottom: -6px;
+  pointer-events: none;
+}
+
+/* ⚠️ O facho é um CÍRCULO, e não um retângulo com gradiente radial. O app
+   tentou retângulo e a foto mostrou uma tarja: o gradiente morre na borda da
+   caixa e sobram duas arestas retas atravessando o topo. Num elemento redondo
+   com `closest-side`, o que não é luz não é pintado. */
+.arandela-facho {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 340px;
+  height: 340px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--accent-hot) 28%, transparent),
+    color-mix(in oklab, var(--accent-hot) 7%, transparent) 55%,
+    transparent
+  );
+}
+
+/* A meia-cúpula de latão, boca pra baixo. */
+.arandela-cupula {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 112px;
+  height: 26px;
+  transform: translateX(-50%);
+  border-radius: 56px 56px 0 0;
+  background: linear-gradient(#8a6a3a, #5a4326);
+}
+
+/* O fio de luz na boca da cúpula — é ele que diz «acesa». */
+.arandela-filamento {
+  position: absolute;
+  left: 50%;
+  top: 29px;
+  width: 104px;
+  height: 2.5px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--accent-hot) 85%, transparent);
+  box-shadow: 0 0 12px var(--accent-hot);
+}
+
+/* AS ETIQUETAS PENDURADAS: as duas contagens da porta, em papel por barbante. */
+.porta-etiquetas {
+  display: flex;
+  gap: var(--s5);
+  margin: 2px 0 10px;
+}
+
+.etiqueta-pendurada {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.etiqueta-barbante {
+  width: 1.5px;
+  height: 16px;
+  background: color-mix(in oklab, #cdb98a 70%, transparent);
+}
+
+/* ⚠️ O torto vem do JSX, fixo por etiqueta. Sorteado a cada render, a etiqueta
+   tremeria pendurada — a mesma regra do varal da ficha. */
+.etiqueta-papel {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 2px;
+  background: var(--papel);
+  transform: rotate(var(--angulo, 0deg));
+}
+
+/* O ilhós: o furinho de metal onde o barbante passa. */
+.etiqueta-papel::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  border: 1.5px solid var(--papel);
+  background: #3a2c18;
+}
+
+.etiqueta-papel b {
+  font: 700 19px/1 var(--font-display);
+  color: var(--tinta-bilhete);
+}
+
+.etiqueta-papel i {
+  font: 700 13px/1 cursive;
+  font-style: normal;
+  color: var(--tinta-papel);
+}
+
+/* A PLAQUINHA da estante: o gênero escrito à mão e preso com fita crepe.
+
+   `.placa .plaquinha` e não `.plaquinha`: o `.placa span` que veste o esqueleto
+   da estante vazia tem specificity maior que uma classe sozinha, e venceria a
+   fonte daqui. */
+.placa .plaquinha {
+  position: relative;
+  padding: 5px 14px;
+  border-radius: 1px;
+  font: 700 20px/1.1 cursive;
+  letter-spacing: normal;
+  color: #3a2f1a;
+  background: var(--papelaria);
+  /* Nem texto luminoso nem sombra de néon: é papel na madeira. */
+  text-shadow: none;
+  transform: rotate(-2deg);
+}
+
+.placa .plaquinha::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 38%;
+  width: 24%;
+  height: 10px;
+  background: color-mix(in oklab, #ebe4cd 55%, transparent);
+}
+
+/* A ETIQUETA DE PREÇO na tábua — o `7 DIAS` colorido das locadoras.
+
+   O número é o prazo real da casa; a cor cicla por estante, e é tinta, não
+   dado — amarrá-la ao gênero criaria um código de cores que ninguém combinou. */
+/* À ESQUERDA, como no app: é onde o lojista cola o preço da fileira, junto da
+   plaquinha que nomeia a estante. À direita ela ficava sozinha no fim de uma
+   madeira de 1.100px, longe de tudo que ela qualifica. */
+.etiqueta-prazo {
+  position: absolute;
+  left: 14px;
+  top: -7px;
+  padding: 1px 5px;
+  font: 700 8.5px/1.6 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  color: #241c08;
+  background: var(--tinta-preco);
+  box-shadow: 0 2px 5px -2px #000;
+}
+
+/* A NOTA DO CAIXA: o saldo impresso, no fim da rolagem. */
+/* ⚠️ Alinhada à esquerda, e não centrada.
+
+   No app ela é centrada porque o celular é uma coluna só e o centro é o único
+   lugar que existe. No monitor a loja inteira alinha à esquerda — porta,
+   plaquinhas, estantes — e uma notinha de 300px no meio da largura ficou
+   boiando, como papel que caiu de outra tela. Na borda das estantes ela lê como
+   o que é: o papel que o caixa deixou no balcão por onde você saiu. */
+.nota-do-caixa {
+  display: flex;
+  justify-content: flex-start;
+  padding: var(--s6) 0 var(--s7);
+}
+
+.nota-papel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 300px;
+  padding: 16px 18px 22px;
+  background: var(--papel);
+  color: var(--tinta-papel);
+  font: 700 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* A leve inclinação de papel largado no balcão. Fixa, como todo torto daqui. */
+  transform: rotate(-0.6deg);
+  box-shadow: 0 18px 30px -22px #000;
+}
+
+/* A SERRILHA: os dentes são recortes do FUNDO e não círculos pintados por
+   cima — pintados, ficariam da cor errada no dia em que o fundo mudar. */
+.nota-papel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 10px;
+  background: radial-gradient(circle at 5px 0, transparent 5px, var(--papel) 5px);
+  background-size: 16px 10px;
+  background-repeat: repeat-x;
+}
+
+.nota-marca {
+  align-self: center;
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  color: var(--tinta-papel);
+}
+
+.nota-sub {
+  align-self: center;
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.nota-tracejado {
+  height: 1.5px;
+  background-image: linear-gradient(90deg, #b8ac8a 60%, transparent 0);
+  background-size: 10px 1.5px;
+  background-repeat: repeat-x;
+}
+
+.nota-linha {
+  display: flex;
+  gap: var(--s3);
+}
+
+.nota-linha > span:first-child {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nota-saida {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+/* O carimbo, torto como todo carimbo. É o único enfeite da nota, e é enfeite
+   honesto: não se parece com dado nenhum. */
+.nota-carimbo {
+  align-self: flex-end;
+  margin: 8px 4px 0 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklab, #b22c2c 80%, transparent);
+  border: 2.5px solid color-mix(in oklab, #b22c2c 75%, transparent);
+  border-radius: 5px;
+  transform: rotate(-8deg);
 }
 
 /* ---------------------------------------- R41: a loja abrindo
@@ -4319,11 +4691,51 @@ label.stacked input {
   height: 100%;
   transform-origin: right center;
   transform: translateZ(calc(var(--d) / 2)) rotateY(-90deg);
-  display: flex;
-  flex-direction: column;
+  /* ⚠️ GRADE, e não `space-between`.
+
+     Com `space-between` as três peças se espalhavam pelo espaço que sobrava, e
+     nenhuma caía onde a impressão manda: o título flutuava, a miniatura parava
+     em cima do fio e o ano encostava na base. A lombada tem DOIS blocos de
+     tinta, e cada peça pertence a um deles:
+
+     | 0 → 57,5% | a tinta viva, e o TÍTULO centrado nela |
+     | 57,5%     | o fio dourado |
+     | 57,5% → 100% | a tinta escura, com a MINIATURA e depois o ANO · FORMATO |
+
+     As linhas da grade são as mesmas frações do fundo, então a divisa de cor e
+     a divisa de conteúdo são a mesma linha — que é o que faz a lombada ler como
+     impressa e não como três coisas empilhadas. */
+  display: grid;
+  grid-template-rows: 57.5% auto 1fr;
+  justify-items: center;
   align-items: center;
-  justify-content: space-between;
-  padding: 9px 0;
+  /* ⚠️ **Sem `gap` e sem `padding` vertical.** Eles somavam 8% + 12px às
+     linhas da grade, e aí a divisa do CONTEÚDO caía abaixo da divisa da TINTA:
+     o título terminava dentro do bloco escuro e a miniatura nascia longe do
+     fio, com um vão preto no meio da lombada. As duas divisas têm que ser a
+     mesma linha — é isso que faz a lombada ler como impressa. O respiro das
+     peças vem da margem de cada uma, que não mexe na grade. */
+  padding: 0;
+  gap: 0;
+}
+
+/* Cada peça no seu bloco, explicitamente. Sem isto, quando a miniatura some na
+   lombada fina da estante o `ano · DVD` sobe pra linha dela e cruza o fio. */
+.lomb-titulo {
+  grid-row: 1;
+}
+
+/* A miniatura encosta no fio dourado: no impresso ela é a primeira coisa do
+   bloco escuro, não uma peça flutuando no meio dele. */
+.lomb-miniatura {
+  grid-row: 2;
+  margin-top: 6%;
+}
+
+.lomb-selo {
+  grid-row: 3;
+  align-self: start;
+  margin-top: 8%;
 }
 
 .lomb-titulo {
@@ -4339,6 +4751,75 @@ label.stacked input {
 .lomb-selo {
   font: 800 5px/1 system-ui, sans-serif;
   letter-spacing: 0.14em;
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+}
+
+/* A MINIATURA DA CAPA na lombada — selo impresso, emoldurado no fio dourado.
+
+   ⚠️ Só na caixa grande. Numa lombada de keep case na estante (11px) uma
+   moldura de 8px seria um cisco, e é por isso que o app também a esconde na
+   vitrine: `larga = largura >= 16dp`.
+
+   A moldura dourada é o que amarra a lombada às cenas emolduradas do verso — e
+   a foto dentro dela ocupa 86% da largura da lombada, que é limite FÍSICO: é o
+   que 14mm de plástico comportam. */
+/* O SELO DO FORMATO no pé da capa, como toda caixa impressa tem. Escala com a
+   face — a mesma capa mora na estante (~100px) e no palco (~600px), e um selo
+   de tamanho fixo estaria errado num dos dois. */
+/* A MARCA DO FORMATO no pé da capa — desenhada, não escrita.
+
+   A largura sai de `--h` porque a mesma capa mora na estante (~144px de altura)
+   e no palco (~900px): uma marca de tamanho fixo estaria errada num dos dois. O
+   filtro é a sombra que separa o branco da marca de uma capa clara — sem ele,
+   em pôster estourado a logo some. */
+.selo-formato {
+  position: absolute;
+  right: 5%;
+  bottom: 3%;
+  width: calc(var(--h) / 7);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
+}
+
+.selo-formato svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.selo-marca {
+  font: 800 21px/1 var(--font-display);
+  letter-spacing: 0.02em;
+  fill: #0a0a0c;
+}
+
+.selo-tipo {
+  font: 700 9px/1 system-ui, sans-serif;
+  letter-spacing: 0.24em;
+  fill: #fff;
+}
+
+.lomb-miniatura {
+  display: none;
+}
+
+.caixa.grande .lomb-miniatura {
+  display: block;
+  /* 86% da largura da lombada — limite **físico**, não de desenho: é o que
+     14mm de plástico comportam. A moldura dourada fica; o que cresce é a foto
+     dentro dela. */
+  width: 86%;
+  aspect-ratio: 1 / 1.45;
+  border: 1px solid color-mix(in oklab, var(--accent) 85%, transparent);
+  padding: 1.5px;
+  overflow: hidden;
+}
+
+.caixa.grande .lomb-miniatura img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .topo,
@@ -4417,13 +4898,36 @@ label.stacked input {
     inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
+/* A lombada de duas tintas — a «opção C», a de gráfica de estúdio.
+
+   Era um degradê horizontal da cor dominante: um cilindro de plástico tingido,
+   que é o que a caixa É, mas não o que ela mostra na estante. Numa locadora a
+   lombada é IMPRESSA — um bloco de cor em cima, outro mais escuro embaixo, e o
+   fio da casa separando os dois.
+
+   As duas tintas saem da capa (`tintas.ts`), não da `dominant_color`: uma cor
+   só não faz uma impressão de duas. O `var(…, …)` guarda o caso de a extração
+   não acontecer — sem CORS na `/artwork`, sem paleta —, e aí a lombada volta a
+   ser o papelão tingido de antes em vez de ficar sem fundo nenhum.
+
+   O corte em 52% e não em 50%: metade exata lê como erro de alinhamento, e a
+   metade de baixo mais gorda é o que a gráfica faz pra o título respirar. */
 .dvd .lombada {
   border-radius: 3px 0 0 3px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--cor) 42%, #000),
-    color-mix(in oklab, var(--cor) 72%, #000)
-  );
+  background-image:
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(
+      180deg,
+      var(--tinta-cima, color-mix(in oklab, var(--cor) 55%, #000)) 0 57.5%,
+      var(--tinta-baixo, color-mix(in oklab, var(--cor) 22%, #000)) 57.5% 100%
+    );
+  background-size:
+    100% 1.5px,
+    100% 100%;
+  background-position:
+    0 57.5%,
+    0 0;
+  background-repeat: no-repeat;
 }
 
 .dvd .lomb-titulo,
@@ -4607,12 +5111,18 @@ label.stacked input {
 
 
 
+/* ⚠️ 0,40 da espessura, e era 0,30.
+
+   O texto é deitado, então a largura da lombada não limita o comprimento dele:
+   limita a **altura**. É a proporção da caixa impressa de verdade — numa
+   lombada de DVD (14mm) o título tem ~6mm. O app passou pela mesma correção,
+   com a queixa registrada: «o texto da lateral tá pequeno, foto também». */
 .caixa.grande .lomb-titulo {
-  font-size: calc(var(--d) * 0.3);
+  font-size: calc(var(--d) * 0.4);
 }
 
 .caixa.grande .lomb-selo {
-  font-size: calc(var(--d) * 0.19);
+  font-size: calc(var(--d) * 0.23);
 }
 
 /* A contracapa fica no plano de trás, virada — quando a caixa gira 180° ela
@@ -4694,6 +5204,157 @@ label.stacked input {
   gap: 0.9em;
 }
 
+/* O PAPEL DE FUNDO do verso: a arte da obra por trás do texto, com o véu.
+
+   ⚠️ O `0.5` foi calibrado no app em duas rodadas — 0,10 leu como "quase
+   preto", 0,34 ainda pouco. Somado ao véu abaixo, o que chega na tela é bem
+   menos que meio. Não baixar sem olhar uma foto. */
+.verso-papel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.verso-papel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5;
+}
+
+.verso-papel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    color-mix(in oklab, var(--bg-sunken) 8%, transparent),
+    color-mix(in oklab, var(--bg-sunken) 32%, transparent)
+  );
+}
+
+/* Tudo o que é texto sobe acima do papel. Sem isto o fundo cobriria o verso. */
+.contracapa > *:not(.verso-papel) {
+  position: relative;
+  z-index: 1;
+}
+
+/* O CORPO DO VERSO: texto à esquerda, cena emoldurada à direita.
+
+   É a diagramação do encarte impresso — e a da foto do app. Empilhados, a cena
+   empurrava as abas pra fora da caixa em sinopse comprida; lado a lado, o texto
+   corre na coluna larga e a cena senta na altura da primeira linha.
+
+   `align-items: start` pra a cena não esticar junto com o parágrafo: ela é uma
+   foto colada, não uma coluna. */
+.verso-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34%;
+  align-items: start;
+  gap: 0.9em;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Sem cena, o texto toma a largura inteira — uma coluna vazia à direita seria
+   um buraco que a diagramação não pediu. */
+.verso-corpo:not(:has(.verso-cena)) {
+  grid-template-columns: 1fr;
+}
+
+/* A moldura é a MESMA da miniatura da lombada: é ela que amarra as duas faces
+   como impressão da mesma gráfica. */
+.verso-cena {
+  display: block;
+  border: 1px solid color-mix(in oklab, var(--accent) 85%, transparent);
+  padding: 1.5px;
+}
+
+.verso-cena img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+/* AS ABAS COLORIDAS — a fileira do encarte. Rótulo em tinta chapada, valor em
+   monoespaçada sobre um véu claro: é como a caixa impressa separa o que é
+   etiqueta do que é medida. */
+.verso-specs {
+  display: grid;
+  gap: 0.25em;
+}
+
+.verso-specs > b {
+  font: 700 0.55em/1 system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  color: var(--accent-dim);
+}
+
+.specs-abas {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.3em;
+}
+
+.spec-aba {
+  display: grid;
+  border-radius: 2px;
+  overflow: hidden;
+  text-align: center;
+}
+
+.spec-aba b {
+  padding: 0.18em 0;
+  font: 700 0.58em/1.3 system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  color: #1c1708;
+  background: var(--aba);
+}
+
+.spec-aba i {
+  padding: 0.18em 0.2em;
+  font: 400 0.72em/1.3 ui-monospace, "SF Mono", monospace;
+  font-style: normal;
+  color: color-mix(in oklab, var(--fg) 90%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A advertência, em letra de bula — e MONOESPAÇADA, como no app: é o tipo em
+   que se imprime miudinho legal no verso de uma caixa. */
+.verso-advertencia {
+  margin: 0;
+  font: 400 0.5em/1.5 ui-monospace, "SF Mono", monospace;
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--fg-muted) 85%, transparent);
+}
+
+/* A marca da casa no pé do verso, como toda distribuidora estampava. */
+.verso-marca {
+  display: grid;
+  justify-items: center;
+  gap: 0.1em;
+}
+
+.verso-marca b {
+  font: 400 0.85em/1 var(--font-display);
+  letter-spacing: 0.3em;
+  color: color-mix(in oklab, var(--fg) 75%, transparent);
+}
+
+.verso-marca i {
+  font: 700 0.44em/1 system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.2em;
+  color: var(--fg-muted);
+}
+
 .verso-ficha {
   display: flex;
   flex-wrap: wrap;
@@ -4713,10 +5374,15 @@ label.stacked input {
   color: var(--accent-dim);
 }
 
+/* O RODAPÉ EM TRÊS COLUNAS: código de barras · marca da casa · botão.
+
+   A do meio é `1fr` e as das pontas cedem ao conteúdo, então a marca fica
+   **centrada na caixa** e não no espaço que sobra — que é onde ela está no
+   impresso, e na foto do app. */
 .verso-acao {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
   gap: var(--s3);
 }
 

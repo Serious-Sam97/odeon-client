@@ -7,13 +7,17 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,15 +37,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -51,6 +63,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,13 +77,16 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import dev.odeon.android.dados.CaixaExposta
 import dev.odeon.android.dados.EstanteExposta
+import dev.odeon.android.ui.Serifada
 import dev.odeon.android.ui.Tipo
 import dev.odeon.android.ui.corDeHex
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.RotuloDeSecao
 import dev.odeon.android.ui.chega
+import dev.odeon.android.ui.inclinacao
 import dev.odeon.android.ui.prazoDoEmprestimo
 import dev.odeon.android.ui.viraQuando
+import kotlin.math.sin
 
 /// A locadora.
 ///
@@ -149,20 +167,90 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("locadora", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
+        /// ## A entrada da loja — a arandela acesa e o título na luz dela
+        ///
+        /// «A loja da esquina, 21h», o desenho que o dono aprovou em 06/08: o
+        /// topo deixou de ser um cabeçalho de app e virou a parede da entrada.
+        /// A arandela é quem ilumina; o título não tem brilho próprio — o halo
+        /// dele é o facho da lâmpada, e por isso os dois andam juntos.
+        Box(Modifier.fillMaxWidth()) {
+            Arandela(Modifier.align(Alignment.TopCenter))
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 30.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "locadora",
+                    style = TextStyle(
+                        fontFamily = Serifada,
+                        fontSize = 34.sp,
+                        letterSpacing = 0.04.em,
+                        color = Color(0xFFE8CF9A),
+                        shadow = Shadow(
+                            color = Cores.destaque.copy(alpha = 0.45f),
+                            blurRadius = 26f,
+                        ),
+                    ),
+                )
+                /// O subtítulo do mock dizia «aberta até meia-noite» — e saiu:
+                /// a loja não fecha de verdade, e horário inventado é mentira
+                /// com cara de metadado (§18). «Acervo da casa» é o que ela é.
+                Text(
+                    text = "ACERVO DA CASA",
+                    style = Tipo.rotulo.copy(fontSize = 10.sp, letterSpacing = 0.3.em),
+                    color = Cores.destaqueApagado,
+                )
+            }
+        }
 
-        /// **A porta da loja** — as três contagens, e as três são coisas
-        /// diferentes.
+        /// **A porta da loja** — as contagens, agora em etiquetas de papel
+        /// penduradas por barbante, como o mock aprovado.
         ///
         /// Só nasce com a vitrine na mão: sem ela, «nada com capa por aqui»
         /// seria o app afirmando sobre um acervo que ele não conseguiu ler. Erro
-        /// de rede não é resposta vazia (§18).
+        /// de rede não é resposta vazia (§18). E o «de N no acervo» que morava
+        /// aqui desceu pra **nota do caixa**, no fim da rolagem — o topo ficou
+        /// com o que muda, o resumo foi pro recibo.
+        ///
+        /// ⚠️ A frase inteira continua indo à semântica — o desenho quebrou as
+        /// contagens em dois papeizinhos, mas quem lê por leitor de tela recebe
+        /// a gramática da [portaDaLoja], a mesma que os testes guardam.
         estado.loja?.let { loja ->
-            PortaDaLoja(
-                naPrateleira = estado.naPrateleira,
-                sorteadas = estado.sorteadas,
-                noAcervo = loja.noAcervo,
-            )
+            val frase = portaDaLoja(estado.naPrateleira, estado.sorteadas, loja.noAcervo)
+            if (estado.naPrateleira == 0) {
+                Text(
+                    text = frase,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Cores.textoApagado,
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clearAndSetSemantics { contentDescription = frase },
+                    horizontalArrangement = Arrangement.spacedBy(
+                        22.dp,
+                        Alignment.CenterHorizontally,
+                    ),
+                ) {
+                    EtiquetaPendurada(
+                        numero = "${estado.naPrateleira}",
+                        /// O buraco continua andando junto do número de que ele
+                        /// é buraco — a régua da porta antiga não mudou.
+                        rotulo = buildString {
+                            append("na prateleira")
+                            val fora = estado.sorteadas - estado.naPrateleira
+                            if (fora > 0) append(" · $fora fora")
+                        },
+                        angulo = -3f,
+                    )
+                    EtiquetaPendurada(
+                        numero = "${estado.sorteadas}",
+                        rotulo = "nesta semana",
+                        angulo = 2f,
+                    )
+                }
+            }
         }
 
         estado.erro?.let {
@@ -207,7 +295,10 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
         /// escassez, a informação «ninguém te barra» é justamente a que não muda
         /// nada no que você pode fazer.
 
+        /// O mesmo `key` das estantes, pelo mesmo motivo: as seções não podem
+        /// renascer só porque o vizinho de cima mudou de tamanho.
         if (estado.minhas.isNotEmpty()) {
+            key("comigo") {
             Secao("comigo", quantos = estado.minhas.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     itemsIndexed(estado.minhas, key = { _, f -> f.id }) { i, fita ->
@@ -221,13 +312,16 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
                             aoDevolver = { modelo.devolver(fita.id) },
                             devolvendo = estado.devolvendo == fita.id,
                             ehVhs = estado.ehVhs(fita.ano),
+                            aoAbrir = { modelo.pegarNaMao(fita) },
                         )
                     }
                 }
             }
+            }
         }
 
         if (estado.dosOutros.isNotEmpty()) {
+            key("dos-outros") {
             Secao("na mão de alguém", quantos = estado.dosOutros.size) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     itemsIndexed(estado.dosOutros, key = { _, f -> f.id }) { i, fita ->
@@ -243,6 +337,7 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
                         )
                     }
                 }
+            }
             }
         }
 
@@ -287,16 +382,50 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
         ///
         /// ⚠️ **São as `expostas`, e não `loja.estantes`.** A caixa que alguém
         /// levou sai da fileira e o vão fica aberto — ver `EstadoDaLocadora`.
-        estado.expostas.forEach { estante ->
+        /// ## A vitrine segue a mão — a `Inclinacao` chega à locadora
+        ///
+        /// Na estante o dedo não gira caixa (o arrasto é da fileira, e a decisão
+        /// está na `CaixaNaEstante`). Mas o aparelho **inclina**, e é o mesmo
+        /// sensor que a ficha já usa na paralaxe do pôster: a vitrine inteira
+        /// muda de pose alguns graus, junta — como uma prateleira de verdade
+        /// quando a cabeça se move. É volume sem disputar gesto nenhum.
+        ///
+        /// Lida **uma vez** pra tela inteira, e não por estante: cada chamada de
+        /// `inclinacao()` registra um listener de acelerômetro, e cinco estantes
+        /// com cinco listeners é o mesmo sensor pago cinco vezes. Com animação
+        /// desligada no sistema o listener nem liga — a régua mora lá.
+        val tilt by inclinacao()
+        val poseDaVitrine = Pose(
+            giroY = Pose.POSE_DE_REPOUSO_Y + tilt.x * 6f,
+            giroX = Pose.POSE_DE_REPOUSO_X + tilt.y * 4f,
+        )
+
+        estado.expostas.forEachIndexed { indice, estante ->
             /// ⚠️ Tocar numa caixa **não abre mais a ficha**: põe a caixa na
             /// mão. É a locadora da web (§6) — a ficha é o caminho da
             /// biblioteca, e aqui o caminho é o objeto. Quem quiser a ficha
             /// abre a caixa e toca na mídia.
-            Estante(
-                estante = estante,
-                arte = modelo::arte,
-                aoAbrir = { id -> estante.caixas.firstOrNull { it.id == id }?.let(modelo::pegarNaMao) },
-            )
+            ///
+            /// ## ⚠️ O `key(nome)` é o que impede a loja de «dar reload»
+            ///
+            /// O dono viu as caixas **pularem** ao voltar do palco: a estante
+            /// nua por um quadro, e as caixas caindo de novo. A causa é
+            /// composição posicional — quando o recado do barramento nasce ou o
+            /// balcão some, tudo abaixo desliza de posição na `Column`, o
+            /// Compose descarta e recria as estantes, e o `chega` reanima do
+            /// zero como se a tela tivesse recarregado. Com a chave, a estante
+            /// «terror» continua sendo ela mesma em qualquer posição.
+            key(estante.nome) {
+                Estante(
+                    estante = estante,
+                    arte = modelo::arte,
+                    ehVhs = estado::ehVhs,
+                    pose = poseDaVitrine,
+                    prazoEmDias = estado.prateleira?.opcoes?.prazoEmDias ?: 0,
+                    indice = indice,
+                    aoAbrir = { id -> estante.caixas.firstOrNull { it.id == id }?.let(modelo::pegarNaMao) },
+                )
+            }
         }
 
         /// Quando a vitrine vira.
@@ -318,6 +447,23 @@ private fun Loja(modelo: ModeloDaLocadora, estado: EstadoDaLocadora) {
                 style = MaterialTheme.typography.labelSmall,
                 color = Cores.textoApagado,
                 modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        /// ## A nota do caixa — o fim da visita
+        ///
+        /// Quem rolou a loja inteira sai pelo caixa, e o caixa imprime o resumo:
+        /// acervo, prazo, as pessoas com as três contagens, seu limite. É o
+        /// dado que morava no topo (o «de N no acervo») e nos chips do balcão,
+        /// reordenado como uma visita de verdade termina. Ver o porquê inteiro
+        /// na [NotaDoCaixa].
+        estado.prateleira?.let { prateleira ->
+            NotaDoCaixa(
+                prateleira = prateleira,
+                noAcervo = estado.loja?.noAcervo ?: 0,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 20.dp, bottom = 8.dp),
             )
         }
     }
@@ -397,6 +543,7 @@ private fun PalcoPorCima(
         arte = modelo.arte(naMao.poster),
         fita = estado.fita,
         obra = estado.obraNaMao,
+        ehVhs = estado.ehVhs(naMao.ano),
         arteDe = modelo::arte,
         rebobinando = estado.rebobinando,
         aoFechar = modelo::guardar,
@@ -435,6 +582,19 @@ private fun PalcoPorCima(
             }
         },
         aoRebobinar = modelo::rebobinar,
+        /// Os corpos do **celular**. Ver [LetraDoPalco]: eles não têm padrão de
+        /// propósito, pra que o `:tv` seja obrigado a escolher os dele em vez de
+        /// herdar 16sp e ninguém reparar.
+        ///
+        /// São os mesmos quatro slots que estavam escritos dentro do `Palco`
+        /// antes de ele mudar de módulo — nenhum corpo mudou de tamanho aqui.
+        letra = LetraDoPalco(
+            titulo = MaterialTheme.typography.titleMedium,
+            dica = Tipo.pilula,
+            ponteiro = MaterialTheme.typography.headlineSmall,
+            aviso = MaterialTheme.typography.bodyMedium,
+            botao = MaterialTheme.typography.labelLarge,
+        ),
     )
 }
 
@@ -442,47 +602,119 @@ private fun PalcoPorCima(
 private fun Estante(
     estante: EstanteExposta,
     arte: (String?) -> String?,
+    /// O corte fita × disco, vindo do estado — é o `ultimo_ano_vhs` do servidor,
+    /// e é ele que decide o **formato da caixa** em cada vão da prateleira.
+    ehVhs: (Int?) -> Boolean,
+    /// A pose da vitrine — repouso somado à inclinação do aparelho, lida uma vez
+    /// pela tela e compartilhada por todas as estantes.
+    pose: Pose,
+    /// O prazo real da casa (`opcoes.prazo_dias`), pra etiqueta colorida da
+    /// tábua. Zero — servidor sem a regra — não vira etiqueta (§24).
+    prazoEmDias: Int,
+    /// Qual estante desta é na loja — decide a cor do papel da plaquinha e da
+    /// etiqueta, que ciclam numa paleta fixa.
+    indice: Int,
     aoAbrir: (String) -> Unit,
 ) {
     if (estante.caixas.isEmpty()) return
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = estante.nome,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 24.sp,
-                    letterSpacing = 0.05.em,
-                    shadow = Shadow(
-                        color = Cores.destaque.copy(alpha = 0.42f),
-                        blurRadius = 24f,
+    /// ## A estante virou móvel — «A loja da esquina, 21h»
+    ///
+    /// Era um rótulo dourado flutuando sobre caixas soltas com uma tábua de 6dp
+    /// por baixo. No desenho aprovado ela é um **móvel de madeira**: o fundo com
+    /// veio, a plaquinha de papel escrita à mão presa com fita crepe, a tábua
+    /// grossa com a etiqueta de prazo. O nome em neon dourado saiu — numa loja
+    /// de verdade quem nomeia a estante é um papel, não um letreiro por seção.
+    Box(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                /// O respiro pro papel da plaquinha morder o topo da madeira.
+                .padding(top = 14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF6B4E32), Color(0xFF5A4028), Color(0xFF44311E)),
                     ),
-                ),
-                color = Cores.destaque,
-            )
-            Text(
-                text = "${estante.caixas.size} de ${estante.total}",
-                style = Tipo.rotulo.copy(letterSpacing = 0.14.em),
-                color = Cores.destaqueApagado,
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-        }
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            itemsIndexed(estante.caixas, key = { _, c -> c.id }) { i, caixa ->
-                CaixaNaEstante(
-                    caixa = caixa,
-                    arte = arte(caixa.poster),
-                    indice = i,
-                    aoAbrir = { aoAbrir(caixa.id) },
                 )
+                .drawBehind {
+                    /// O veio da madeira: riscos verticais quase invisíveis. É o
+                    /// mesmo truque da fibra da corda — textura por repetição,
+                    /// não por imagem.
+                    var x = 8.dp.toPx()
+                    while (x < size.width) {
+                        drawLine(
+                            color = Color.Black.copy(alpha = 0.07f),
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                        x += 14.dp.toPx()
+                    }
+                },
+        ) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 22.dp),
+            ) {
+                itemsIndexed(estante.caixas, key = { _, c -> c.id }) { i, caixa ->
+                    CaixaNaEstante(
+                        caixa = caixa,
+                        arte = arte(caixa.poster),
+                        indice = i,
+                        ehVhs = ehVhs(caixa.ano),
+                        pose = pose,
+                        aoAbrir = { aoAbrir(caixa.id) },
+                    )
+                }
             }
+
+            /// A tábua grossa: o tampo que pega luz e a testa na sombra — a
+            /// `Tabua` fina de 6dp continua existindo só na estante vazia.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(14.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF7A5A38), Color(0xFF4A3520)),
+                        ),
+                    ),
+            ) {
+                if (prazoEmDias > 0) {
+                    EtiquetaDePrazo(
+                        prazoEmDias = prazoEmDias,
+                        indice = indice,
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 14.dp),
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(Color(0xFF2E2114)),
+            )
         }
 
-        Tabua()
+        PlaquinhaDaEstante(
+            nome = estante.nome,
+            indice = indice,
+            modifier = Modifier.padding(start = 14.dp),
+        )
+
+        /// A contagem continua sendo dita — agora discreta, no canto da madeira,
+        /// onde o lojista penduraria o inventário.
+        Text(
+            text = "${estante.caixas.size} de ${estante.total}",
+            style = Tipo.rotulo.copy(letterSpacing = 0.14.em),
+            color = Cores.destaqueApagado,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 22.dp, end = 12.dp),
+        )
     }
 }
 
@@ -496,6 +728,8 @@ private fun CaixaNaEstante(
     caixa: CaixaExposta,
     arte: String?,
     indice: Int,
+    ehVhs: Boolean,
+    pose: Pose,
     aoAbrir: () -> Unit,
 ) {
     /// ## Ela virou um objeto de verdade — 05/08/2026
@@ -509,206 +743,50 @@ private fun CaixaNaEstante(
     /// horizontal, e um arrasto que começasse na caixa seria roubado dela — a
     /// prateleira deixaria de rolar justamente onde há caixa, que é o lugar todo.
     /// O giro no dedo é do **palco**, onde a caixa está sozinha e o arrasto não
-    /// disputa com nada.
+    /// disputa com nada. O que a estante ganhou foi a **inclinação do aparelho**
+    /// — a `pose` que chega de fora —, que dá o movimento sem tomar o gesto.
+    ///
+    /// ## As medidas são as dos objetos, e a prateleira mistura os dois
+    ///
+    /// Era uma caixa genérica de 96×144×26 pra tudo — e uma locadora de verdade
+    /// não tem caixa genérica. Um keep case de DVD mede 135×190×14mm; um estojo
+    /// de VHS, 103×187×25mm. Na mesma altura de prateleira (144dp), isso dá:
+    ///
+    /// | | largura | espessura |
+    /// |---|---|---|
+    /// | DVD | 144 ÷ (190/135) ≈ **102dp** | 102 × 0,104 ≈ **11dp** |
+    /// | VHS | 144 ÷ (187/103) ≈ **79dp** | 79 × 0,243 ≈ **19dp** |
+    ///
+    /// A fileira com fitas gordas e estreitas entre discos finos e largos é o
+    /// que faz a prateleira parecer acervo, e não grade de miniaturas — e o
+    /// corte é o mesmo `ultimo_ano_vhs` que já decide o rebobinar.
     Column(
         modifier = Modifier.chega(indice),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         CaixaEm3D(
-            largura = 96.dp,
+            largura = if (ehVhs) 79.dp else 102.dp,
             altura = 144.dp,
-            espessura = 26.dp,
+            espessura = if (ehVhs) 19.dp else 11.dp,
+            poseControlada = pose,
             aoTocar = aoAbrir,
-        ) { lado, luz ->
+        ) { lado, luz, poseDoQuadro ->
             FaceDaCaixa(
                 lado = lado,
                 luz = luz,
+                pose = poseDoQuadro,
                 titulo = caixa.titulo,
                 arte = arte,
                 cor = corDeHex(caixa.corDominante),
+                ehVhs = ehVhs,
+                ano = caixa.ano,
+                id = caixa.id,
                 /// ⚠️ **`serie` e `temporadas` têm que valer os dois**, e é a
                 /// web que corta assim. Uma obra solta pode vir com
                 /// `temporadas` preenchido por engano do lado de lá, e «1
                 /// TEMPORADA» estampado num filme é o §18 impresso na capa.
                 temporadas = if (caixa.serie) caixa.temporadas else 0,
             )
-        }
-    }
-}
-
-/// O desenho de cada lado de uma caixa da vitrine.
-///
-/// Separado do `CaixaEm3D` porque aquele é geometria e este é arte: o mesmo
-/// projetor serve pra caixa da estante, pra caixa na mão e — quando ela existir
-/// — pra qualquer outra coisa que tenha lados.
-@Composable
-internal fun FaceDaCaixa(
-    lado: Lado,
-    luz: Float,
-    titulo: String,
-    arte: String?,
-    cor: Color?,
-    /// Quantas temporadas, quando a caixa é de **coleção**. Zero em tudo o mais,
-    /// e aí a faixa não nasce — ver a `Lado.Capa`.
-    temporadas: Int = 0,
-    verso: (@Composable BoxScope.() -> Unit)? = null,
-) {
-    when (lado) {
-        Lado.Capa -> Box(
-            Modifier.fillMaxSize().background(cor ?: Cores.fundoElevado),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (arte != null) {
-                AsyncImage(
-                    model = arte,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    text = titulo,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Cores.texto,
-                    textAlign = TextAlign.Center,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(6.dp),
-                )
-            }
-            /// O verniz — `.brilho` da folha (`:4385`). «É o que faz o olho ler
-            /// objeto em vez de imagem.»
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.linearGradient(
-                        0.00f to Color.White.copy(alpha = 0.24f),
-                        0.14f to Color.White.copy(alpha = 0.05f),
-                        0.32f to Color.Transparent,
-                        0.74f to Color.Transparent,
-                        1.00f to Color.White.copy(alpha = 0.10f),
-                    ),
-                ),
-            )
-
-            /// **A faixa de temporadas** — a última dívida do §8 do
-            /// `PARIDADE-ANDROID.md`.
-            ///
-            /// ## Ela existe porque uma série é **uma** caixa
-            ///
-            /// A locadora não expõe 21 fitas de Breaking Bad: expõe uma caixa de
-            /// coleção. Sem a faixa, ela é indistinguível de um filme — e o que
-            /// a pessoa pega na mão tem vinte horas dentro, não duas.
-            ///
-            /// ## A tinta é a da própria obra, escurecida
-            ///
-            /// `color-mix(in oklab, var(--cor) 68%, #000)` na folha (`:4499`).
-            /// A faixa é a **cinta impressa na capa**, então ela tem que ser da
-            /// caixa — e escurecida porque branco sobre a cor pura da arte não
-            /// se lê em metade do acervo. Sem `dominant_color`, a linha da casa:
-            /// nunca uma cor sorteada (§18).
-            ///
-            /// ⚠️ **7px na web, 8sp aqui, e a proporção foi quebrada de
-            /// propósito.** Lá a caixa tem 130px de largura e a letra 7px — 5,4%.
-            /// Os mesmos 5,4% nos 96dp desta caixa dariam **5,2sp**, que não é
-            /// tamanho de texto, é textura. É o mesmo erro que o selo do nível
-            /// cobrou na oitava rodada: mesma proporção, caixas diferentes,
-            /// resultados diferentes na tela.
-            if (temporadas > 0) {
-                Text(
-                    text = "$temporadas ${if (temporadas == 1) "TEMPORADA" else "TEMPORADAS"}",
-                    style = Tipo.rotulo.copy(fontSize = 8.sp, letterSpacing = 0.14.em),
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(
-                            androidx.compose.ui.graphics.lerp(
-                                Color.Black,
-                                cor ?: Cores.destaque,
-                                0.68f,
-                            ),
-                        )
-                        .padding(vertical = 3.dp),
-                )
-            }
-
-            VeuDeLuz(luz)
-        }
-
-        Lado.Lombada -> Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    listOf(Cores.fundoAfundado, Cores.fundoElevado, Cores.fundoAfundado),
-                ),
-            ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = titulo,
-                style = MaterialTheme.typography.labelSmall,
-                color = Cores.textoApagado,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                /// O título deitado, como em toda lombada de fita. A largura
-                /// requerida é a **altura** da lombada — o texto é medido antes
-                /// de girar.
-                modifier = Modifier.requiredWidth(130.dp).graphicsLayer { rotationZ = 90f },
-            )
-            VeuDeLuz(luz)
-        }
-
-        /// O topo e a base: papelão de perfil. O degradê dá a aresta — sem ele
-        /// são duas tarjas, e o olho não fecha o volume.
-        ///
-        /// A base é mais escura que o topo de propósito: ela é a face que
-        /// encosta na prateleira, e nenhuma luz de loja chega ali.
-        Lado.Topo -> Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(Cores.linha, Cores.fundoAfundado)),
-            ),
-        ) {
-            VeuDeLuz(luz)
-        }
-
-        Lado.Base -> Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(Cores.fundoAfundado, Color.Black)),
-            ),
-        ) {
-            VeuDeLuz(luz)
-        }
-
-        /// A **lateral da abertura** — o lado por onde a caixa abre.
-        ///
-        /// Ela não é lisa como a lombada: numa caixa de verdade é aqui que as
-        /// duas metades se encontram, e o que se vê é uma **fresta** no meio da
-        /// espessura. É o detalhe que diz de que lado a caixa abre mesmo antes de
-        /// alguém tocar nela — e o gesto de abrir é justamente deste lado.
-        Lado.LateralDireita -> Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    listOf(Cores.fundoAfundado, Cores.linha, Cores.fundoAfundado),
-                ),
-            ),
-        ) {
-            Box(
-                Modifier
-                    .align(Alignment.Center)
-                    .fillMaxHeight()
-                    .width(1.dp)
-                    .background(Color.Black.copy(alpha = 0.65f)),
-            )
-            VeuDeLuz(luz)
-        }
-
-        Lado.Contracapa -> Box(
-            Modifier.fillMaxSize().background(Cores.fundoElevado),
-        ) {
-            verso?.invoke(this)
-            VeuDeLuz(luz)
         }
     }
 }
@@ -769,61 +847,6 @@ private fun EstanteVazia(comTabuas: Boolean) {
     }
 }
 
-/// A madeira da prateleira.
-@Composable
-private fun Tabua() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            /// Sangra 16dp de cada lado pra cancelar o padding da tela. Uma
-            /// prateleira que respeita a margem do texto é uma prateleira que
-            /// acaba no ar.
-            ///
-            /// ⚠️ **`padding` negativo não existe em Compose**, e a primeira
-            /// versão disto tentou: `padding(horizontal = (-16).dp)`. Compilou,
-            /// passou no lint, e o app **caiu ao abrir a locadora** com
-            /// `IllegalArgumentException: Padding must be non-negative`. Mais
-            /// uma para a lista: compilar e passar no lint não é ter visto.
-            ///
-            /// O jeito certo é medir com folga e colocar deslocado. O `layout`
-            /// pede ao filho uma largura maior que a que recebeu e depois o
-            /// posiciona 16dp à esquerda, mantendo a **altura** reservada igual
-            /// — assim a coluna acima não se mexe.
-            .layout { medivel, restricoes ->
-                val folga = 16.dp.roundToPx() * 2
-                val largura = restricoes.maxWidth + folga
-                val posto = medivel.measure(
-                    restricoes.copy(minWidth = largura, maxWidth = largura),
-                )
-                layout(restricoes.maxWidth, posto.height) {
-                    posto.place(-folga / 2, 0)
-                }
-            }
-            .height(6.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF2A2119), Color(0xFF150F0A)),
-                ),
-            ),
-    ) {
-        /// A luz da loja batendo na tábua: uma linha quente no topo dela.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color.Transparent,
-                            Cores.destaque.copy(alpha = 0.35f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
-    }
-}
-
 /// Uma caixa de fita, **de pé e em três quartos** — R5.
 ///
 /// ## Ela não fica de frente, e isso é o item inteiro
@@ -876,6 +899,11 @@ private fun Caixa(
     pedindo: Boolean = false,
     /// O corte entre fita e disco, vindo do `ultimo_ano_vhs` do servidor.
     ehVhs: Boolean = false,
+    /// Tocar **abre o palco** em vez de virar o cartão — é o caminho das
+    /// «comigo», onde o toque tem que levar ao filme («ao clicar só mostra
+    /// devolver e nem abre o 3D», 07/08). Nulo nas dos outros, onde não há
+    /// filme a tocar e o verso do cartão continua sendo a resposta do toque.
+    aoAbrir: (() -> Unit)? = null,
 ) {
     var virada by remember { mutableStateOf(false) }
     val giro by animateFloatAsState(
@@ -1005,7 +1033,7 @@ private fun Caixa(
                     /// gesto leve; a batida fica pra devolver, que é o que muda
                     /// o acervo de todo mundo.
                     haptico.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    virada = !virada
+                    if (aoAbrir != null) aoAbrir() else virada = !virada
                 },
         ) {
             if (giro <= 90f) {
@@ -1244,107 +1272,9 @@ private fun Caixa(
     }
 }
 
-/// A placa da porta — **a loja tinha letreiro em toda estante e nenhum na
-/// própria porta**.
-///
-/// ## Por que os números mudam de tipo, e não só de cor
-///
-/// Antes as três contagens eram uma frase só, em cinza de 12sp, com exatamente o
-/// mesmo peso das regras da casa e do limite. Três números que dizem coisas
-/// diferentes, e nenhum era o principal — o olho não tinha onde pousar.
-///
-/// Agora os dois que importam saem na **serifa dourada das placas de estante**
-/// (`Terror 8 de 145`), que é a tinta que esta tela já usa pra dizer «isto é
-/// letreiro de loja». Não é uma cor nova nem uma fonte nova: é a que estava
-/// pendurada em cada prateleira e faltava na entrada.
-///
-/// ## O acervo desce, e sussurra
-///
-/// `de 850 no acervo` é contexto — a vitrine é uma amostra dele. Na mesma linha
-/// e no mesmo peso, ele disputava com os dois números que são de hoje. Numa
-/// segunda linha, apagado, ele responde a pergunta sem fazê-la.
-///
-/// ## ⚠️ A frase inteira continua existindo, e vai na semântica
-///
-/// O desenho quebrou a frase em pedaços com pesos diferentes; quem lê por leitor
-/// de tela receberia os pedaços soltos. O `clearAndSetSemantics` põe de volta a
-/// frase que a [portaDaLoja] monta — a mesma que os testes guardam. A tipografia
-/// é da tela; a gramática continua sendo de uma função só.
-@Composable
-private fun PortaDaLoja(naPrateleira: Int, sorteadas: Int, noAcervo: Int) {
-    val frase = portaDaLoja(naPrateleira, sorteadas, noAcervo)
-
-    /// Sem caixa à vista não há placa: os dois vazios são frase, não número.
-    if (naPrateleira == 0) {
-        Text(text = frase, style = MaterialTheme.typography.bodySmall, color = Cores.textoApagado)
-        return
-    }
-
-    val numero = MaterialTheme.typography.headlineSmall.copy(
-        fontSize = 22.sp,
-        /// O mesmo halo das placas, **na metade** (0,42 → 0,22). Lá ele pende
-        /// sobre madeira escura e precisa acender; aqui ele encosta em texto
-        /// corrido, e o mesmo brilho borraria a linha de baixo.
-        shadow = Shadow(color = Cores.destaque.copy(alpha = 0.22f), blurRadius = 18f),
-    )
-    val palavra = MaterialTheme.typography.bodySmall
-
-    Column(
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.clearAndSetSemantics { contentDescription = frase },
-    ) {
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text("$naPrateleira", style = numero, color = Cores.destaque)
-            Text(
-                /// O buraco anda junto do número de que ele é buraco, e fica
-                /// **apagado**: ele qualifica a prateleira, não é uma terceira
-                /// contagem de mesmo posto.
-                text = buildString {
-                    append("na prateleira")
-                    val fora = sorteadas - naPrateleira
-                    if (fora > 0) append(", $fora fora")
-                },
-                style = palavra,
-                color = Cores.textoApagado,
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-            /// O separador é mais apagado que as palavras que ele separa — ele é
-            /// pontuação, e pontuação que se lê tanto quanto o texto vira ruído.
-            /// Derivado do cinza da casa, e não uma cor nova: `Cores.linha` é
-            /// tinta de borda e sumiria de vez sobre o fundo.
-            Text(
-                "·",
-                style = palavra,
-                color = Cores.textoApagado.copy(alpha = 0.45f),
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-            Text("$sorteadas", style = numero, color = Cores.destaque)
-            Text(
-                text = "nesta semana",
-                style = palavra,
-                color = Cores.textoApagado,
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-        }
-
-        /// §24: servidor que não mandou `no_acervo` não ganha uma linha dizendo
-        /// «de 0 no acervo».
-        if (noAcervo > 0) {
-            Text(
-                text = "de $noAcervo no acervo",
-                style = palavra,
-                /// Um degrau abaixo do cinza da casa. Não é token novo — é o
-                /// mesmo cinza rebaixado, como o app já faz com o vermelho do
-                /// selo de atrasada.
-                color = Cores.textoApagado.copy(alpha = 0.7f),
-            )
-        }
-    }
-}
-
+/// A placa da porta virou **etiquetas penduradas** — ver a entrada da [Loja] e
+/// a [EtiquetaPendurada]. A frase única continua sendo montada aqui embaixo,
+/// porque semântica e teste falam gramática, não desenho.
 /// «37 caixas na prateleira, 3 fora · 40 nesta semana, de 600 no acervo».
 ///
 /// ## As três contagens são coisas diferentes, e é por isso que são três

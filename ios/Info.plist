@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  O que este arquivo existe pra dizer, e por que ele não é gerado.
+
+  ⚠️ A primeira tentativa foi pelo build setting
+  `INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads`. **Ela não
+  funciona, e falha em silêncio**: o Xcode só aceita um conjunto fechado de
+  `INFOPLIST_KEY_*`, e `NSAppTransportSecurity` — que é um dicionário — não está
+  nele. O ajuste foi ignorado sem aviso, o app compilou, e a primeira requisição
+  morreu com «sem resposta do servidor» na tela. Medido em 14/08/2026.
+
+  É exatamente o tipo de defeito que este projeto persegue: compilar não prova
+  nada. O `Info.plist` gerado não tinha a chave, e `PlistBuddy` foi quem contou.
+
+  ## Por que liberar o texto puro
+
+  O servidor da casa fala HTTP num IP de tailnet (`100.x`). Não é a rede aberta:
+  o Tailscale já cifra ponta a ponta com WireGuard, então o TLS por cima seria
+  uma segunda camada sobre um túnel que já é criptografado — e exigiria certificado
+  válido pra um IP privado, que é o problema que fez o `EnderecoDoServidor` tentar
+  https **e** http em vez de escolher por nós.
+
+  ⚠️ `NSAllowsLocalNetworking` não serve: ele cobre `.local` e link-local, e um
+  endereço de tailnet não é nenhum dos dois.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

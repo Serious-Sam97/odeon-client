@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  O banner — o retângulo que **é** o Odeon na home da Google TV.
+
+  ## Ele não é o ícone, e trocar um pelo outro é o erro clássico
+
+  Na gaveta de apps de um celular, o app é um ícone quadrado com o nome escrito
+  embaixo. Na home de uma TV não há nome escrito: a fileira de apps é uma fila de
+  **banners deitados**, e o nome tem que estar dentro da arte. Um app que declara
+  só `android:icon` aparece lá como um quadradinho perdido no meio de um
+  retângulo vazio.
+
+  Daí o texto "ODEON" estar desenhado aqui dentro em vez de vir do
+  `@string/nome_do_app`: não há rótulo do sistema pra receber a string.
+
+  ## As medidas, que não são escolha
+
+  **320x180dp, exatos.** É o que o Android TV exige, e a proporção 16:9 é a da
+  própria fileira; qualquer outra é esticada ou cortada pelo launcher. O
+  `viewport` abaixo usa esses mesmos números pra que 1 unidade = 1 dp e as
+  contas do desenho sejam lidas direto.
+
+  ⚠️ **A zona segura é menor que o retângulo.** O launcher da TCL desenha o
+  banner com cantos arredondados e põe um brilho de foco por cima da borda —
+  arte encostada na margem some. Nada aqui passa de 24dp das bordas laterais,
+  que é a mesma régua de overscan que as telas usam (ver `Overscan.kt`).
+
+  ## O desenho é o carretel do ícone, deitado ao lado do nome
+
+  Mesma figura do `ic_launcher_foreground.xml`, mesmo dourado, mesmo fundo de um
+  degrau mais fundo que a tela. Um banner com outra identidade seria um segundo
+  logotipo pro mesmo app — e este é o lugar onde os dois apareceriam lado a
+  lado, porque a home mostra o banner e a gaveta mostra o ícone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <!-- O fundo: o `bg-sunken`, o mesmo do ícone adaptativo. -->
+    <path
+        android:fillColor="@color/fundo_do_icone"
+        android:pathData="M0,0 h320 v180 h-320 z" />
+
+    <!--
+      O carretel, à esquerda, centrado na vertical.
+
+      É o desenho do ícone reduzido: lá o aro tem raio 26 num viewport de 108;
+      aqui tem raio 30 num de 180 de altura, o que dá quase o mesmo peso ótico
+      num retângulo três vezes mais largo.
+    -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/destaque"
+        android:strokeWidth="6"
+        android:pathData="M 74,60 A 30,30 0 1 1 73.99,60 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 74,82 A 8,8 0 1 1 73.99,82 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 74,63 A 6.5,6.5 0 1 1 73.99,63 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 74,105 A 6.5,6.5 0 1 1 73.99,105 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 53,84 A 6.5,6.5 0 1 1 52.99,84 Z" />
+    <path
+        android:fillColor="@color/destaque"
+        android:pathData="M 95,84 A 6.5,6.5 0 1 1 94.99,84 Z" />
+
+    <!--
+      "ODEON", em caixa alta e espaçado — o mesmo versalete que o `Tipo.rotulo`
+      faz nas telas, e que a `.brand-name` da web faz no cabeçalho.
+
+      Está desenhado como caminho, letra por letra, e não como `<string>` num
+      `TextView`: um `<vector>` não tem texto. Cada letra é um traço de 5 de
+      largura, 30 de altura, com 34 de passo entre elas — o passo é o que faz o
+      `letter-spacing: 0.28em` da web em unidades daqui.
+    -->
+    <group android:translateX="132" android:translateY="75">
+        <!-- O -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="@color/destaque"
+            android:strokeWidth="5"
+            android:pathData="M2.5,2.5 h19 v25 h-19 z" />
+        <!-- D -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="@color/destaque"
+            android:strokeWidth="5"
+            android:pathData="M36.5,2.5 h11 a12.5,12.5 0 0 1 0,25 h-11 z" />
+        <!-- E -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="@color/destaque"
+            android:strokeWidth="5"
+            android:pathData="M89.5,2.5 h-19 v25 h19 M70.5,15 h15" />
+        <!-- O -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="@color/destaque"
+            android:strokeWidth="5"
+            android:pathData="M104.5,2.5 h19 v25 h-19 z" />
+        <!-- N -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="@color/destaque"
+            android:strokeWidth="5"
+            android:pathData="M138.5,27.5 v-25 l19,25 v-25" />
+    </group>
+
+</vector>

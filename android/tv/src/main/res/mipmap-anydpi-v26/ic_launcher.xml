@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Só existe ícone adaptativo, e não há PNG de fallback em `mipmap-hdpi/` e
+  companhia.
+
+  Isso não é esquecimento: o `minSdk` é **26**, então não há aparelho alcançado
+  por este app que não entenda ícone adaptativo. Gerar cinco densidades de PNG
+  pra atender ninguém é peso no APK e mais um lugar onde o ícone pode divergir
+  de si mesmo.
+
+  ## O `-v26` fica, e desta vez o lint está errado
+
+  Ele avisa:
+
+      Warning: This folder configuration (v26) is unnecessary; minSdkVersion
+      is 26. Merge all the resources in this folder into mipmap-anydpi.
+      [ObsoleteSdkInt]
+
+  O raciocínio parece impecável — com `minSdk` 26, "a partir da 26" é "sempre".
+  **Só que seguir o conselho não compila.** Medido com AGP 9.3.1 e
+  build-tools 37.0.0, renomeando a pasta pra `mipmap-anydpi`:
+
+      ERROR: AndroidManifest.xml: AAPT: error: resource mipmap/ic_launcher
+      (aka dev.odeon.android.debug:mipmap/ic_launcher) not found.
+
+  O merge de recursos **descarta** a pasta sem qualificador de versão: os dois
+  XML não aparecem em `merged_res/`, e o manifesto fica apontando pra um ícone
+  que não existe. Com `-v26`, os dois entram.
+
+  O experimento foi feito nos dois sentidos, com `build/` apagado entre eles,
+  pra descartar cache.
+
+  O aviso está silenciado no `app/lint.xml`, dirigido a esta pasta e com o
+  motivo escrito ao lado — não foi desligado no projeto inteiro.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/fundo_do_icone" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <!--
+      O ícone monocromático, que é o que o Android 13+ tinge com a cor do papel
+      de parede. Aparelho mais velho ignora a linha; nenhum quebra por causa
+      dela.
+    -->
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

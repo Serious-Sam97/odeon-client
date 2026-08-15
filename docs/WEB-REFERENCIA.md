@@ -346,8 +346,27 @@ franquia, cada um com uma frase explicando). Criar já **abre** a coleção nova
 
 ## 6. Locadora — `/locadora`
 
-`Locadora.tsx` · **1.825 linhas**, a maior tela do produto. A biblioteca vista
-como uma loja de aluguel — e a unidade **não é a obra, é a caixa**.
+`Locadora.tsx` · **1.864 linhas**, a maior tela do produto (+ `Cenografia.tsx`
+221 + `tintas.ts` 225). A biblioteca vista como uma loja de aluguel — e a unidade
+**não é a obra, é a caixa**.
+
+### A cenografia — «a loja da esquina, 21h»
+
+Veio do app, e é a única parte da locadora que fez o caminho de volta: o dono
+olhou vinte conceitos no Android e escolheu um — **as prateleiras ficam**, e o
+resto da tela vira matéria: madeira, papel, luz.
+
+| peça | o que é |
+|---|---|
+| **arandela** | a meia-cúpula de latão e o facho quente no topo. A largura dela é a do letreiro que ela acende, e não a da página — na largura da página a lâmpada iluminava o vazio à direita, com o título no escuro |
+| **etiquetas penduradas** | as duas primeiras contagens da porta, em papel por barbante, com ilhós. O torto é **fixo por etiqueta**: sorteado, ela tremeria pendurada |
+| **plaquinha** | o gênero em letra cursiva sobre papel de papelaria, preso com fita crepe. A cor cicla por estante — é tinta, não dado |
+| **etiqueta de prazo** | o `7 DIAS` colorido adesivado na tábua, com o prazo real da casa |
+| **nota do caixa** | o saldo impresso no fim da rolagem, com serrilha, tracejado e o carimbo `VOLTE SEMPRE` |
+
+O material não é novo: `--papel`, `--tinta-papel` e `--tinta-bilhete` entraram no
+`:root` com os três valores do `Tema.kt` do app, e são os mesmos que o bilhete da
+ficha e o rótulo da fita já pintavam à mão.
 
 ### O modelo
 
@@ -360,30 +379,36 @@ como uma loja de aluguel — e a unidade **não é a obra, é a caixa**.
 
 ### A porta da loja
 
-Três contagens diferentes, e as três importam:
+Três contagens diferentes, e as três importam. Com a cenografia elas deixaram de
+ser uma frase só: **duas viraram papel pendurado** (`37 na prateleira` ·
+`40 nesta semana`), a terceira desceu pra nota do caixa (`NO ACERVO`), e o que
+sobra em texto é o buraco e a rotação:
 
 ```
-37 caixas na prateleira, 3 fora · 40 nesta semana, de 600 no acervo · vira segunda
+[37 na prateleira]  [40 nesta semana]
+3 fora · vira segunda
 ```
 
-O buraco é **dito**, não deduzido: a caixa alugada **sai** da prateleira e o vão
-não é preenchido. Sem essa frase, quem viu 40 ontem conclui que a loja quebrou.
+O buraco continua sendo **dito**, e é a parte que não podia virar enfeite: a
+caixa alugada **sai** da prateleira e o vão não é preenchido. Sem essa frase,
+quem viu 40 ontem conclui que a loja quebrou.
 
 Estados vazios: `a prateleira está vazia — está tudo emprestado` /
 `nada com capa por aqui` / `acendendo as luzes…`.
 
-### O balcão
+### O balcão — partido em dois, e a divisória é o tempo
 
-Some inteiro quando não há nada a dizer. Quando há:
+Ele era um bloco só no topo. Com a cenografia, **o saldo desceu e a notícia
+ficou**:
 
-- **Chips de pessoa** — quem está com fita **ou quem tem fama**: `N` na mão,
-  `✕N` fitas dela que alguém teve que rebobinar, `⟲N` fitas dos outros que ela
-  rebobinou. Zero some.
-- **Seu limite** — `você pode pegar mais 2` / `você está no limite — devolva uma
-  pra pegar outra`.
-- **Recado ao vivo** — do barramento, some sozinho em 6s.
-- **Devoluções** — `fulano devolveu rebobinada` / `sem rebobinar` / `até o fim`,
-  `venceu na mão de fulano`, com selo `atrasada`.
+| onde | o que | por quê |
+|---|---|---|
+| **no topo** | o **recado ao vivo** do barramento, que some sozinho em 6s | é o pedido de volta chegando, e *"um bloqueio só vira porta se quem está com a fita souber que bateram nela"*. No pé de oito estantes, um aviso de seis segundos é um aviso que ninguém vê |
+| **na nota, no fim** | as pessoas (`N` na mão, `✕N`, `⟲N` — zero some), o seu limite, o acervo, o prazo da casa, e as devoluções (`fulano devolveu rebobinada`, `venceu na mão de fulano`, com selo `atrasada`) | saldo se lê na saída: você anda pelas estantes e o caixa te entrega a notinha |
+
+⚠️ **É aqui que a web difere do app de propósito.** No Android a nota leva tudo,
+porque lá não existe recado ao vivo nem lista de devoluções. Copiar aquilo ao pé
+da letra teria enterrado a única parte do balcão que é urgente.
 
 ### As estantes
 
@@ -400,6 +425,22 @@ final — quando as caixas chegam, nada salta.
 A caixa na estante tem **três faces** (lombada à esquerda, capa, topo), selo
 `VHS`/`DVD`, `N temporadas` nas coleções, e a **cinta de papel** com o nome de
 quem está com ela.
+
+**A lombada é impressa em duas tintas** (`tintas.ts`), e elas saem da capa, não
+da `dominant_color`: um bloco de cor em cima, um mais escuro embaixo, com o fio
+da casa separando os dois — a lombada de gráfica de estúdio que o app desenhou.
+Uma cor só não faz uma impressão de duas.
+
+Onde o app usa a `Palette` do AndroidX, a web faz a conta: a capa vai pra um
+`<canvas>` de 96px e um histograma de 24 faixas de matiz, pesado por saturação,
+devolve o pico. **Média de pixels não serve** — foi medida no app e o pôster do
+Ichabod, azul e roxo, deu cinza.
+
+⚠️ O `getImageData` exige `Access-Control-Allow-Origin` na `/artwork`, porque a
+arte vem de outra origem. Sem o cabeçalho a extração falha em silêncio e a
+lombada volta ao papelão tingido da cor dominante — perde-se o refinamento, não
+a tela. A imagem visível **não** leva `crossOrigin` de propósito: pôr trocaria
+«lombada menos bonita» por «pôster que não carrega» no dia em que o CORS falhar.
 
 ### A caixa na mão
 

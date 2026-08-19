@@ -108,6 +108,39 @@ fun TelaDaSerie(
                             ),
                         ),
                     )
+
+                    /// ## ⚠️ E um véu **no topo**, pro «voltar» — 19/08/2026
+                    ///
+                    /// Medido no emulador, n'`A Feiticeira`: o dourado da casa
+                    /// (#e0b062, luz 181) sobre o céu claro do backdrop (luz 204
+                    /// onde o texto cai) dá **1,33:1**. O mínimo legível pra
+                    /// texto é 4,5:1 — ou seja, o botão estava na tela e não dava
+                    /// pra ler.
+                    ///
+                    /// O véu de baixo já existia pelo mesmo motivo, e cobria o
+                    /// **letreiro**; ninguém tinha olhado pro canto de cima.
+                    ///
+                    /// ⚠️ **Duas tentativas antes desta, e as duas medidas.**
+                    /// Com 22% do bloco o contraste foi de 1,33 pra 1,47 — nada,
+                    /// porque o botão não mora no topo do bloco e sim **abaixo da
+                    /// barra de status** (`bounds=[32,100][146,153]`), onde um
+                    /// degradê curto já virou transparente. Subindo pra 88% de
+                    /// preto em 42% do bloco deu 3,43:1 — passa o limiar de texto
+                    /// **grande** (3:1) e não o de texto normal (4,5:1), e ainda
+                    /// custava um canto de arte quase preto.
+                    ///
+                    /// Então o véu voltou a ser discreto e quem ficou legível foi
+                    /// o **botão**, com fundo próprio logo abaixo. Escurecer a
+                    /// obra inteira pra salvar 114 pixels de texto era pagar caro
+                    /// no lugar errado.
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.verticalGradient(
+                                0f to Color.Black.copy(alpha = 0.45f),
+                                0.30f to Color.Transparent,
+                            ),
+                        ),
+                    )
                     /// ⚠️ **`statusBarsPadding` aqui, e não no `Box`** — visto no
                     /// emulador em 18/08/2026: o bloco de arte é borda a borda de
                     /// propósito (ele sobe até debaixo do relógio, como a ficha),
@@ -115,9 +148,28 @@ fun TelaDaSerie(
                     ///
                     /// O padding é do botão, então a arte continua sangrando e só
                     /// o alvo de toque desce.
+                    /// ⚠️ **O botão carrega o próprio fundo**, e é isso que o faz
+                    /// legível sobre qualquer arte: medido n'`A Feiticeira`, o
+                    /// dourado sobre o céu claro do backdrop dava **1,33:1** — o
+                    /// mínimo pra texto é 4,5:1. Não é caso raro: metade das
+                    /// séries deste acervo tem backdrop claro.
+                    ///
+                    /// A pílula é a mesma forma que o resto do app usa pra pousar
+                    /// cromo sobre imagem, e custa só a área do próprio rótulo.
                     TextButton(
                         onClick = aoVoltar,
-                        modifier = Modifier.align(Alignment.TopStart).statusBarsPadding(),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(start = 8.dp, top = 4.dp)
+                            .background(
+                                /// ⚠️ 0,70 e não 0,55: medido, a 0,55 o contraste
+                                /// parou em **4,08:1**, e o mínimo pra texto é
+                                /// 4,5. Meia dúzia de pontos de alfa custa nada e
+                                /// é a diferença entre passar e quase passar.
+                                Color.Black.copy(alpha = 0.70f),
+                                RoundedCornerShape(50),
+                            ),
                     ) {
                         Text("‹ voltar", color = Cores.destaque)
                     }

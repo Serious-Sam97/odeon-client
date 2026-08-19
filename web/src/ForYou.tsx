@@ -3,6 +3,7 @@ import Desafios from "./Desafios";
 import { useArrastoDeFileira } from "./arrasto";
 import {
   api,
+  comPrazo,
   formatDuration,
   hueFromTitle,
   type ForYou as ForYouData,
@@ -35,14 +36,28 @@ export default function ForYou({ onPlay }: { onPlay: (w: WorkListItem) => void }
   const [moods, setMoods] = useState<string[]>([]);
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [parou, setParou] = useState<WorkListItem[]>([]);
   const [calib, setCalib] = useState<WorkListItem[]>([]);
   const [votadas, setVotadas] = useState<Record<string, "love" | "block">>({});
 
+  /// ## ⚠️ Sem `catch`, a falha virava «afrouxe o tempo disponível» — 19/08/2026
+  ///
+  /// Esta tela tinha o defeito da família toda, e na versão mais desagradável
+  /// dele: quando `/api/curation/for-you` falhava, `data` ficava nulo, a lista
+  /// saía vazia, e a tela dizia **«Nada cabe nesse tempo · afrouxe o tempo
+  /// disponível ou o humor»** — culpando a escolha de quem está olhando por um
+  /// erro que não é dela. E, se o pedido pendurasse, o «pensando…» era pra
+  /// sempre, porque `fetch` sem prazo não falha: só não volta.
+  ///
+  /// Não saber é diferente de não ter (§18), e as duas frases agora são duas.
   const load = useCallback(async () => {
     setLoading(true);
+    setErro(null);
     try {
-      setData(await api.forYou(minutes, mood));
+      setData(await comPrazo(api.forYou(minutes, mood), "para você"));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -175,6 +190,14 @@ export default function ForYou({ onPlay }: { onPlay: (w: WorkListItem) => void }
 
       {loading && !data ? (
         <p className="muted">pensando…</p>
+      ) : erro && !data ? (
+        <div className="empty">
+          <p>a sugestão não veio</p>
+          <p className="muted">{erro}</p>
+          <button className="chip" onClick={load}>
+            tentar de novo
+          </button>
+        </div>
       ) : items.length === 0 ? (
         <div className="empty">
           <p>Nada cabe nesse tempo.</p>

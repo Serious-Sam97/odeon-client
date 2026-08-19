@@ -1757,3 +1757,111 @@ produzir os dois erros sem depender do servidor cair:
 - **A TV não ganhou nada disto.** Ela já tinha os dois recados desde 17/08; o que
   ela não tem é a retentativa no «não deu pra sintonizar», e o «tentar de novo»
   dela é `prepare()`. Fica anotado — a TCL segue desligada.
+
+---
+
+## 24. Duas coisas que a passada de qualidade achou — 19/08/2026
+
+### A aba das séries mostrando 007, de novo
+
+Reproduzido no emulador: abrir a aba das séries e ler `TODAS AS SÉRIES 8333`,
+com `007: A Serviço Secreto de Sua Majestade · 1 episódio` na grade. O servidor
+estava certo o tempo todo — perguntado com o mesmo filtro, `?tags=format:série`
+devolve **5143** e só série.
+
+⚠️ **A folha do `primeiraPagina` já descrevia este sintoma em 18/08**, com o
+mesmo número (`8333`) e a mesma grade de 007. O conserto de lá tornou a primeira
+consulta cancelável; o que faltou foi **quando** cancelar:
+
+| | |
+|---|---|
+| o que acontecia | `sóSéries()` pergunta ao servidor «quais formatos existem?» **antes** de fixar a prateleira. Enquanto essa pergunta viaja, a consulta sem filtro do `init` segue viva — e num servidor ocupado ela chega primeiro |
+| o caso pior | se as etiquetas **não** vêm (lenta, 500, lista vazia), o `serie == null` desistia **em silêncio** e a aba ficava mostrando o acervo inteiro para sempre, chamando filme de série |
+
+O conserto tem duas partes: cancelar a consulta sem filtro **antes** de perguntar,
+e insistir três vezes pelas etiquetas — e, se ainda assim não souber, dizer que
+não sabe em vez de mostrar tudo. Não saber é diferente de não ter (§18).
+
+⚠️ A aba dos filmes ganhou a insistência e **não** o cancelamento, de propósito:
+filmes sem exclusão ainda é a biblioteca inteira, que é uma verdade aproximada;
+séries sem prateleira é uma mentira.
+
+**Verificado**: quatro aberturas a frio, com leitura aos 2s e aos 10s. Nenhuma
+mostrou o acervo inteiro; todas assentaram em `5143`. A aba dos filmes seguiu em
+`3.187`, e trocar de aba ida e volta não vaza prateleira.
+
+⚠️ **O ramo do erro não foi exercitado**: pra vê-lo seria preciso derrubar só a
+rota de etiquetas, mantendo a da biblioteca de pé, e não há como fazer isso do
+lado de cá sem um proxy.
+
+### O «voltar» que estava na tela e não dava pra ler
+
+Na ficha da série, o «‹ voltar» é dourado sobre a arte, sem nada por baixo.
+Medido n'`A Feiticeira`, cujo backdrop é um céu claro: **1,33:1**, contra o
+mínimo de 4,5:1 para texto. O botão existia e era invisível.
+
+Duas tentativas antes da que ficou, e as duas medidas:
+
+| tentativa | resultado |
+|---|---|
+| véu no topo, 22% do bloco | 1,47:1 — nada. O botão mora **abaixo da barra de status**, onde um degradê curto já virou transparente |
+| véu forte, 88% de preto em 42% | 3,43:1 — passa o limiar de texto grande (3:1), não o de texto normal, e escurecia um canto inteiro de arte |
+| **pílula atrás do rótulo** | **6,12:1**, na mesma arte, com a obra intacta |
+
+⚠️ A lição é a de sempre nesta casa: **escurecer a obra inteira pra salvar 114
+pixels de texto era pagar caro no lugar errado.** O véu voltou a ser discreto e
+quem carrega o próprio fundo é o botão.
+
+---
+
+## 25. O que faltava e agora existe — 19/08/2026
+
+### O `collection_id` do ao vivo virou destino
+
+O contrato estava medido (ver `SERIES.md`) e o campo continuava sendo jogado
+fora. Agora ele é lido nos dois modelos (`CanalNoAr` e `ProgramaDoGuia`) e tem
+onde aparecer: **os blocos da programação passam a receber toque** e abrem uma
+folha com horário, título, episódio e sinopse — e, quando o programa é episódio
+de série, o botão `▸ ver a série`.
+
+| destino | quando |
+|---|---|
+| ficha da série | o bloco tem `collection_id` — 59 dos 255 medidos |
+| ficha da obra | o bloco tem `work_id` — 96 dos 255 |
+| «não está casado com nada do acervo» | os outros 100, dito em uma linha em vez de um botão morto |
+
+⚠️ **A folha não sintoniza**, e é decisão: sintonizar é o gesto do cartão, de um
+toque só (regra do dono, 18/08). Um bloco que também sintonizasse daria à mesma
+tela dois toques com efeitos diferentes — que é o defeito que aquela regra veio
+consertar.
+
+**Visto na tela**: bloco do `Futurama` na grade → folha com a sinopse do episódio
+→ `ver a série` → ficha do Futurama, 11 temporadas, 149 episódios.
+
+### O próximo episódio
+
+`grep proximoEpisodio` dava **zero** nos quatro clientes: quando um episódio
+acabava, acabava. Não precisou de rota nova — o `/api/works/{id}` já devolvia as
+coleções da obra, e o modelo é que as descartava. Com a temporada na mão, o
+próximo é `obras(colecao = …)` e o menor `episode_number` maior que o atual.
+
+⚠️ **Ele não avança sozinho, e isso é desenho, não preguiça.** O que uma sala de
+cinema faz quando o filme acaba é acender a luz, não emendar outro — e emendar
+sozinho é o gesto que faz alguém acordar às três da manhã no episódio sete. O
+cartão oferece; quem decide é quem está assistindo.
+
+⚠️ E ele fica **no canto de baixo**: o último quadro do que acabou ainda é a
+imagem na tela, e cobri-la com um cartaz seria trocar o fim do episódio pelo
+anúncio do seguinte.
+
+#### O que está verificado, e o que não está
+
+| | |
+|---|---|
+| **web** | ponta a ponta: `Piloto` acabou → cartão `S01E02 · A Lâmpada` → tocando o seguinte |
+| **celular** | **metade**: o log mostra `próximo episódio de …: Lista de Desejos (S1E3)` ao abrir o S01E02. O **cartão** eu não vi — ele exige um episódio chegando ao fim, e não consegui dirigir o cromo do player até lá pelo emulador |
+| **TV e iOS** | não tocados |
+
+⚠️ Fica escrito como está: no celular, a busca do próximo está exercitada e o
+desenho do cartão não. Quando alguém terminar um episódio no aparelho, é isso que
+precisa ser olhado.

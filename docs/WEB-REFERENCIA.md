@@ -282,6 +282,17 @@ das tags só contam o que foi identificado, e sem essa linha a tela dizia "filme
 1. **Chip "Dentro de"** quando se entrou numa série, e **"Com"** quando se
    filtrou por pessoa. Os dois com ✕ pra sair.
 2. **Continuar assistindo** — `/api/continue`, quando houver.
+
+   ⚠️ **Filtrada pela aba desde 19/08/2026.** A rota devolve por obra e não sabe
+   de abas, então a fileira trazia 007 e Resident Evil pra dentro da aba das
+   **séries** — enquanto a grade ao lado, essa sim filtrada por `?tags=format:série`,
+   mostrava só série. Agora cada aba continua o que ela guarda: `séries` fica com
+   quem tem `series_title`, `filmes` com quem não tem. É a mesma correção que o
+   celular fez em 18/08 («série começada é assunto da aba das séries»), e o
+   sintoma lá foi idêntico: um episódio de Arcane abrindo o herói dos filmes.
+
+   ⚠️ Dentro de uma coleção ela **some**: a temporada já lista os episódios, e um
+   «continuar» genérico por cima disso competiria com a própria lista.
 3. **Biblioteca `N de M`** — grade de cartões.
 
 ### Os três cartões
@@ -592,6 +603,13 @@ min · programado pelo Odeon | ao vivo`, uma barra de progresso do programa com
 - `▸ SINTONIZAR`
 - `↺ VER DESDE O INÍCIO` — **só quando há arquivo casado** e o canal é IPTV.
 
+⚠️ **O modal de um programa oferece `▸ ver a série`** quando ele é episódio —
+19/08/2026. O servidor manda `collection_id` no lugar do `work_id` nesses casos
+(medido: 59 de 255 blocos da grade, e **zero** com os dois campos), e o app
+ignorava o campo: um episódio no ar era «programa sem nada atrás», igual a um
+canal sem EPG. O destino é a **aba das séries** — a ficha é de uma série, e o
+`voltar` dela tem de cair onde séries moram.
+
 No vão entre programas (a grade da casa tem 4 min de respiro), sintonizar diz
 `intervalo — X começa às 22:04` em vez de não fazer nada.
 
@@ -629,11 +647,39 @@ permissão ainda". Programa que já começou não oferece agendar.
 - **Intervalo**: quando o arquivo acaba antes da hora, entra o cartão
   `intervalo · <próximo> · às 22:04` — emendar adiantaria o canal em relação à
   própria grade, que é o que todo mundo está vendo.
-- Cromo some após 3s parado, **mesmo pausado**.
+- Cromo some após 3s parado.
 - Timeline **sem knob e sem preview**: não há pra onde buscar. Só `● AO VIVO`,
   `no ar há N min` e `a seguir X`.
-- Selo do modo (`Remux` / `transcode`), volume, pausar (a transmissão continua),
-  `Esc` fecha.
+- **Tela cheia** por botão `⛶` e pela tecla `f` — a mesma do player de filme.
+  ⚠️ **Faltava por completo**: dava pra assistir um canal a noite inteira sem
+  jeito de tirar o navegador da frente.
+- **Não há transporte** — 19/08/2026. Saíram o botão de pausa e o atalho do
+  espaço; ficaram `canais`, o relógio, o selo do modo, o volume e o `Esc`. É a
+  regra que a TV e o celular já seguiam: pausar não pausa a transmissão, e o
+  botão só parava **a sua tela** enquanto o programa seguia sem você. O título do
+  botão que saiu já admitia isso — «pausar (a transmissão continua)».
+  - ⚠️ **Volume não é transporte** e fica: ele não mente sobre o tempo, e num
+    computador não há tecla de volume dedicada como no controle da sala.
+  - ⚠️ **Pausou por fora, volta**: tecla de mídia do teclado, menu de contexto do
+    `<video>` e janelinha pausam sem passar por nós, e sem botão nenhum a pessoa
+    ficaria com a transmissão congelada. O `onPause` retoma. Só o evento `pause`
+    dispara isso — engasgo de rede levanta `waiting`, e reagir aos dois viraria
+    um laço de `play()` contra um buffer vazio.
+
+### Quando o ao vivo não abre — 19/08/2026
+
+⚠️ **Os pedidos da aba têm prazo (12s)** — o `comPrazo` do `api.ts`, hoje
+compartilhado com a biblioteca. Visto na tela: o `/api/live/channels`
+pendurou — nem respondeu, nem falhou —, o `Promise.all` nunca assentou e o
+`finally` que apaga o «acendendo a ilha…» **nunca rodou**. A aba ficou na frase
+de espera até alguém recarregar a página; o mesmo pedido, segundos depois, voltou
+em 79ms. `fetch` sem prazo não é esperar mais, é esperar sem fim.
+
+⚠️ E o erro ganhou **tela própria**: antes, um servidor que não respondeu caía no
+«Nenhum canal ainda · peça pro administrador cadastrar uma fonte IPTV», que manda
+a pessoa arrumar o que não está quebrado. Agora é «o ao vivo não abriu», o motivo,
+e um `tentar de novo` — exercitado pendurando o pedido de propósito e destravando
+depois.
 
 ### As fontes (admin)
 
@@ -1045,7 +1091,10 @@ acha que o filme começa no ponto onde a sessão começou. Tudo aqui trabalha em
 |---|---|
 | **plano** | `GET /api/playback/{id}/plan` decide Direct Play · Remux · Transcode a partir do que o navegador declara (`canPlayType`) |
 | **entrega** | Direct Play usa `/api/stream/{id}`; o resto abre sessão HLS (`ligarHls`, token **por header** — o `?token=` da playlist não chega nos segmentos) |
-| **timeline** | mostra o arquivo inteiro, com as regiões **fora desta sessão** marcadas em vez de escondidas, buffer, knob e **preview de sprites** (folha baixada uma vez, `background-position`, zero requisições ao arrastar) |
+| **timeline** | é uma **película** (19/08/2026): fotogramas lado a lado, perfurações nas bordas, o já visto em cor cheia e o que vem a 34%. Fotograma vem da folha de sprites quando existe (`background-position`, zero requisições ao arrastar) e, quando não, das **doze cenas** do disco; sem nenhum dos dois a célula fica escura, que é película não revelada e não buraco de desenho |
+| **o fim do episódio** | quando um episódio acaba, o cartão `acabou · a seguir` no canto de baixo, com `▸ próximo episódio` e `ficar aqui`. ⚠️ **Não avança sozinho**: emendar sozinho é o gesto que faz alguém acordar às três da manhã no episódio sete. O próximo sai de `/api/works/{id}` → `collections[kind=season]` → `works?collection=…`, sem rota nova |
+| **o ponto atual** | a **janela do projetor** — moldura âmbar em volta do fotograma que está passando, com a lente no pé dela. Um traço marca uma posição; uma janela com o quadro dentro diz que a película está passando por ali. ⚠️ Ela substituiu o `knob` **e a barra âmbar**: com a película desenhada, a barra dizia pela terceira vez o que o revelado e a janela já dizem. Posicionada por pixel medido e **presa nas bordas** — com `left: %` + `translateX(-50%)` o primeiro e o último fotograma ficariam com meia moldura fora da tira |
+| **a régua fina** | continua por baixo, sem âmbar: diz só o que **esta sessão** alcança e o que já baixou — coisas que a imagem não sabe dizer |
 | **seek** | fora do que a sessão produziu, avisa em vez de falhar em silêncio |
 | **controles** | ↺10s · play/pause · ↻10s · timecode · **legendas** · **selo do modo com "por quê"** · volume · tela cheia |
 | **legendas** | faixas de texto entram como `<track>` nativo (sem transcode); ASS/PGS oferecem **queimar**, que preserva o estilo e força transcode — e a tela diz isso |
@@ -1100,6 +1149,71 @@ perder exatamente a informação que a implantação ensinou a mostrar.
 ---
 
 ## 15. As regras que valem em toda tela
+
+### ⚠️ Tela que espera tem hora pra desistir — 19/08/2026
+
+`comPrazo(promessa, oQue)` no `api.ts`, 12s. Nasceu do ao vivo — um pedido que
+pendurou deixou a aba em «acendendo a ilha…» para sempre, porque `fetch` sem
+prazo não falha, só não volta — e vale agora também pra biblioteca e pra listagem
+de episódios.
+
+⚠️ **Ele não está dentro do `json()`**, e isso é decisão: há rotas
+legitimamente lentas (abrir sessão de transcode, as doze cenas de um disco,
+importar M3U). Um prazo geral mataria justamente as que precisam de tempo. Quem
+usa é a **tela que espera pra desenhar**.
+
+⚠️ E a fileira de «continuar» tem prazo **mas não derruba a tela**: ela é enfeite
+ao lado da grade, e um servidor lento pra ela não é motivo pra dizer que a
+biblioteca não abriu.
+
+### ⚠️ Erro não é acervo vazio — 19/08/2026
+
+Duas telas diziam a coisa errada quando um pedido falhava:
+
+| tela | dizia | diz |
+|---|---|---|
+| biblioteca | «Nada encontrado · afrouxe os filtros ou rode uma varredura» | «a biblioteca não abriu», o motivo, e `tentar de novo` |
+| ao vivo | «Nenhum canal ainda · peça pro administrador cadastrar uma fonte IPTV» | «o ao vivo não abriu», o motivo, e `tentar de novo` |
+| para você | «Nada cabe nesse tempo · afrouxe o tempo disponível ou o humor» | «a sugestão não veio», o motivo, e `tentar de novo` |
+
+⚠️ A do «para você» era a pior das três, e por duas razões: o `load` não tinha
+`catch` **nenhum** — a falha subia como rejeição não tratada e a tela ficava com
+`data` nulo — e a frase que sobrava **culpava a escolha de quem está olhando**
+por um erro que não era dela.
+
+As duas frases antigas mandavam a pessoa arrumar o que não estava quebrado. Não
+saber é diferente de não ter (§18).
+
+**Exercitado nas três**: derrubando ou pendurando a rota de propósito, esperando
+o prazo quando havia prazo, e destravando pra ver o `tentar de novo` devolver a
+tela — a biblioteca voltou à busca real, o ao vivo aos 21 canais, o «para você» ao
+herói da noite.
+
+⚠️ **O Android não tem esta confusão**, e vale dizer por quê: lá o `vazioComFiltro`
+do `EstadoDaBiblioteca` **exige `erro == null`** pra ligar, e o erro tem linha
+própria acima da grade. A regra estava no modelo, não na tela — que é onde ela
+sobrevive a quem desenha depois.
+
+### ⚠️ Sobreposição dentro de aba precisa de contexto de empilhamento limpo — 19/08/2026
+
+> «no player cheio o menu superior continua aparecendo e não some»
+
+O `main.troca` tinha `animation: odeon-troca … both`, e uma animação de `opacity`
+**em vigor** faz o elemento criar contexto de empilhamento próprio — com `both`
+ela continua em vigor depois de terminar, para sempre. Tudo que fosse
+`position: fixed` dentro da aba ficava preso ali: o **player ao vivo**, que mora
+dentro do `AoVivo.tsx`, aparecia por baixo do cabeçalho, com `z-index: 100`
+contra os `30` da barra — e perdendo, porque z-index só compara dentro do mesmo
+contexto.
+
+Medido no navegador: com `animation: none` no `main.troca`, o `elementFromPoint`
+no topo da tela passa de `HEADER.topbar` para `VIDEO.video`; ao restaurar, o
+cabeçalho volta pra frente. O conserto é `backwards` no lugar de `both` — o mesmo
+que o `.player-top` já tinha aprendido uma vez, e está escrito lá no CSS.
+
+⚠️ **O player de filme nunca teve o defeito** porque é desenhado na raiz do app,
+fora da aba. Foi essa diferença que escondeu o problema: a mesma classe `.player`,
+dois lugares, um comportamento.
 
 Elas explicam por que a web parece um produto só, e são o que um app tem que
 reproduzir mesmo quando os controles mudam de forma.

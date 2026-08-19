@@ -15,7 +15,40 @@ histórico do git e nos comentários do código que os consome.
 
 ---
 
-## Nenhum pedido aberto
+## 1. O token de arte já veio — e nós não sabemos como pedir
+
+> Acrescentado em **19/08/2026**. Não é pedido de coisa nova: é o **formato** do
+> que já foi entregue no dia 17 (linha 3 da tabela do fim). Sem isso, a entrega
+> está no ar e nenhum cliente a usa.
+
+```
+o que preciso: como se pede o token de arte de vida longa — rota, corpo da
+               resposta e validade. O único token que este cliente conhece é o
+               de mídia (`POST /api/auth/media-token`, 8h), e ele roda
+
+por quê:       a capa da notificação de mídia é baixada por **outro processo** —
+               o system UI do Android, e o launcher da Google TV dias depois —
+               com a URL que a gente entregou. Quando o token de mídia roda,
+               essas URLs passam a devolver 401
+
+o que quebra:  medido no emulador em 19/08/2026, com o log do próprio sistema:
+               `NotificationProvider: Failed to load bitmap:
+                InvalidResponseCodeException` — a notificação sobe sem capa. Na
+               TV o efeito é a fileira da home com retângulos vazios
+
+já tentei:     procurar no cliente e nos docs. `grep -r artwork-token` dá zero em
+               todo o repositório, e a tabela do fim registra a entrega sem o
+               formato — o corpo do pedido saiu daqui quando ele foi atendido
+```
+
+⚠️ **A lição de processo, e ela é nossa**: pedido atendido sai deste arquivo, e
+com ele saiu a única descrição do que foi combinado. O que sobrou na tabela — «3 ·
+token de arte de vida longa · 17/08/2026» — não basta pra escrever uma linha de
+código. Da próxima vez, o formato entregue fica na tabela.
+
+---
+
+## Nenhum outro pedido aberto
 
 Os dois últimos — `hevc10` e o casamento do EPG — foram entregues em 18/08/2026,
 no mesmo dia em que foram escritos. O que já veio está na tabela do fim.

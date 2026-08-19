@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   DEVICE_ID,
+  type Cena,
   type PlaybackPlan,
   type Sala,
   type SpriteInfo,
@@ -48,12 +49,16 @@ function clock(seconds: number): string {
 export default function Player({
   work,
   onClose,
+  aoTrocarDeObra,
   sala,
   aoMudarSala,
   aoLado,
 }: {
   work: WorkListItem;
   onClose: () => void;
+  /// Troca a obra que está tocando — é o que faz «próximo episódio» existir sem
+  /// o player saber o que é uma série.
+  aoTrocarDeObra?: (obra: WorkListItem) => void;
   /// R46 — a sala de assistir junto, quando é uma sessão junta.
   ///
   /// **Quem manda é o host** (§4.6): pro membro o player vira um espelho — ele
@@ -72,6 +77,35 @@ export default function Player({
   const hideTimer = useRef<number | undefined>(undefined);
 
   const [sprite, setSprite] = useState<SpriteInfo | null>(null);
+  /// As doze cenas do filme — o que enche a tira quando não há folha de sprites.
+  ///
+  /// ⚠️ **Não são alternativa à folha; são o outro mecanismo.** É a lição que o
+  /// Android registrou no `ModeloDoPlayer`: tratar os dois como excludentes
+  /// deixou a tira cinza, porque quase nenhum arquivo deste acervo tem folha
+  /// gerada. A folha, quando existe, é melhor — dá o quadro **daquele** instante
+  /// em vez do mais próximo —, e por isso tem precedência no desenho.
+  const [cenas, setCenas] = useState<Cena[]>([]);
+  /// A largura da tira, em pixels, medida da tela.
+  ///
+  /// ⚠️ Ela decide **quantas células cabem**, e por isso não pode ser chutada:
+  /// numa janela estreita 40 fotogramas viram uma tarja borrada, e numa larga 8
+  /// células viram cartazes. Sem `ResizeObserver` a conta congelava no primeiro
+  /// desenho e não acompanhava a janela.
+  const [larguraDaTira, setLarguraDaTira] = useState(0);
+  /// O episódio seguinte ao que está tocando, quando existe um.
+  ///
+  /// ## ⚠️ «Quando um episódio acaba, acaba» — e acabava mesmo
+  ///
+  /// `grep proximoEpisodio` dava **zero** nos quatro clientes: terminar o
+  /// `S01E01` devolvia à ficha, e quem quisesse o `S01E02` ia procurá-lo na
+  /// grade. É o buraco funcional mais antigo desta casa.
+  ///
+  /// ⚠️ O caminho não precisou de rota nova: `/api/works/{id}` já devolve
+  /// `collections[]`, com a **temporada** e o `parent_id` da série. Daí sai a
+  /// lista da temporada, e o próximo é o de `episode_number` seguinte.
+  const [proximo, setProximo] = useState<WorkListItem | null>(null);
+  /// Acabou de tocar, e o cartão do próximo está na tela.
+  const [acabou, setAcabou] = useState(false);
   const [plan, setPlan] = useState<PlaybackPlan | null>(null);
   const [session, setSession] = useState<TranscodeSession | null>(null);
   const [subtitle, setSubtitle] = useState<number | null>(null);
@@ -120,6 +154,69 @@ export default function Player({
     if (!work.media_file_id) return;
     api.spriteInfo(work.media_file_id).then(setSprite).catch(() => {});
   }, [work.media_file_id]);
+
+  /// As cenas, pedidas **em paralelo** com a folha.
+  ///
+  /// ⚠️ Elas custam ~3s na primeira vez (o servidor extrai doze quadros) e ficam
+  /// em cache. É custo que só se paga uma vez por obra, e é o que garante que a
+  /// tira tenha imagem **hoje** em qualquer filme, sem depender de a varredura
+  /// de sprites ter passado por ele.
+  ///
+  /// ⚠️ Falhar aqui é silencioso de propósito: sem cenas a tira desenha as
+  /// células escuras, que é película **não revelada** — e não um erro pra
+  /// anunciar (§18).
+  useEffect(() => {
+    let vivo = true;
+    api
+      .cenasDoDisco(work.id)
+      .then((c) => vivo && setCenas(c))
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [work.id]);
+
+  /// Procura o próximo episódio — só quando o que está tocando é episódio.
+  ///
+  /// ⚠️ **Nada disto roda pra filme**: um filme não tem «próximo», e sair
+  /// perguntando por coleção de tudo que abre é gastar duas consultas por
+  /// sessão pra descobrir que não há resposta.
+  useEffect(() => {
+    setProximo(null);
+    setAcabou(false);
+    if (work.season_number == null || work.episode_number == null) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const ficha = await api.detail(work.id);
+        const temporada = ficha.collections?.find((c) => c.kind === "season");
+        if (!temporada) return;
+        const irmaos = await api.works({ collection: temporada.id });
+        const seguinte = irmaos
+          .filter((e) => (e.episode_number ?? 0) > (work.episode_number ?? 0))
+          .sort((a, b) => (a.episode_number ?? 0) - (b.episode_number ?? 0))[0];
+        if (vivo && seguinte) setProximo(seguinte);
+      } catch {
+        /// ⚠️ Falhar aqui é **silencioso**: o próximo episódio é um oferecimento,
+        /// e um recado de erro sobre algo que ninguém pediu seria ruído sobre o
+        /// filme que a pessoa está vendo.
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [work.id, work.season_number, work.episode_number]);
+
+  /// Mede a tira sempre que a janela muda de tamanho.
+  useEffect(() => {
+    const alvo = timelineRef.current;
+    if (!alvo) return;
+    const medir = () => setLarguraDaTira(alvo.getBoundingClientRect().width);
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, []);
 
   // Pergunta ao servidor o caminho mais barato que este navegador aguenta.
   useEffect(() => {
@@ -499,7 +596,10 @@ export default function Player({
             // tem timeline clicável.
             publicar(!videoRef.current?.paused);
           }}
-          onEnded={() => report("finish")}
+          onEnded={() => {
+            report("finish");
+            setAcabou(true);
+          }}
           onVolumeChange={(e) => setVolume(e.currentTarget.muted ? 0 : e.currentTarget.volume)}
           onError={() => {
             // Com plano de transcode o erro vem do hls.js, não daqui.
@@ -529,6 +629,39 @@ export default function Player({
           </button>
         )}
       </div>
+
+      {/* ## O cartão do próximo episódio
+          
+          ⚠️ **Ele não avança sozinho, e é decisão.** O que uma sala de cinema faz
+          quando o filme acaba é acender a luz, não emendar outro — e emendar
+          sozinho é o gesto que faz alguém acordar às três da manhã no episódio
+          sete. Aqui a próxima sessão é oferecida; quem decide é quem está vendo.
+          
+          ⚠️ Ele só existe quando **há** um próximo episódio na mesma temporada.
+          Sem próximo, o cartão não aparece — em vez de aparecer vazio ou com um
+          botão que não leva a lugar nenhum (§24). */}
+      {acabou && proximo && aoTrocarDeObra && (
+        <div className="fim-do-episodio">
+          <p className="rotulo">acabou · a seguir</p>
+          <p className="titulo">
+            {proximo.season_number != null && proximo.episode_number != null && (
+              <span className="codigo">
+                S{String(proximo.season_number).padStart(2, "0")}E
+                {String(proximo.episode_number).padStart(2, "0")}
+              </span>
+            )}{" "}
+            {proximo.title}
+          </p>
+          <div className="acoes">
+            <button className="play pequeno" onClick={() => aoTrocarDeObra(proximo)}>
+              ▸ próximo episódio
+            </button>
+            <button className="ghost" onClick={() => setAcabou(false)}>
+              ficar aqui
+            </button>
+          </div>
+        </div>
+      )}
 
       <header className="player-top">
         <div>
@@ -643,11 +776,18 @@ export default function Player({
 
         <div
           ref={timelineRef}
-          className="timeline"
+          className="timeline com-tira"
           onMouseMove={(e) => setHover({ x: e.clientX, time: timeAt(e.clientX) })}
           onMouseLeave={() => setHover(null)}
           onClick={(e) => mando && seekToFile(timeAt(e.clientX))}
         >
+          <Tira
+            sprite={sprite}
+            cenas={cenas}
+            total={total}
+            fracao={total > 0 ? fileTime / total : 0}
+            largura={larguraDaTira}
+          />
           <div className="track" />
           {/* O que esta sessão NÃO entrega, marcado em vez de escondido: a
               timeline mostra o arquivo inteiro, mas só parte dele é alcançável. */}
@@ -665,7 +805,14 @@ export default function Player({
           <div className="track played" style={{ width: `${pctPlayed}%` }} />
           <div className="knob" style={{ left: `${pctPlayed}%` }} />
 
-          {hover && <ScrubPreview sprite={sprite} hover={hover} timeline={timelineRef.current} />}
+          {hover && (
+            <ScrubPreview
+              sprite={sprite}
+              cenas={cenas}
+              hover={hover}
+              timeline={timelineRef.current}
+            />
+          )}
         </div>
 
         <div className="control-row">
@@ -775,12 +922,169 @@ export default function Player({
 /// `hover.time` é tempo de ARQUIVO, que é o mesmo eixo em que a folha foi
 /// gerada — antes isto usava o tempo do `<video>` e mostrava o quadro errado
 /// sempre que a sessão começava com offset.
+
+/// A altura do fotograma na tira, em pixels. As perfurações são desenhadas
+/// **por cima** dele, nas bordas — como numa película de verdade, onde elas
+/// ocupam a margem do filme e não um espaço à parte.
+///
+/// ⚠️ Duas alturas, e a régua é a **largura da janela**, não o aparelho: numa
+/// janela estreita 40px de película comem a imagem que a pessoa veio ver, e é o
+/// mesmo raciocínio dos 30dp do celular contra os 48 deitados no Android.
+const ALTURA_DO_QUADRO = 40;
+const ALTURA_DO_QUADRO_ESTREITO = 28;
+
+/// A timeline como **película** — o porte da `Tira` do Android (`Tira.kt`).
+///
+/// ## A folha de sprites já estava paga, e desenhava três segundos
+///
+/// O servidor gera uma grade com o filme inteiro em miniaturas, e este player já
+/// a baixava — pra usar num balãozinho que aparece no hover e some. O resto do
+/// tempo, uma imagem com o filme dentro ficava na memória sem desenhar nada.
+///
+/// Aqui ela vira a barra: você não arrasta até um tempo, arrasta até uma
+/// **imagem**, e a imagem está lá antes de o ponteiro chegar.
+///
+/// | | |
+/// |---|---|
+/// | **as perfurações** | duas fileiras, passo fixo, nas bordas do fotograma |
+/// | **o já visto revelado** | o que passou tem cor cheia; o que vem está a 34% |
+/// | **sem folha** | cai nas doze cenas, a mais próxima de cada célula |
+/// | **sem nada** | célula escura — película **não revelada**, que é o estado real do arquivo |
+///
+/// ⚠️ **Célula escura não é buraco de desenho** (§18). Inventar retângulo
+/// colorido no lugar do fotograma seria a tela afirmando cena que não conhece;
+/// uma tira sem fotogramas revelados continua sendo uma tira de filme.
+function Tira({
+  sprite,
+  cenas,
+  total,
+  fracao,
+  largura,
+}: {
+  sprite: SpriteInfo | null;
+  cenas: Cena[];
+  total: number;
+  fracao: number;
+  largura: number;
+}) {
+  /// ⚠️ Sem duração não há o que dividir em células — e isso acontece de verdade
+  /// em HLS, onde a duração só chega com o plano. Até lá a timeline é a barra
+  /// fina de sempre, que continua desenhada por baixo desta peça.
+  if (total <= 0 || largura <= 0) return null;
+
+  /// Quantos fotogramas cabem — a conta que decide se isto é uma tira ou uma
+  /// tarja borrada. O resto da divisão é distribuído entre as células porque uma
+  /// sobra no fim leria como quadro cortado, e quadro cortado numa tira é
+  /// defeito de projeção.
+  const altura = largura < 700 ? ALTURA_DO_QUADRO_ESTREITO : ALTURA_DO_QUADRO;
+  const aspecto = sprite ? sprite.thumb_width / sprite.thumb_height : 16 / 9;
+  const quantos = Math.max(1, Math.min(40, Math.round(largura / (altura * aspecto))));
+  const larguraReal = largura / quantos;
+
+  const celulas = Array.from({ length: quantos }, (_, i) => {
+    /// O instante do **meio** da faixa, e não o do começo: um quadro que
+    /// representa oito minutos de filme deve mostrar o miolo desses oito.
+    const emQue = ((i + 0.5) / quantos) * total;
+    /// Já passou? A comparação é com a borda **direita**: uma célula só conta
+    /// como vista quando a lente terminou de atravessá-la.
+    const visto = (i + 1) / quantos <= fracao;
+
+    let arte: React.CSSProperties = {};
+    if (sprite && sprite.frame_count > 0) {
+      const indice = Math.max(
+        0,
+        Math.min(sprite.frame_count - 1, Math.floor(emQue / sprite.interval_seconds)),
+      );
+      const coluna = indice % sprite.columns;
+      const linha = Math.floor(indice / sprite.columns);
+      arte = {
+        backgroundImage: `url(${api.spriteUrl(sprite.path)})`,
+        backgroundSize: `${sprite.columns * larguraReal}px ${sprite.rows * altura}px`,
+        backgroundPosition: `-${coluna * larguraReal}px -${linha * altura}px`,
+      };
+    } else if (cenas.length > 0) {
+      /// ⚠️ A cena **mais próxima**, e não a anterior. Com doze cenas num filme
+      /// de 1h40 cada uma cobre ~8 minutos; pegar sempre a anterior faria a
+      /// última célula de cada bloco mostrar imagem de oito minutos atrás. A mais
+      /// próxima erra por metade disso, e erra pros dois lados.
+      const cena = cenas.reduce((a, b) =>
+        Math.abs(b.segundos - emQue) < Math.abs(a.segundos - emQue) ? b : a,
+      );
+      arte = {
+        backgroundImage: `url(${api.artworkUrl(cena.imagem)})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+
+    return (
+      <div
+        key={i}
+        className={visto ? "quadro visto" : "quadro"}
+        style={{ ...arte, width: larguraReal }}
+      />
+    );
+  });
+
+  /// ## A janela do projetor
+  ///
+  /// > «coloque a lente como o percorredor na linha, sem a linha amarela feia
+  /// > que temos no web hoje»
+  ///
+  /// Ela substitui o `knob` e a barra âmbar: um traço marca *uma posição*; uma
+  /// janela com o fotograma dentro diz que a película **está passando por ali**.
+  /// É a peça que faz a tira parecer um projetor lendo filme em vez de uma barra
+  /// com uma marca — e é o mesmo desenho do Android (`Tira.kt`), onde ela nasceu
+  /// pelo mesmo pedido.
+  ///
+  /// ⚠️ **Posicionada por pixel medido, e não por porcentagem.** O centro fica em
+  /// `largura × fração` e a janela recua metade de si mesma; nas pontas ela para
+  /// na borda em vez de vazar. Com `left: %` e `translateX(-50%)` o primeiro e o
+  /// último fotograma ficariam com meia moldura fora da tira.
+  const larguraDaJanela = larguraReal + 8;
+  const centro = largura * Math.max(0, Math.min(1, fracao));
+  const esquerdaDaJanela = Math.max(
+    0,
+    Math.min(largura - larguraDaJanela, centro - larguraDaJanela / 2),
+  );
+
+  return (
+    <div className="tira" style={{ height: altura }} aria-hidden>
+      {celulas}
+      <span className="perfuracoes acima" />
+      <span className="perfuracoes abaixo" />
+      <span
+        className="janela"
+        style={{ left: esquerdaDaJanela, width: larguraDaJanela, height: altura + 6 }}
+      />
+      {/* A lente fica **abaixo** da película porque é de lá que a luz vem: o cone
+          sobe da lente e atravessa o filme, que é o que uma janela de projeção
+          faz. Ela segue o centro exato, e não a moldura — a moldura para nas
+          bordas, a lente não. */}
+      <span className="lente" style={{ left: centro }} />
+    </div>
+  );
+}
+
+/// ⚠️ **O balão também cai nas cenas** — 19/08/2026.
+///
+/// Ele mostrava só o relógio em quase todo filme deste acervo, porque quase
+/// nenhum arquivo tem folha de sprites — e as doze cenas já estavam baixadas
+/// aqui do lado, desenhando a tira. Duas peças olhando pro mesmo dado e só uma
+/// usando é o desperdício que a tira veio corrigir; deixar o balão de fora seria
+/// repetir o erro na peça vizinha.
+///
+/// ⚠️ A precisão continua sendo diferente, e é honesto que seja: a folha dá o
+/// quadro **daquele** segundo; doze cenas dão o quadro mais próximo, que num
+/// filme de 1h40 erra por até ~4 minutos. Por isso a folha tem precedência.
 function ScrubPreview({
   sprite,
+  cenas,
   hover,
   timeline,
 }: {
   sprite: SpriteInfo | null;
+  cenas: Cena[];
   hover: { x: number; time: number };
   timeline: HTMLDivElement | null;
 }) {
@@ -792,7 +1096,23 @@ function ScrubPreview({
   const left = Math.max(half, Math.min(rect.width - half, hover.x - rect.left));
 
   let cell = null;
-  if (sprite && sprite.frame_count > 0) {
+  if (!sprite && cenas.length > 0) {
+    const cena = cenas.reduce((a, b) =>
+      Math.abs(b.segundos - hover.time) < Math.abs(a.segundos - hover.time) ? b : a,
+    );
+    cell = (
+      <div
+        className="scrub-frame"
+        style={{
+          width: 160,
+          height: 90,
+          backgroundImage: `url(${api.artworkUrl(cena.imagem)})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+    );
+  } else if (sprite && sprite.frame_count > 0) {
     const index = Math.max(
       0,
       Math.min(sprite.frame_count - 1, Math.floor(hover.time / sprite.interval_seconds)),

@@ -1084,9 +1084,28 @@ button.ghost {
    contenção pra `fixed` (só pra `absolute`, que aqui não existe). Custa um
    reflow de 8px num elemento, o que é irrelevante, e é seguro por construção em
    vez de seguro por 280ms. */
+/* ⚠️ **`backwards` e não `both`** — 19/08/2026, e é a segunda vez que esta casa
+   tropeça na mesma pedra: o bloco do `.player-top` mais abaixo conta a primeira.
+
+   > «no player cheio o menu superior continua aparecendo e não some»
+
+   Uma animação de `opacity` **em vigor** faz o elemento criar contexto de
+   empilhamento próprio, e com `both` ela continua em vigor depois de terminar —
+   para sempre. O `main.troca` virava então uma caixa fechada, e tudo que fosse
+   `position: fixed` lá dentro ficava preso nela: o player ao vivo, que mora
+   dentro da aba, aparecia **por baixo** do cabeçalho — com `z-index: 100` contra
+   os `30` da barra, e perdendo, porque z-index só compara dentro do mesmo
+   contexto.
+
+   Medido no navegador: `main.troca { animation: none }` e o `elementFromPoint`
+   no topo da tela passa de `HEADER.topbar` para `VIDEO.video`; ao restaurar, o
+   cabeçalho volta pra frente.
+
+   ⚠️ O player de filme nunca teve o defeito porque é desenhado na **raiz** do
+   app, fora da aba — e foi essa diferença que escondeu o problema até agora. */
 main.troca {
   position: relative;
-  animation: odeon-troca 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: odeon-troca 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 @keyframes odeon-troca {
@@ -1961,6 +1980,138 @@ main.troca {
   cursor: pointer;
 }
 
+/* ------------------------------------------------------------ a película
+
+   A timeline com fotogramas — o porte da `Tira` do Android. A régua fina
+   continua existindo por baixo: ela é quem diz o que ESTA sessão alcança e o
+   que já baixou, coisas que a imagem não sabe dizer. */
+.timeline.com-tira {
+  height: 54px;
+  align-items: flex-start;
+}
+
+.tira {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #0b0b0d;
+}
+
+.tira .quadro {
+  height: 100%;
+  flex: 0 0 auto;
+  background-repeat: no-repeat;
+  background-color: #121216;
+  /* O que ainda não passou fica a 34% — a mesma fração do Android. Não é
+     decoração: é a diferença entre "já vi" e "vem por aí" dita sem texto. */
+  opacity: 0.34;
+  transition: opacity var(--ease);
+  border-right: 1px solid rgba(0, 0, 0, 0.55);
+}
+
+.tira .quadro.visto {
+  opacity: 1;
+}
+
+/* As perfurações. Duas fileiras com passo fixo, desenhadas SOBRE as bordas do
+   fotograma — é onde elas ficam numa película de verdade. */
+.perfuracoes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* ⚠️ A perfuração acompanha a altura da tira: 6px numa película de 40 é
+     margem, numa de 28 seria quase metade do fotograma — e aí a fileira de
+     furos passa a competir com a cena em vez de emoldurá-la. */
+  height: var(--perf, 6px);
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.85) 0 4px,
+    transparent 4px 12px
+  );
+}
+
+/* ⚠️ `acima`/`abaixo`, e **não** `topo`/`base`: já existe um `.topo` global — o
+   da caixa 3D da locadora, com `height: var(--d)` e `rotateX(90deg)`. A primeira
+   versão desta tira usou `topo` e a fileira de cima nasceu com **altura zero**,
+   herdando a face de uma caixa de DVD. Nome curto e genérico numa folha de 7 mil
+   linhas é colisão esperando acontecer. */
+.perfuracoes.acima {
+  top: 0;
+}
+
+.perfuracoes.abaixo {
+  bottom: 0;
+}
+
+/* A tira transborda 3px pra baixo: a moldura da janela é 6px mais alta que o
+   fotograma, e sem isto ela nasceria cortada. */
+.tira {
+  overflow: visible;
+}
+
+.tira .quadro:first-child {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+}
+
+/* ## A janela do projetor, no lugar do knob e da barra âmbar
+
+   > «coloque a lente como o percorredor na linha, sem a linha amarela feia»
+
+   ⚠️ **A barra âmbar saiu, e não foi só estética.** Com a película desenhada,
+   ela dizia pela terceira vez o que a tira já diz duas: o revelado contra o
+   apagado marca o progresso, e a janela marca o ponto. Três desenhos para um
+   fato só é o que fazia a linha parecer sobrando — porque estava. */
+.tira .janela {
+  position: absolute;
+  top: -3px;
+  border: 2px solid var(--accent-hot);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow:
+    0 0 18px -2px color-mix(in oklab, var(--accent-hot) 55%, transparent),
+    inset 0 0 12px -4px color-mix(in oklab, var(--accent-hot) 70%, transparent);
+  transition: left 120ms linear;
+}
+
+/* A lente, no pé da janela — de onde a luz sobe. */
+.tira .lente {
+  position: absolute;
+  bottom: -7px;
+  width: 30px;
+  height: 8px;
+  margin-left: -15px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    50% 60% at 50% 50%,
+    var(--accent-hot),
+    color-mix(in oklab, var(--accent-hot) 35%, transparent) 60%,
+    transparent 100%
+  );
+  transition: left 120ms linear;
+}
+
+/* Com tira, a régua fina desce pro rodapé, afina e **perde o âmbar**: ela deixou
+   de ser a timeline e virou a legenda dela — diz só o que a imagem não sabe
+   dizer, que é o que esta sessão alcança e o que já baixou. */
+.timeline.com-tira .track {
+  top: 48px;
+  height: 3px;
+}
+
+.timeline.com-tira:hover .track {
+  height: 3px;
+}
+
+.timeline.com-tira .track.played,
+.timeline.com-tira .knob {
+  display: none;
+}
+
 .track {
   position: absolute;
   height: 5px;
@@ -2014,7 +2165,7 @@ main.troca {
 /* preview de seek: a folha já está no browser, isto é só recorte */
 .scrub-preview {
   position: absolute;
-  bottom: 28px;
+  bottom: 60px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -2165,6 +2316,7 @@ main.troca {
     padding-right: var(--s4);
   }
 
+
   .player-tech,
   .volume {
     display: none;
@@ -2174,6 +2326,36 @@ main.troca {
     right: var(--s4);
     left: var(--s4);
     width: auto;
+  }
+}
+
+/* A tira encolhe junto com a janela.
+
+   ⚠️ **760px e não 900**, e o número não é solto: a altura do fotograma é
+   decidida no componente pela largura **da tira** (< 700px vira 28px de altura),
+   e a tira é a janela menos o respiro lateral do cromo. Com o limiar do CSS em
+   900 os dois discordavam na faixa entre 700 e 900 — a régua fina subia pra cima
+   de uma película que ainda tinha 40px, e o resultado era a barra atravessando
+   os fotogramas. Dois limiares pro mesmo fato têm de falar o mesmo número. */
+@media (max-width: 760px) {
+  .tira {
+    --perf: 4px;
+  }
+
+  .timeline.com-tira {
+    height: 40px;
+  }
+
+  .timeline.com-tira .track {
+    top: 34px;
+  }
+
+  .timeline.com-tira .knob {
+    top: 29px;
+  }
+
+  .scrub-preview {
+    bottom: 48px;
   }
 }
 
@@ -12512,4 +12694,47 @@ a.cur-fonte:focus-visible {
 
 .prateleiras .chip.on .conta {
   color: var(--accent-dim);
+}
+
+/* ------------------------------------------------- o fim do episódio
+
+   O cartão que aparece quando um episódio acaba. Ele **não** avança sozinho —
+   ver o comentário no `Player.tsx`. Fica no canto de baixo, do lado oposto ao
+   cromo do topo, pra não cobrir o último quadro do que acabou de terminar. */
+.fim-do-episodio {
+  position: absolute;
+  right: var(--s5);
+  bottom: 96px;
+  z-index: 4;
+  max-width: 340px;
+  padding: var(--s4);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 12, 14, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7);
+}
+
+.fim-do-episodio .rotulo {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-dim);
+  margin: 0 0 var(--s2);
+}
+
+.fim-do-episodio .titulo {
+  margin: 0 0 var(--s3);
+  font-size: 15px;
+  color: var(--text);
+}
+
+.fim-do-episodio .codigo {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.fim-do-episodio .acoes {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
 }

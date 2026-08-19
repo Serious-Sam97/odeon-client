@@ -271,6 +271,38 @@ export const DEVICE_ID = (() => {
   return id;
 })();
 
+/// Quanto uma tela espera por um pedido antes de dizer que ele não veio.
+///
+/// ## ⚠️ `fetch` sem prazo não é «esperar mais» — é esperar sem fim
+///
+/// Visto na tela em 19/08/2026, na aba do ao vivo: o `/api/live/channels`
+/// pendurou — nem respondeu, nem falhou —, o `Promise.all` nunca assentou e o
+/// `finally` que apaga o «carregando» nunca rodou. A aba ficou na frase de
+/// espera até alguém recarregar a página; o mesmo pedido, medido segundos
+/// depois, voltou em 79ms.
+///
+/// ⚠️ **Ele não é aplicado dentro do `json()`**, e isso é decisão: há rotas
+/// legitimamente lentas — abrir sessão de transcode, as doze cenas de um disco
+/// (~4s na primeira vez), o import de uma lista M3U. Um prazo geral mataria
+/// justamente as que precisam de tempo. Quem usa isto é a **tela que espera pra
+/// desenhar**, e só ela sabe que está segurando a pessoa.
+export const PRAZO_DE_TELA_MS = 12_000;
+
+/// Um pedido com hora pra desistir.
+///
+/// ⚠️ Ele **não cancela** o `fetch` por baixo — as rotas desta casa não recebem
+/// `AbortSignal`, e enfiar um em cada assinatura seria mexer em dezenas de
+/// funções pra resolver um problema de tela. O que ele faz é parar de
+/// **esperar**: o resultado atrasado, se vier, cai no vazio.
+export function comPrazo<T>(promessa: Promise<T>, oQue: string, ms = PRAZO_DE_TELA_MS): Promise<T> {
+  return Promise.race([
+    promessa,
+    new Promise<T>((_, rejeita) =>
+      setTimeout(() => rejeita(new Error(`o servidor não respondeu (${oQue})`)), ms),
+    ),
+  ]);
+}
+
 export interface SpriteInfo {
   media_file_id: string;
   path: string;
@@ -478,6 +510,8 @@ export interface CanalNoAr {
   /** A obra e o arquivo dela: é o que "ver desde o início" toca. */
   work_id: string | null;
   media_file_id: string | null;
+  /** A série, quando o programa é um episódio. Ver `ProgramaDoGuia.collection_id`. */
+  collection_id: string | null;
 }
 
 export interface ProgramaDoGuia {
@@ -495,6 +529,17 @@ export interface ProgramaDoGuia {
   work_id: string | null;
   /** O arquivo dela — o que "ver desde o início" toca. */
   media_file_id: string | null;
+  /** A série, quando o programa é um **episódio**.
+   *
+   * ⚠️ **Ele e o `work_id` são mutuamente exclusivos**, e isso foi medido no
+   * servidor em 19/08/2026: de 255 programas da grade, 96 vinham só com obra,
+   * **59 só com coleção** e **zero com os dois** (os outros 100, com nenhum).
+   * Episódio de série chega com `work_id: null` — e era por isso que o app
+   * tratava um episódio no ar como «programa sem nada atrás», igual a um canal
+   * sem EPG.
+   *
+   * É o mesmo id que a ficha da série consome. */
+  collection_id: string | null;
   lembrete: boolean;
 }
 

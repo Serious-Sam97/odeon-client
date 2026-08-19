@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useLocation, useMatch, useNavigate } from "react-router-dom";
 import AoVivo, { AvisoDePrograma } from "./AoVivo";
 import Collections from "./Collections";
@@ -44,6 +52,7 @@ import {
   type ScrubStatus,
   type Versao,
   type WorkListItem,
+  comPrazo,
 } from "./api";
 
 /// As abas, depois da R36.
@@ -623,17 +632,20 @@ export default function App() {
     try {
       const pendente = api.continueWatching();
       if (f.collection) {
-        const list = await api.works(f);
+        const list = await comPrazo(api.works(f), "episódios");
         setWorks(list);
         setEntries([]);
         setTotal(list.length);
       } else {
-        const list = await api.library(f);
+        const list = await comPrazo(api.library(f), "biblioteca");
         setEntries(list);
         setWorks([]);
         setTotal(list[0]?.total ?? 0);
       }
-      setResume(await pendente);
+      /// ⚠️ A fileira de continuar **não derruba a tela**: ela é enfeite ao lado
+      /// da grade, e um servidor que demorou pra ela não é motivo pra dizer que a
+      /// biblioteca não abriu.
+      setResume(await comPrazo(pendente, "continuar").catch(() => []));
       setError(null);
     } catch (e) {
       if (e instanceof Unauthorized) {
@@ -645,6 +657,19 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+
+  /// O «continuar» que **esta** aba mostra.
+  ///
+  /// A rota `/api/continue` devolve tudo que está pela metade, sem saber de
+  /// abas; quem separa é a tela, com a mesma chave que o resto do app usa pra
+  /// dizer o que é série: `series_title`.
+  const continuarDaAba = useMemo(
+    () =>
+      tab === "series"
+        ? resume.filter((w) => w.series_title)
+        : resume.filter((w) => !w.series_title),
+    [resume, tab],
+  );
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -860,7 +885,19 @@ export default function App() {
         {tab === "mural" && <Mural aoVerPerfil={(quem) => navigate(`/p/${quem}`)} />}
         {tab === "collections" && <Collections onPlay={tocar} />}
 
-        {tab === "live" && <AoVivo isAdmin={isAdmin} onDetails={setDetailsOf} />}
+        {tab === "live" && (
+          <AoVivo
+            isAdmin={isAdmin}
+            onDetails={setDetailsOf}
+            /// ⚠️ **Vai pra aba das séries, e não pra biblioteca**: a ficha é de
+            /// uma série, e o `voltar` dela tem de cair onde séries moram. Levar
+            /// pra `library` faria o caminho de volta desaguar nos filmes.
+            aoVerSerie={(id, titulo) => {
+              setTab("series");
+              setFilters({ collection: id, collectionName: titulo });
+            }}
+          />
+        )}
 
         {(tab === "library" || tab === "series") && (
           <>
@@ -904,11 +941,27 @@ export default function App() {
               aoAbrirRevisao={() => setTab("review")}
             />
 
-            {resume.length > 0 && (
+            {/* ## ⚠️ Cada aba continua **o que ela guarda** — 19/08/2026
+                
+                > «arruma o filtro da aba séries também»
+
+                A grade já vinha filtrada (`?tags=format:série` numa, `tags_not`
+                na outra), mas esta fileira vem de **outra rota** — `/api/continue`,
+                que devolve por obra e não sabe de aba. O resultado era 007 e
+                Resident Evil abrindo a aba das séries, e um episódio de série
+                aparecendo na dos filmes.
+
+                É a mesma correção que o celular fez em 18/08 e pelo mesmo motivo,
+                que está escrito lá: «série começada é assunto da aba das séries».
+
+                ⚠️ Dentro de uma coleção a fileira **some**: ali a pergunta já é
+                outra — a temporada lista os episódios, e um «continuar» genérico
+                por cima disso competiria com a própria lista. */}
+            {continuarDaAba.length > 0 && !filters.collection && (
               <section>
                 <h2 className="section-title">Continuar assistindo</h2>
                 <div className="grid">
-                  {resume.map((w) => (
+                  {continuarDaAba.map((w) => (
                     <Card key={w.id} work={w} onDetails={setDetailsOf} onManage={setManaging} />
                   ))}
                 </div>
@@ -927,6 +980,20 @@ export default function App() {
 
               {loading ? (
                 <p className="muted">carregando…</p>
+              ) : /* ⚠️ **Erro não é acervo vazio** — 19/08/2026. Com a grade sem
+                     nada por causa de um pedido que falhou, a tela dizia «Nada
+                     encontrado · afrouxe os filtros ou rode uma varredura»: manda
+                     a pessoa mexer no que não está quebrado, e esconde que o
+                     problema foi outro. É o mesmo §18 que a aba do ao vivo levou
+                     hoje — não saber é diferente de não ter. */
+              error && mostrando === 0 ? (
+                <div className="empty">
+                  <p>a biblioteca não abriu</p>
+                  <p className="muted">{error}</p>
+                  <button className="chip" onClick={() => { setError(null); setLoading(true); refresh(filtersRef.current); }}>
+                    tentar de novo
+                  </button>
+                </div>
               ) : mostrando === 0 ? (
                 <div className="empty">
                   <p>Nada encontrado.</p>
@@ -1073,6 +1140,10 @@ export default function App() {
             setPlaying(null);
             refresh(filters);
           }}
+          /// ⚠️ Trocar a obra que toca é **aqui**, e não dentro do player: quem
+          /// guarda o que está tocando é esta tela, e um player que trocasse o
+          /// próprio assunto teria duas fontes de verdade sobre a mesma coisa.
+          aoTrocarDeObra={setPlaying}
         />
       )}
     </div>

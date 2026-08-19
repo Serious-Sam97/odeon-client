@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,10 +77,20 @@ import dev.odeon.android.ui.Tipo
 /// ⚠️ **O vermelho é o único do app fora de erro**, e é o da TV: «vermelho aqui
 /// não é erro, é a luz do estúdio — a convenção que toda televisão do mundo já
 /// ensinou».
+/// ⚠️ `ExperimentalMaterial3Api` por causa do `ModalBottomSheet` da folha do
+/// bloco — a mesma anotação que qualquer folha de baixo do Material 3 exige, e
+/// `OptIn` aqui é declaração, não silêncio: quando a API mudar, o compilador
+/// avisa.
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TelaAoVivo(
     modelo: ModeloAoVivo,
     aoSintonizar: (QuadroNoAr, comecarEm: Double) -> Unit,
+    /// Onde um bloco de série desemboca: a **ficha da série**, com as
+    /// temporadas — e não o episódio que está passando.
+    aoVerSerie: (colecaoId: String, titulo: String) -> Unit,
+    /// Onde um bloco casado com obra desemboca.
+    aoVerObra: (obraId: String) -> Unit,
     /// ⚠️ **Canal sem obra casada.** Ele não abre um filme — abre a
     /// **transmissão**, que o ErsatzTV serve com ou sem casamento. É o caminho
     /// que a TV sempre teve e o celular não. Ver `TelaDoCanal`.
@@ -112,6 +125,9 @@ fun TelaAoVivo(
     /// O que a tela tem a dizer sobre o último toque. Hoje só uma coisa: que o
     /// programa não tem arquivo. Antes disso, o toque era mudo.
     var recado by remember { mutableStateOf<String?>(null) }
+
+    /// O bloco da grade que está aberto na folha. `null` é folha fechada.
+    var blocoAberto by remember { mutableStateOf<BlocoDaGrade?>(null) }
 
     /// ⚠️ Voltar do player **apaga o rodinho**. A tela não é destruída ao
     /// navegar (ela é um destino da mesma árvore), então o estado sobrevive à
@@ -263,11 +279,81 @@ fun TelaAoVivo(
                 doOdeon = estado.doOdeon,
                 guia = estado.guia,
                 externos = estado.canais,
+                aoTocarBloco = { blocoAberto = it },
             )
 
             /// O respiro do fim: a barra do facho flutua por cima do conteúdo, e
             /// sem isto o último cartão fica embaixo dos rótulos das abas.
             Spacer(Modifier.height(dev.odeon.android.ui.ALTURA_DA_FILEIRA))
+        }
+    }
+
+    /// ## A folha do bloco — o que aquele retângulo da grade é
+    ///
+    /// ⚠️ Ela existe pra **um** campo que o servidor manda e o app jogava fora:
+    /// o `collection_id`. Um episódio de série no ar chega com `work_id: null` —
+    /// medido, 59 dos 255 blocos da grade —, então o app o tratava como programa
+    /// sem nada atrás. A folha é onde esse id vira destino.
+    ///
+    /// ⚠️ **Ela não sintoniza.** Sintonizar é o gesto do cartão, de um toque só
+    /// (regra de 18/08). Um bloco que também sintonizasse daria à mesma tela dois
+    /// toques com efeitos diferentes — o defeito que aquela regra veio consertar.
+    blocoAberto?.let { bloco ->
+        ModalBottomSheet(
+            onDismissRequest = { blocoAberto = null },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = Cores.fundoElevado,
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                Text(
+                    "${hora(bloco.inicioMs)} – ${hora(bloco.fimMs)}",
+                    style = Tipo.rotulo,
+                    color = Cores.destaqueApagado,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(bloco.titulo, style = MaterialTheme.typography.titleMedium, color = Cores.texto)
+                bloco.subtitulo?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(2.dp))
+                    Text(it, style = Tipo.pilula, color = Cores.textoApagado)
+                }
+                /// ⚠️ A sinopse **só quando existe**: guia de terceiro quase sempre
+                /// manda vazio, e um parágrafo reservado «pro caso de vir» é buraco
+                /// desenhado (§24).
+                bloco.descricao?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Cores.textoApagado,
+                        maxLines = 6,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+                val colecao = bloco.colecaoId
+                val obra = bloco.obraId
+                if (colecao != null) {
+                    TextButton(onClick = {
+                        blocoAberto = null
+                        aoVerSerie(colecao, bloco.titulo)
+                    }) { Text("▸ ver a série", color = Cores.destaque) }
+                } else if (obra != null) {
+                    TextButton(onClick = {
+                        blocoAberto = null
+                        aoVerObra(obra)
+                    }) { Text("▸ ver a ficha", color = Cores.destaque) }
+                } else {
+                    /// ⚠️ **Sem destino, diz que não sabe** — e não some com o
+                    /// bloco nem finge que ele leva a algum lugar. Cem dos 255
+                    /// programas da grade não casam com nada do acervo, e a
+                    /// honestidade aqui é dizer isso em uma linha (§18).
+                    Text(
+                        "este programa não está casado com nada do acervo.",
+                        style = Tipo.pilula,
+                        color = Cores.textoApagado,
+                    )
+                }
+            }
         }
     }
 }
@@ -572,6 +658,7 @@ private fun Programacao(
     doOdeon: dev.odeon.android.dados.GradeDoOdeon?,
     guia: dev.odeon.android.dados.Guia?,
     externos: List<dev.odeon.android.dados.CanalNoAr>,
+    aoTocarBloco: (BlocoDaGrade) -> Unit,
 ) {
     if (agoraMs <= 0) return
     val rolagem = rememberScrollState()
@@ -591,7 +678,14 @@ private fun Programacao(
                 .mapNotNull { p ->
                     val i = emMillis(p.comeca)
                     val f = emMillis(p.termina)
-                    if (i > 0 && f > i) Triple(p.title, i, f) else null
+                    /// ⚠️ A grade da casa **não tem** `collection_id` — medido: ela
+                    /// toca arquivo, e episódio ali é obra. O campo fica nulo, e é
+                    /// verdade, não omissão.
+                    if (i > 0 && f > i) {
+                        BlocoDaGrade(p.title, null, null, i, f, p.obraId, null)
+                    } else {
+                        null
+                    }
                 }
         }
         /// ⚠️ A programação dos externos vem do **guia**, não do canal: o
@@ -603,7 +697,11 @@ private fun Programacao(
             c.name to porCanal[c.id].orEmpty().mapNotNull { p ->
                 val i = emMillis(p.comeca)
                 val f = emMillis(p.termina)
-                if (i > 0 && f > i) Triple(p.title, i, f) else null
+                if (i > 0 && f > i) {
+                    BlocoDaGrade(p.title, p.subtitulo, p.description, i, f, p.obraId, p.colecaoId)
+                } else {
+                    null
+                }
             }
         }
         (daCasa + deFora).filter { it.second.isNotEmpty() }
@@ -649,7 +747,10 @@ private fun Programacao(
 
                 faixas.forEach { (_, blocos) ->
                     Box(Modifier.fillMaxWidth().height(46.dp)) {
-                        blocos.forEach { (titulo, i, f) ->
+                        blocos.forEach { bloco ->
+                            val titulo = bloco.titulo
+                            val i = bloco.inicioMs
+                            val f = bloco.fimMs
                             val de = ((i - inicio) / 60_000f * LARGURA_DO_MINUTO)
                             val ate = ((f - inicio) / 60_000f * LARGURA_DO_MINUTO)
                             if (ate > 0 && de < horas * 60 * LARGURA_DO_MINUTO) {
@@ -667,7 +768,8 @@ private fun Programacao(
                                         .background(
                                             if (noAr) Cores.destaque.copy(alpha = 0.22f)
                                             else Cores.fundoElevado,
-                                        ),
+                                        )
+                                        .clickable { aoTocarBloco(bloco) },
                                     contentAlignment = Alignment.CenterStart,
                                 ) {
                                     Text(
@@ -702,6 +804,31 @@ private fun Programacao(
 /// 1,6dp por minuto — o número da TV, e é ele que faz doze horas caberem em
 /// 1152dp de rolagem.
 private const val LARGURA_DO_MINUTO = 1.6f
+
+/// Um bloco da grade, com o que ele **é** — e não só onde ele fica.
+///
+/// ## ⚠️ Antes daqui a grade era desenho puro
+///
+/// Ela guardava `Triple(título, início, fim)` e descartava o resto: sinopse,
+/// obra casada e, principalmente, o `collection_id` que o servidor manda quando
+/// o programa é episódio de série. Doze horas de programação na tela, e nenhum
+/// dos 59 blocos de série (de 255, medidos em 19/08/2026) levava a lugar nenhum.
+///
+/// ⚠️ **O toque abre uma folha, e não sintoniza.** Sintonizar é o gesto do
+/// cartão, e ele é de um toque só — regra do dono, de 18/08. Um bloco de grade
+/// que sintonizasse faria a mesma tela ter dois toques com efeitos diferentes,
+/// que é o defeito que aquela regra veio consertar.
+data class BlocoDaGrade(
+    val titulo: String,
+    val subtitulo: String?,
+    val descricao: String?,
+    val inicioMs: Long,
+    val fimMs: Long,
+    val obraId: String?,
+    val colecaoId: String?,
+) {
+    val temDestino: Boolean get() = colecaoId != null || obraId != null
+}
 
 /// Como se abre um programa do ao vivo. **Uma regra, para todos os canais.**
 ///

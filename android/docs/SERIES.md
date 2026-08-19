@@ -357,6 +357,29 @@ cor-de-rosa` (1978) e `A Pantera Cor-de-Rosa` (1993) — e ele **não** colide
 porque a comparação é sensível a caixa. É sorte, está escrito, e o pedido do
 `collection_id` fica para o servidor.
 
+### O `collection_id` no ao vivo, medido — 19/08/2026
+
+Ele **existe** e nenhum dos quatro clientes lê. Medido no aparelho, lendo o corpo
+cru das respostas antes do parse (o `ignoreUnknownKeys` do Kotlin faz o app
+engolir campo novo em silêncio, então o modelo não serve de prova):
+
+| rota | tem `collection_id`? | o que os números disseram |
+|---|---|---|
+| `/api/live/channels` | **sim** | 18 canais · 13 com `work_id` · 1 com `collection_id` |
+| `/api/live/guide` | **sim** | 255 programas · 96 só obra · **59 só coleção** · **0 com os dois** · 100 com nenhum |
+| `/api/live/odeon` | não | só `work_id`/`media_file_id` — a grade da casa toca arquivo, e episódio ali é obra |
+
+⚠️ **O par é mutuamente exclusivo.** Episódio de série vem com `collection_id` e
+`work_id: null` — e é por isso que hoje o app trata um episódio no ar como
+«programa sem nada atrás», igual a um canal sem EPG. O `collection_id` é o mesmo
+id que a tela da série já recebe (`ModeloDaSerie(serieId)`), então a ponte é
+direta quando alguém decidir onde ela encosta na tela.
+
+⚠️ **A superfície é que não existe no celular**: a grade da programação é desenho
+puro (os blocos não recebem toque e o `Programacao` descarta tudo menos título,
+início e fim), e o toque do cartão já foi fixado como «um toque e já vai». Sem
+decidir onde a ficha da série é alcançada, consumir o campo não tem onde aparecer.
+
 ### ⚠️ Não foi exercitado na tela, e digo por quê
 
 A conta do emulador tem **29 filmes** começados e **nenhuma série**. Toquei dois

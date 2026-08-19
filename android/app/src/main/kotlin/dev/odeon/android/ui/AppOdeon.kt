@@ -847,6 +847,12 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         TelaAoVivo(
                             modelo = modelo,
+                            /// ⚠️ Vai pra **ficha da série**, com as temporadas — e
+                            /// não pro episódio que está no ar. Quem tocou num bloco
+                            /// da grade estava olhando a programação, não escolhendo
+                            /// um arquivo.
+                            aoVerSerie = { id, titulo -> onde = Onde.Serie(id, titulo) },
+                            aoVerObra = { id -> onde = Onde.Ficha(id) },
                             /// ⚠️ Sem obra casada, **sintoniza o canal** — não
                             /// desiste. Ver `TelaDoCanal`.
                             aoSintonizarDeFora = { canalId, nome ->
@@ -1096,6 +1102,24 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         modelo = modelo,
                         ondeParou = alvo.ondeParou,
                         aoVoltar = voltar,
+                        /// ⚠️ **Quem troca de episódio é a raiz**, e não o player:
+                        /// ela é quem sabe empilhar telas e guardar de onde se
+                        /// veio. Um player que trocasse o próprio assunto teria
+                        /// duas fontes de verdade sobre o que está tocando.
+                        aoTocarProximo = { proximo ->
+                            onde = Onde.Assistindo(
+                                obraId = proximo.id,
+                                arquivoId = proximo.arquivoId ?: "",
+                                titulo = proximo.title,
+                                ondeParou = 0.0,
+                                capaUrl = null,
+                                duracaoEmSegundos = proximo.duracaoEmSegundos,
+                                canalId = null,
+                                canalNome = null,
+                                daSerie = alvo.daSerie,
+                                daSerieTitulo = alvo.daSerieTitulo,
+                            )
+                        },
                         aoAcabar = {
                             val canal = alvo.canalId ?: return@TelaDoPlayer
                             val acabou = alvo.arquivoId

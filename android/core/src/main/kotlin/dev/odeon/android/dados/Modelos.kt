@@ -406,6 +406,14 @@ data class ObraDetalhada(
     @SerialName("position_seconds") val ondeParou: Double = 0.0,
     val finished: Boolean = false,
     val tags: List<Etiqueta> = emptyList(),
+    /// As coleções a que esta obra pertence — a **temporada**, quando é
+    /// episódio, e por ela a série (o `parent_id` da temporada).
+    ///
+    /// ⚠️ O servidor sempre mandou isto; o modelo é que descartava, e é por
+    /// causa dele que «quando um episódio acaba, acaba» era verdade nos quatro
+    /// clientes. Com a temporada na mão, o próximo episódio é uma consulta que
+    /// a casa já sabe fazer (`obras(colecao = …)`).
+    val collections: List<Colecao> = emptyList(),
 )
 
 /// De onde continuar — ou **zero**, quando não há de onde.
@@ -1502,6 +1510,9 @@ data class CanalNoAr(
     /// A obra e o arquivo dela: é o que «ver desde o início» toca.
     @SerialName("work_id") val obraId: String? = null,
     @SerialName("media_file_id") val arquivoId: String? = null,
+    /// A **série**, quando o que está no ar é um episódio. Ver
+    /// `ProgramaDoGuia.colecaoId`.
+    @SerialName("collection_id") val colecaoId: String? = null,
 )
 
 /// Um programa na grade.
@@ -1519,6 +1530,25 @@ data class ProgramaDoGuia(
     val arte: String? = null,
     @SerialName("work_id") val obraId: String? = null,
     @SerialName("media_file_id") val arquivoId: String? = null,
+    /// A série, quando o programa é um **episódio**.
+    ///
+    /// ## ⚠️ Ele e o `work_id` são **mutuamente exclusivos**
+    ///
+    /// Medido no aparelho em 19/08/2026, lendo o corpo cru antes do parse — o
+    /// `ignoreUnknownKeys` desta casa faz o app engolir campo novo em silêncio,
+    /// então o modelo não servia de prova:
+    ///
+    /// | | |
+    /// |---|---|
+    /// | `/api/live/guide` | 255 programas · 96 só obra · **59 só coleção** · **0 com os dois** |
+    /// | `/api/live/channels` | 18 canais · 13 com obra · 1 com coleção |
+    /// | `/api/live/odeon` | **não tem** — a grade da casa toca arquivo, e episódio ali é obra |
+    ///
+    /// ⚠️ Era por isto que um episódio no ar aparecia como «programa sem nada
+    /// atrás», igual a um canal sem EPG: o app procurava `work_id`, achava
+    /// `null`, e concluía que não havia o que abrir. É o mesmo id que a ficha da
+    /// série consome (`ModeloDaSerie(serieId)`).
+    @SerialName("collection_id") val colecaoId: String? = null,
     val lembrete: Boolean = false,
 )
 

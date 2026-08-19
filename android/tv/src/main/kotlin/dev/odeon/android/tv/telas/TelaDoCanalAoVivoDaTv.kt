@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,7 +77,21 @@ fun TelaDoCanalAoVivoDaTv(
     var url by remember(canalId) { mutableStateOf<String?>(null) }
     var erro by remember(canalId) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(canalId) {
+    /// Quantas vezes esta tela já pediu o canal. Mudar de valor **re-sintoniza**.
+    ///
+    /// ⚠️ É o mesmo contador do celular, e chegou aqui pelo mesmo motivo: no ao
+    /// vivo o que costuma ter morrido é a **sessão do servidor**, e nela não se
+    /// volta com `prepare()` — preparar de novo um player apontado pra uma
+    /// playlist que já não existe falha na hora, de novo. Pedir o canal outra vez
+    /// cobre sessão caída e rede caída com um gesto só.
+    var tentativa by remember(canalId) { mutableIntStateOf(0) }
+
+    LaunchedEffect(canalId, tentativa) {
+        /// ⚠️ Limpar antes de pedir: sem isto o recado da tentativa anterior fica
+        /// na tela enquanto a nova está a caminho, e de longe — que é como se olha
+        /// uma TV — nada parece ter acontecido ao apertar o botão.
+        erro = null
+        url = null
         val aberto = modelo.sintonizar(canalId)
         val playlist = aberto?.let { modelo.playlist(it.urlDaPlaylist) }
         if (playlist == null) {
@@ -89,8 +104,16 @@ fun TelaDoCanalAoVivoDaTv(
     BackHandler { aoSair() }
 
     if (erro != null) {
+        /// ⚠️ **Aqui havia só «voltar»**, e era uma saída sem porta de volta: numa
+        /// sala, canal que não abriu por soluço de rede é o caso comum, e a única
+        /// alternativa oferecida era desistir do canal. Agora a primeira tecla é
+        /// tentar — que é o que a pessoa faria de qualquer jeito, zapeando pra
+        /// fora e pra dentro.
         Recado(titulo = "não deu pra sintonizar", detalhe = erro, modifier = modifier) {
-            BotaoDaSala("voltar", aoSair, principal = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                BotaoDaSala("tentar de novo", { tentativa++ }, principal = true)
+                BotaoDaSala("voltar", aoSair)
+            }
         }
         return
     }
@@ -162,11 +185,19 @@ fun TelaDoCanalAoVivoDaTv(
             /// ⚠️ Sem código de erro na frase: num canal externo a causa quase
             /// sempre está do outro lado da internet, e um número aqui só daria
             /// a impressão de que há o que consertar deste lado.
-            detalhe = "o canal saiu do ar ou a fonte parou de responder.",
+            detalhe = "o canal saiu do ar, a fonte parou de responder, ou a rede caiu.",
             modifier = modifier,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                BotaoDaSala("tentar de novo", { falhou = false; player?.prepare() }, principal = true)
+                /// ⚠️ **Era `player?.prepare()`, e trocou por re-sintonizar** —
+                /// 19/08/2026. `prepare()` refaz o pedido da **mesma** playlist, e
+                /// quando a sessão do servidor caiu essa playlist não existe mais:
+                /// o botão falhava na hora, sempre, e o recado voltava igual — o
+                /// pior tipo de botão, o que parece uma saída e não é.
+                ///
+                /// Re-sintonizar pede o canal de novo: sessão nova quando a antiga
+                /// morreu, mesmo caminho refeito quando o que caiu foi a rede.
+                BotaoDaSala("tentar de novo", { falhou = false; tentativa++ }, principal = true)
                 BotaoDaSala("voltar", aoSair)
             }
         }

@@ -74,6 +74,15 @@ data class EstadoDoPlayer(
     /// A folha de sprites do preview de seek, quando o servidor já gerou a
     /// desta obra. `null` é normal e não é falha — o player só degrada pra um
     /// arrasto sem miniatura.
+    /// O episódio seguinte, quando o que está tocando é episódio e existe um.
+    ///
+    /// ## ⚠️ «Quando um episódio acaba, acaba» — e acabava mesmo
+    ///
+    /// `grep proximoEpisodio` dava **zero** nos quatro clientes até 19/08/2026:
+    /// terminar o `S01E01` devolvia à ficha, e quem quisesse o `S01E02` ia
+    /// procurá-lo na grade. Não precisou de rota nova — o `/api/works/{id}` já
+    /// devolvia as coleções da obra, e o modelo é que as descartava.
+    val proximoEpisodio: dev.odeon.android.dados.ObraDaLista? = null,
     val folha: FolhaDeSprites? = null,
     val urlDaFolha: String? = null,
     /// ## As cenas do filme, pra encher a tira **sem depender de job nenhum**
@@ -516,6 +525,7 @@ class ModeloDoPlayer(
     init {
         preparar(paraCast = false)
         pedirFolhaDeSprites()
+        pedirProximoEpisodio()
     }
 
     /// ## ⚠️ Este modelo vive mais que a tela, e é daí que vinha o defeito
@@ -635,6 +645,36 @@ class ModeloDoPlayer(
     /// ainda não tem preview" seriam a mesma tela em branco.
     /// A URL de uma imagem de cena. Mesmo caminho da arte do resto do app.
     fun arteDaCena(caminho: String): String? = odeon.urlDaArte(caminho)
+
+    /// Procura o episódio seguinte — e **só** quando o que toca é episódio.
+    ///
+    /// ⚠️ Filme não tem próximo, e perguntar por coleção de tudo que abre seriam
+    /// duas consultas por sessão pra descobrir que não há resposta.
+    ///
+    /// ⚠️ **Falha em silêncio, de propósito.** O próximo episódio é um
+    /// oferecimento; um recado de erro sobre algo que ninguém pediu seria ruído
+    /// por cima do filme que a pessoa está vendo (§8b ao contrário).
+    private fun pedirProximoEpisodio() {
+        viewModelScope.launch {
+            runCatching {
+                val ficha = odeon.obra(obraId)
+                if (ficha.episodio == null) return@launch
+                val temporada = ficha.collections.firstOrNull { it.kind == "season" }
+                    ?: return@launch
+                val irmaos = odeon.obras(limite = 200, filtros = dev.odeon.android.dados.Filtros(colecao = temporada.id))
+                val seguinte = irmaos
+                    .filter { (it.episodio ?: 0) > (ficha.episodio ?: 0) }
+                    .minByOrNull { it.episodio ?: Int.MAX_VALUE }
+                    ?: return@launch
+                android.util.Log.i(
+                    "Odeon",
+                    "próximo episódio de $obraId: ${seguinte.title} " +
+                        "(S${ficha.temporada}E${seguinte.episodio})",
+                )
+                _estado.update { it.copy(proximoEpisodio = seguinte) }
+            }
+        }
+    }
 
     private fun pedirFolhaDeSprites() {
         /// ## As cenas, em paralelo com a folha

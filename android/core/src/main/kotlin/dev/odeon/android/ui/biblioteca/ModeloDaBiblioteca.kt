@@ -169,16 +169,31 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
     /// e a paginação voltam a fechar. O corte na tela sai junto.
     fun semSéries() {
         viewModelScope.launch {
-            if (_estado.value.prateleiras.isEmpty()) carregarPrateleiras()
-            val fora = _estado.value.prateleiras
-                .filter { it.value.startsWith("série") || it.value.startsWith("anime") }
-                .map { it.chave }
-            if (fora.isEmpty()) return@launch
-            _estado.update {
-                it.copy(filtros = it.filtros.copy(excluindo = fora), carregando = true)
+            /// ⚠️ **A mesma insistência da aba das séries**, e pela metade do
+            /// mesmo motivo: sem as etiquetas não há o que excluir, e a aba dos
+            /// filmes passa a mostrar as 5.143 séries no meio dos filmes. O
+            /// sintoma é mais discreto que o da irmã — ninguém escreve «todas as
+            /// séries» aqui —, e por isso mereceria menos confiança, não mais.
+            ///
+            /// ⚠️ Aqui **não** se cancela a consulta do `init` antes da hora: a
+            /// aba dos filmes sem exclusão ainda é a biblioteca inteira, que é
+            /// uma verdade aproximada; a das séries sem prateleira é uma mentira
+            /// (007 sob o rótulo «séries»). As duas esperas não são iguais.
+            repeat(3) { tentativa ->
+                if (_estado.value.prateleiras.isEmpty()) runCatching { carregarPrateleiras() }
+                val fora = _estado.value.prateleiras
+                    .filter { it.value.startsWith("série") || it.value.startsWith("anime") }
+                    .map { it.chave }
+                if (fora.isNotEmpty()) {
+                    _estado.update {
+                        it.copy(filtros = it.filtros.copy(excluindo = fora), carregando = true)
+                    }
+                    trabalhoDaBusca?.cancel()
+                    trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
+                    return@launch
+                }
+                delay(500L * (tentativa + 1))
             }
-            trabalhoDaBusca?.cancel()
-            trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
         }
     }
 
@@ -191,12 +206,51 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
     /// em paralelo com a primeira página. Fixar «a etiqueta cujo valor começa
     /// com série» **antes** dela chegar fixaria em nada — e a aba abriria com o
     /// acervo inteiro por um piscar, que é pior do que abrir vazia.
+    /// ## ⚠️ Ela **cancela a consulta sem filtro antes de perguntar** — 19/08/2026
+    ///
+    /// Reproduzido no emulador: a aba abriu escrevendo `TODAS AS SÉRIES 8333`
+    /// com uma grade de 007 — **o mesmo sintoma que a folha do `primeiraPagina`
+    /// já descrevia em 18/08**, e que aquele conserto não fechou por inteiro.
+    ///
+    /// O que faltava: cancelar era a primeira coisa que `escolherPrateleira`
+    /// fazia, mas ela só roda **depois** de as etiquetas chegarem. Enquanto a
+    /// pergunta «quais formatos existem?» viaja, a consulta sem filtro — do
+    /// `init` — segue viva, e num servidor ocupado ela chega primeiro e pinta o
+    /// acervo inteiro sob o rótulo das séries.
+    ///
+    /// ⚠️ E havia o caso pior, que é silencioso: se as etiquetas **não** vêm
+    /// (rota lenta, 500, lista vazia), o `serie == null` desistia sem dizer nada
+    /// e a aba ficava mostrando o acervo inteiro **para sempre**, chamando filme
+    /// de série. Agora ela insiste três vezes e, se ainda assim não souber, diz
+    /// que não sabe — que é o §18 desta casa: não saber é diferente de não ter.
     fun sóSéries() {
+        trabalhoDaBusca?.cancel()
+        _estado.update { it.copy(carregando = true, erro = null) }
         viewModelScope.launch {
-            if (_estado.value.prateleiras.isEmpty()) carregarPrateleiras()
-            val serie = _estado.value.prateleiras.firstOrNull { it.value.startsWith("série") }
-            if (serie == null) return@launch
-            escolherPrateleira(serie.chave)
+            repeat(3) { tentativa ->
+                if (_estado.value.prateleiras.isEmpty()) runCatching { carregarPrateleiras() }
+                val serie = _estado.value.prateleiras.firstOrNull { it.value.startsWith("série") }
+                if (serie != null) {
+                    /// ⚠️ `escolherPrateleira` volta na hora quando a chave já é a
+                    /// mesma — e aqui isso deixaria a tela girando pra sempre,
+                    /// porque a busca que existia foi cancelada acima. Quando ela
+                    /// não vai buscar, buscamos nós.
+                    if (_estado.value.filtros.prateleira == serie.chave) {
+                        trabalhoDaBusca?.cancel()
+                        trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
+                    } else {
+                        escolherPrateleira(serie.chave)
+                    }
+                    return@launch
+                }
+                delay(500L * (tentativa + 1))
+            }
+            _estado.update {
+                it.copy(
+                    carregando = false,
+                    erro = "não deu pra separar as séries: o servidor não disse quais formatos existem.",
+                )
+            }
         }
     }
 

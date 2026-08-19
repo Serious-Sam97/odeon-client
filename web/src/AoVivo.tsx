@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
+  comPrazo,
   type CanalAberto,
   type CanalNoAr,
   type Guia,
@@ -11,6 +12,7 @@ import { ligarHls } from "./hls";
 import { useArrastoDeFileira } from "./arrasto";
 
 const RECARREGA_MS = 60_000;
+
 /// Quanto o mouse pode ficar parado antes do cromo sumir.
 const OCIOSO_MS = 3000;
 
@@ -33,12 +35,16 @@ function hhmm(iso: string): string {
 export default function AoVivo({
   isAdmin,
   onDetails,
+  aoVerSerie,
 }: {
   isAdmin: boolean;
   /// Abre o cartaz de uma obra do acervo. R39: é o que o bloco de um canal da
   /// casa passou a fazer — ele aponta pra uma obra, que é mais do que um
   /// programa de IPTV tem.
   onDetails: (workId: string) => void;
+  /// Abre a **ficha da série** de um programa que é episódio. Ver
+  /// `ProgramaDoGuia.collection_id`.
+  aoVerSerie: (collectionId: string, titulo: string) => void;
 }) {
   const arrastar = useArrastoDeFileira();
   const [canais, setCanais] = useState<CanalNoAr[]>([]);
@@ -62,11 +68,11 @@ export default function AoVivo({
   const carregar = useCallback(async () => {
     try {
       const [c, g, o, l] = await Promise.all([
-        api.liveChannels(),
-        api.liveGuide(JANELA_H),
-        api.liveOdeon(JANELA_H).catch(() => null),
+        comPrazo(api.liveChannels(), "canais"),
+        comPrazo(api.liveGuide(JANELA_H), "grade"),
+        comPrazo(api.liveOdeon(JANELA_H), "canais da casa").catch(() => null),
         // A lista de agendamentos não derruba a aba: sem ela a grade continua.
-        api.reminders().catch(() => []),
+        comPrazo(api.reminders(), "agendamentos").catch(() => []),
       ]);
       setCanais(c);
       setGuia(g);
@@ -185,6 +191,28 @@ export default function AoVivo({
 
   if (loading) return <p className="muted">acendendo a ilha…</p>;
 
+  /// ⚠️ **Erro tem tela própria, e não o texto de acervo vazio.** Antes daqui,
+  /// um servidor que não respondeu caía no «Nenhum canal ainda · peça pro
+  /// administrador cadastrar uma fonte IPTV» — que manda a pessoa arrumar o que
+  /// não está quebrado. Não saber é diferente de não ter (§18).
+  if (erro && pistas.length === 0) {
+    return (
+      <div className="curadoria">
+        <div className="strip primeira">
+          <h2>Ao vivo</h2>
+          <span className="rule" />
+        </div>
+        <div className="empty">
+          <p>o ao vivo não abriu</p>
+          <p className="muted">{erro}</p>
+          <button className="chip" onClick={() => { setErro(null); setLoading(true); carregar(); }}>
+            tentar de novo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (pistas.length === 0) {
     return (
       <div className="curadoria">
@@ -298,6 +326,7 @@ export default function AoVivo({
         <ModalPrograma
           programa={detalhe}
           canal={canais.find((c) => c.id === detalhe.channel_id) ?? null}
+          aoVerSerie={aoVerSerie}
           onFechar={() => setDetalhe(null)}
           onMudou={carregar}
         />
@@ -837,9 +866,12 @@ function PlayerAoVivo({
   }, [zapear]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  /// A casca que vai pra tela cheia — a mesma peça que o player de filme tem, e
+  /// que aqui **faltava**: dava pra assistir um canal a noite inteira sem jeito
+  /// de tirar o navegador da frente, nem por botão nem por tecla.
+  const cascaRef = useRef<HTMLDivElement>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [volume, setVolume] = useState(1);
-  const [tocando, setTocando] = useState(false);
   const [relogio, setRelogio] = useState(() => new Date());
   const [cromo, setCromo] = useState(true);
   const ocioso = useRef<number | undefined>(undefined);
@@ -878,11 +910,22 @@ function PlayerAoVivo({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onFechar();
-      if (e.key === " ") {
-        e.preventDefault();
-        const v = videoRef.current;
-        if (v) (v.paused ? v.play() : v.pause());
+      /// `f` como no player de filme — a mesma tecla pro mesmo gesto.
+      if (e.key === "f") {
+        document.fullscreenElement
+          ? void document.exitFullscreen()
+          : void cascaRef.current?.requestFullscreen?.().catch(() => {});
       }
+      /// ⚠️ **O espaço pausava, e não pausa mais** — 19/08/2026.
+      ///
+      /// > «o ideal é ter aquele player ao vivo que não te deixa pausar nem nada»
+      ///
+      /// É a regra que a TV e o celular já seguem: num canal não há transporte,
+      /// porque pausar não pausa a transmissão. O que o espaço fazia era parar
+      /// **a sua tela** enquanto o programa seguia sem você — e depois devolvia
+      /// você a um ponto que já não é o que está no ar.
+      ///
+      /// ⚠️ O `Escape` fica: sair do canal é a única coisa que um canal aceita.
       acordar();
     };
     window.addEventListener("keydown", onKey);
@@ -901,6 +944,7 @@ function PlayerAoVivo({
 
   return (
     <div
+      ref={cascaRef}
       className={cromo ? "player" : "player idle"}
       style={{ "--accent-work": "#e0b062" } as React.CSSProperties}
       onMouseMove={acordar}
@@ -909,7 +953,18 @@ function PlayerAoVivo({
 
       <div className="player-stage">
         <video ref={videoRef} className="video" autoPlay crossOrigin="anonymous"
-          onPlay={() => setTocando(true)} onPause={() => setTocando(false)}
+          /// ⚠️ **Pausou por fora? Volta.**
+          ///
+          /// Tirar o botão de pausa não basta: a tecla de mídia do teclado, o
+          /// menu de contexto do próprio `<video>` e o modo janelinha do
+          /// navegador pausam sem passar por nós — e aí a pessoa ficaria com uma
+          /// transmissão congelada **e sem botão nenhum pra retomar**, que é pior
+          /// que o botão que saiu.
+          ///
+          /// ⚠️ Só o evento `pause` dispara isto, e é de propósito: engasgo de
+          /// rede levanta `waiting`, não `pause`. Se fosse pelos dois, um canal
+          /// travado viraria um laço de `play()` contra um buffer vazio.
+          onPause={(e) => { void e.currentTarget.play().catch(() => {}); }}
           // Acabou antes da hora marcada: INTERVALO, não emenda.
           //
           // Emendar no próximo adiantaria o canal em relação à própria grade,
@@ -997,16 +1052,15 @@ function PlayerAoVivo({
         </p>
 
         <div className="control-row">
-          <button
-            className="icon big"
-            onClick={() => {
-              const v = videoRef.current;
-              if (v) (v.paused ? v.play() : v.pause());
-            }}
-            title="pausar (a transmissão continua)"
-          >
-            {tocando ? "❚❚" : "▶"}
-          </button>
+          {/* ⚠️ **Aqui havia um botão de pausa**, com o título «pausar (a
+              transmissão continua)» — a própria dica admitindo que o botão não
+              faz o que o desenho dele promete. Saiu em 19/08/2026, junto com o
+              atalho do espaço.
+
+              O que fica é o que um canal aceita: sair dele, saber que horas são,
+              e o volume. **Volume não é transporte** — ele não mente sobre o
+              tempo, e num computador não há tecla de volume dedicada como no
+              controle da sala. */}
           <button className="player-btn" onClick={onFechar}>
             canais
           </button>
@@ -1045,6 +1099,18 @@ function PlayerAoVivo({
               }}
             />
           </div>
+
+          <button
+            className="icon"
+            title="tela cheia (f)"
+            onClick={() =>
+              document.fullscreenElement
+                ? void document.exitFullscreen()
+                : void cascaRef.current?.requestFullscreen?.().catch(() => {})
+            }
+          >
+            ⛶
+          </button>
         </div>
       </div>
     </div>
@@ -1153,10 +1219,12 @@ type FonteLista = Awaited<ReturnType<typeof api.liveSources>>[number];
 function ModalPrograma({
   programa,
   canal,
+  aoVerSerie,
   onFechar,
   onMudou,
 }: {
   programa: ProgramaDoGuia;
+  aoVerSerie: (collectionId: string, titulo: string) => void;
   canal: CanalNoAr | null;
   onFechar: () => void;
   onMudou: () => void;
@@ -1259,6 +1327,25 @@ function ModalPrograma({
               Esta obra está na sua biblioteca — dá pra assistir do começo em vez de
               pegar no meio.
             </p>
+          )}
+
+          {/* ## ⚠️ A ponte que faltava: episódio no ar → ficha da série
+              
+              O servidor manda `collection_id` no lugar do `work_id` quando o
+              programa é um episódio — medido em 19/08/2026: 59 dos 255 blocos da
+              grade são assim, e **nenhum** traz os dois campos. Sem consumir isto,
+              um episódio no ar era «programa sem nada atrás», igual a um canal sem
+              EPG: a tela sabia o nome e não sabia chegar em lugar nenhum.
+
+              ⚠️ O texto diz **série**, e não «obra»: o destino é a ficha da série
+              inteira — com as temporadas —, e não o episódio que está passando. */}
+          {programa.collection_id && (
+            <button
+              className="play pequeno"
+              onClick={() => aoVerSerie(programa.collection_id!, programa.title)}
+            >
+              ▸ ver a série
+            </button>
           )}
 
           <div className="modal-acoes">

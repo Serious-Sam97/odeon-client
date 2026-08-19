@@ -12,6 +12,9 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
+import dev.odeon.android.ui.Tipo
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -89,8 +92,20 @@ fun TelaDoPlayer(
     /// O arquivo **acabou**. Só interessa a quem veio de um canal: a TV já tinha
     /// isto, e é o que separa «tocar um arquivo» de «ficar num canal».
     aoAcabar: () -> Unit = {},
+    /// Tocar o episódio seguinte. Quem sabe navegar é a raiz; esta tela só
+    /// oferece.
+    aoTocarProximo: (dev.odeon.android.dados.ObraDaLista) -> Unit = {},
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
+
+    /// O cartão do próximo episódio está na tela?
+    ///
+    /// ⚠️ Ele **não avança sozinho**, e é decisão de desenho: o que uma sala de
+    /// cinema faz quando o filme acaba é acender a luz, não emendar outro —
+    /// e emendar sozinho é o gesto que faz alguém acordar às três da manhã no
+    /// episódio sete. A próxima sessão é oferecida; quem decide é quem assiste.
+    var acabou by remember(estado.arquivoId) { mutableStateOf(false) }
+
 
     /// ## ⚠️ As duas pontas do ciclo de vida da sessão moram aqui
     ///
@@ -174,7 +189,15 @@ fun TelaDoPlayer(
                 legendaEscolhida = legendaEscolhida,
                 aoEscolherLegenda = { legendaEscolhida = it },
                 aoVoltar = aoVoltar,
-                aoAcabar = aoAcabar,
+                /// ⚠️ **O `acabou` é levantado aqui, e não lá dentro**: quem
+                /// guarda o estado do cartão é esta tela, e o `Reprodutor` recebe
+                /// `Boolean` — um `val`. A tentativa de escrever de lá não
+                /// compilava, e o compilador estava certo: dois donos do mesmo
+                /// estado é o defeito que este projeto já pagou noutras telas.
+                aoAcabar = { acabou = true; aoAcabar() },
+                acabou = acabou,
+                aoFecharOCartao = { acabou = false },
+                aoTocarProximo = aoTocarProximo,
             )
         }
     }
@@ -346,6 +369,11 @@ private fun Reprodutor(
     aoVoltar: () -> Unit,
     /// O arquivo acabou — repassado de cima; ver a folha no `TelaDoPlayer`.
     aoAcabar: () -> Unit,
+    /// O cartão do próximo episódio está na tela? Estado de cima, porque quem
+    /// escuta o fim do arquivo é o `TelaDoPlayer`.
+    acabou: Boolean,
+    aoFecharOCartao: () -> Unit,
+    aoTocarProximo: (dev.odeon.android.dados.ObraDaLista) -> Unit,
 ) {
     val contexto = LocalContext.current
     val app = contexto.applicationContext as dev.odeon.android.OdeonApp
@@ -739,6 +767,53 @@ private fun Reprodutor(
 
     Box(Modifier.fillMaxSize()) {
         Superficie(player)
+
+        /// ## O cartão do próximo episódio
+        ///
+        /// ⚠️ Ele fica **no canto de baixo**, e não no meio: o último quadro do
+        /// que acabou de terminar ainda é a imagem na tela, e cobri-la com um
+        /// cartaz seria trocar o fim do episódio por um anúncio do seguinte.
+        ///
+        /// ⚠️ **Só aparece com próximo de verdade.** Sem episódio seguinte não
+        /// há cartão — em vez de um cartão vazio ou um botão que não leva a lugar
+        /// nenhum (§24).
+        estado.proximoEpisodio?.takeIf { acabou }?.let { proximo ->
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .widthIn(max = 320.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Cores.fundoElevado.copy(alpha = 0.94f))
+                    .padding(16.dp),
+            ) {
+                Text("acabou · a seguir", style = Tipo.rotulo, color = Cores.destaqueApagado)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    buildString {
+                        proximo.temporada?.let { t ->
+                            proximo.episodio?.let { e ->
+                                append("S%02dE%02d · ".format(t, e))
+                            }
+                        }
+                        append(proximo.title)
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Cores.texto,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { aoFecharOCartao(); aoTocarProximo(proximo) }) {
+                        Text("▸ próximo episódio", color = Cores.destaque)
+                    }
+                    TextButton(onClick = aoFecharOCartao) {
+                        Text("ficar aqui", color = Cores.textoApagado)
+                    }
+                }
+            }
+        }
 
         /// O grão, sobre o filme inteiro e o tempo todo.
         ///

@@ -1859,9 +1859,28 @@ anúncio do seguinte.
 | | |
 |---|---|
 | **web** | ponta a ponta: `Piloto` acabou → cartão `S01E02 · A Lâmpada` → tocando o seguinte |
-| **celular** | **metade**: o log mostra `próximo episódio de …: Lista de Desejos (S1E3)` ao abrir o S01E02. O **cartão** eu não vi — ele exige um episódio chegando ao fim, e não consegui dirigir o cromo do player até lá pelo emulador |
+| **celular** | ponta a ponta, **depois de um defeito que o dono pegou** — ver abaixo |
 | **TV e iOS** | não tocados |
 
-⚠️ Fica escrito como está: no celular, a busca do próximo está exercitada e o
-desenho do cartão não. Quando alguém terminar um episódio no aparelho, é isso que
-precisa ser olhado.
+### ⚠️ O cartão aparecia e o toque não chegava nele
+
+> «no celular o cartão do próximo ep não tá funcionando via toque, só aparece o
+> gui do player»
+
+Ele nasceu logo depois da `Superficie`, que é a ordem em que a gente **pensa** a
+cena — filme atrás, cartaz na frente — e é o contrário da ordem em que o Compose
+**entrega toque**: num `Box`, quem vem depois desenha por cima e recebe o dedo
+primeiro. O `Controles`, que é o último filho, tem um `detectTapGestures` cobrindo
+a tela inteira pra mostrar e esconder o cromo — então o toque no botão do cartão
+virava «mostrar o cromo», que foi exatamente o relato.
+
+⚠️ **A árvore de acessibilidade mentia a favor**: o `uiautomator` mostrava o botão
+como `clickable=true`, no lugar certo, com o tamanho certo. Ele estava lá; o que
+não chegava nele era o dedo. Ver na árvore não é o mesmo que tocar.
+
+⚠️ E este é o tipo de defeito que **passa em qualquer verificação que não seja o
+dedo**: compila, aparece na tela, aparece na árvore, e não funciona.
+
+**Verificado depois do conserto**: deixei o `Piloto` acabar sozinho (2:40 de
+espera), o cartão apareceu com `S01E02 · A Lâmpada`, e o toque levou pro episódio
+seguinte — `A Lâmpada`, 0:26, faltam 21:05.

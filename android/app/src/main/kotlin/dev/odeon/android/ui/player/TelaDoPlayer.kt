@@ -768,52 +768,6 @@ private fun Reprodutor(
     Box(Modifier.fillMaxSize()) {
         Superficie(player)
 
-        /// ## O cartão do próximo episódio
-        ///
-        /// ⚠️ Ele fica **no canto de baixo**, e não no meio: o último quadro do
-        /// que acabou de terminar ainda é a imagem na tela, e cobri-la com um
-        /// cartaz seria trocar o fim do episódio por um anúncio do seguinte.
-        ///
-        /// ⚠️ **Só aparece com próximo de verdade.** Sem episódio seguinte não
-        /// há cartão — em vez de um cartão vazio ou um botão que não leva a lugar
-        /// nenhum (§24).
-        estado.proximoEpisodio?.takeIf { acabou }?.let { proximo ->
-            Column(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(20.dp)
-                    .widthIn(max = 320.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Cores.fundoElevado.copy(alpha = 0.94f))
-                    .padding(16.dp),
-            ) {
-                Text("acabou · a seguir", style = Tipo.rotulo, color = Cores.destaqueApagado)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    buildString {
-                        proximo.temporada?.let { t ->
-                            proximo.episodio?.let { e ->
-                                append("S%02dE%02d · ".format(t, e))
-                            }
-                        }
-                        append(proximo.title)
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Cores.texto,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { aoFecharOCartao(); aoTocarProximo(proximo) }) {
-                        Text("▸ próximo episódio", color = Cores.destaque)
-                    }
-                    TextButton(onClick = aoFecharOCartao) {
-                        Text("ficar aqui", color = Cores.textoApagado)
-                    }
-                }
-            }
-        }
 
         /// O grão, sobre o filme inteiro e o tempo todo.
         ///
@@ -896,6 +850,70 @@ private fun Reprodutor(
             aoMudarVolume = { mudarVolume(contexto, it, acumuladorDeVolume) },
             aoTerminarGesto = { acumuladorDeVolume[0] = -1f },
         )
+
+        /// ## O cartão do próximo episódio
+        ///
+        /// ## ⚠️ Ele é o **último filho** do `Box`, e isso não é arrumação
+        ///
+        /// > «no celular o cartão do próximo ep não tá funcionando via toque, só
+        /// > aparece o gui do player»
+        ///
+        /// Ele nasceu logo depois da `Superficie`, que é a ordem em que a gente
+        /// pensa a cena — filme atrás, cartaz na frente — e é **o contrário** da
+        /// ordem que o Compose usa pra entregar toque: num `Box`, quem vem
+        /// depois desenha por cima **e recebe o dedo primeiro**. O `Controles`,
+        /// que é o último, tem um `detectTapGestures` cobrindo a tela inteira
+        /// pra mostrar e esconder o cromo — então o toque no botão do cartão
+        /// virava «mostrar o cromo», que foi exatamente o relato.
+        ///
+        /// ⚠️ A árvore de acessibilidade **mentia a favor**: o `uiautomator`
+        /// mostrava o botão como `clickable=true` no lugar certo. Ele estava lá;
+        /// o que não chegava nele era o toque.
+        ///
+        /// ⚠️ Ele fica **no canto de baixo**, e não no meio: o último quadro do
+        /// que acabou de terminar ainda é a imagem na tela, e cobri-la com um
+        /// cartaz seria trocar o fim do episódio por um anúncio do seguinte.
+        ///
+        /// ⚠️ **Só aparece com próximo de verdade.** Sem episódio seguinte não
+        /// há cartão — em vez de um cartão vazio ou um botão que não leva a lugar
+        /// nenhum (§24).
+        estado.proximoEpisodio?.takeIf { acabou }?.let { proximo ->
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .widthIn(max = 320.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Cores.fundoElevado.copy(alpha = 0.94f))
+                    .padding(16.dp),
+            ) {
+                Text("acabou · a seguir", style = Tipo.rotulo, color = Cores.destaqueApagado)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    buildString {
+                        proximo.temporada?.let { t ->
+                            proximo.episodio?.let { e ->
+                                append("S%02dE%02d · ".format(t, e))
+                            }
+                        }
+                        append(proximo.title)
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Cores.texto,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { aoFecharOCartao(); aoTocarProximo(proximo) }) {
+                        Text("▸ próximo episódio", color = Cores.destaque)
+                    }
+                    TextButton(onClick = aoFecharOCartao) {
+                        Text("ficar aqui", color = Cores.textoApagado)
+                    }
+                }
+            }
+        }
     }
 }
 

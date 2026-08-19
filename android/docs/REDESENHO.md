@@ -1881,6 +1881,14 @@ não chegava nele era o dedo. Ver na árvore não é o mesmo que tocar.
 ⚠️ E este é o tipo de defeito que **passa em qualquer verificação que não seja o
 dedo**: compila, aparece na tela, aparece na árvore, e não funciona.
 
-**Verificado depois do conserto**: deixei o `Piloto` acabar sozinho (2:40 de
-espera), o cartão apareceu com `S01E02 · A Lâmpada`, e o toque levou pro episódio
-seguinte — `A Lâmpada`, 0:26, faltam 21:05.
+**Verificado depois do conserto**, os dois botões:
+
+| toque | o que aconteceu |
+|---|---|
+| `▸ próximo episódio` | `Piloto` deixado acabar sozinho (2:40 de espera) → cartão `S01E02 · A Lâmpada` → tocando `A Lâmpada`, 0:26, faltam 21:05 |
+| `ficar aqui` | em `Lista de Desejos`, cartão `S01E04 · Nova Tecnologia` → o cartão sumiu e o player **ficou** onde estava (20:59), sem avançar |
+
+⚠️ E uma armadilha do próprio teste, que vale pra quem for repetir: **tocar perto
+da borda direita não é tocar na tira**. Um toque em `x=1045` de 1080 caiu na faixa
+do gesto de voltar do sistema e mandou o app pro fundo — parecia defeito do app, e
+era o Android fazendo o que ele faz. A `x=950` o salto funciona.

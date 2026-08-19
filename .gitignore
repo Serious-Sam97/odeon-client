@@ -31,3 +31,6 @@ clients/iosApp/build/
 .DS_Store
 .idea/
 .vscode/
+
+# Config de sessão do Claude Code — é da máquina, não do projeto.
+.claude/

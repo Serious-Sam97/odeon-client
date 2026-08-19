@@ -17,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -53,7 +55,16 @@ import dev.odeon.android.ui.pegaLuz
 /// oito rotas). Falta escrito em vez de fingido: nenhum botão aparece
 /// desabilitado, porque oferecer o que não existe é o §53.
 @Composable
-fun TelaDoMural(modelo: ModeloDoMural, aoAbrirObra: (String) -> Unit = {}) {
+fun TelaDoMural(
+    modelo: ModeloDoMural,
+    aoAbrirObra: (String) -> Unit = {},
+    /// ⚠️ Ele **voltou a ser folha** no dia em que o ao vivo pegou o lugar dele na
+    /// barra, e por isso precisa de saída própria: uma tela sem aba acesa e sem
+    /// «voltar» só se fecha pelo gesto do sistema, que é saída sem sinal (§8b).
+    ///
+    /// É o mesmo `‹ voltar` do perfil, que chega pela mesma gaveta.
+    aoVoltar: () -> Unit = {},
+) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
     if (estado.carregando) {
@@ -67,6 +78,13 @@ fun TelaDoMural(modelo: ModeloDoMural, aoAbrirObra: (String) -> Unit = {}) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        TextButton(
+            onClick = aoVoltar,
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text("‹ voltar", color = Cores.destaque)
+        }
+
         Text("mural", style = MaterialTheme.typography.headlineSmall, color = Cores.texto)
 
         /// ⚠️ **«2 de 3 vozes» é o §8b numa métrica**, e a frase é da web:

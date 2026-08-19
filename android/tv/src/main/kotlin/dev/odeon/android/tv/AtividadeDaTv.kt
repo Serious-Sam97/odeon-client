@@ -20,6 +20,8 @@ import dev.odeon.android.tv.home.CanalDaHome
 import dev.odeon.android.tv.player.TelaDoPlayerDaTv
 import dev.odeon.android.tv.telas.TelaDeLoginDaTv
 import dev.odeon.android.tv.telas.TelaDaObraDaTv
+import dev.odeon.android.tv.telas.TelaDaSerieDaTv
+import dev.odeon.android.tv.telas.TelaDaTemporadaDaTv
 import dev.odeon.android.tv.telas.Destino
 import dev.odeon.android.tv.telas.TelaDoCanalAoVivoDaTv
 import dev.odeon.android.tv.telas.TelaInicialDaTv
@@ -81,11 +83,38 @@ private sealed interface Onde {
     /// nem onde parar. Fingir que é obrigaria o player de filme a aceitar nulos
     /// em tudo que ele usa pra existir.
     data class CanalDeFora(val canalId: String, val nome: String) : Onde
+
+    /// ## A ficha de uma série, e a de uma temporada — 18/08/2026
+    ///
+    /// Elas são **destinos**, e não um modo da biblioteca. Até ontem «entrar numa
+    /// série» trocava o conteúdo da grade no lugar, com o mesmo estado de
+    /// rolagem e o mesmo cabeçalho — e foi de onde vieram três defeitos seguidos
+    /// (a rolagem herdada, o foco sem dono, o cabeçalho que rolava pra fora).
+    ///
+    /// Como destino, cada uma tem a própria tela, o próprio foco e o próprio
+    /// «voltar»; e a temporada volta pra série, que volta pra biblioteca.
+    data class Serie(val serieId: String, val titulo: String) : Onde
+    data class Temporada(
+        val serieId: String,
+        val titulo: String,
+        val numero: Int,
+    ) : Onde
     /// [tocarEm] só é preenchido pela bancada: quando vem, a ficha toca sozinha
     /// naquele segundo em vez de esperar alguém apertar.
     data class Ficha(
         val obraId: String,
         val tocarEm: Double? = null,
+        /// ## ⚠️ De onde esta ficha veio — visto na TCL em 18/08/2026
+        ///
+        /// A ficha sempre voltou pra casa, e estava certo enquanto ela só era
+        /// aberta da grade. Vinda de uma temporada, «voltar» pulava dois degraus
+        /// e largava a pessoa na home — o mesmo defeito que o canal teve, e pelo
+        /// mesmo motivo: **a tela não sabia de onde a pessoa veio**.
+        ///
+        /// É o par `canalId`/`canalNome` do `Filme`, com outro nome.
+        val daSerie: String? = null,
+        val daSerieTitulo: String? = null,
+        val daTemporada: Int? = null,
         /// A legenda que a bancada quer ligada. Só ela usa.
         val legenda: String? = null,
     ) : Onde
@@ -100,6 +129,13 @@ private sealed interface Onde {
         /// É o campo que separa «estou vendo um filme» de «estou num canal», e
         /// sem ele o fim do arquivo não tem a quem perguntar o que vem depois.
         val canalId: String? = null,
+
+        /// ⚠️ **O nome do canal**, e não só o id — ele é o que a tela escreve.
+        ///
+        /// Vem junto porque o cromo do canal diz `● NO AR · Pulse`, e um id
+        /// (`c-04`) não é uma coisa que se lê na sala. Viaja separado do
+        /// [canalId] porque quem sai é o id e quem aparece é o nome.
+        val canalNome: String? = null,
 
         /// ⚠️ A legenda que a bancada pediu, se pediu. Existe porque **medir sem
         /// legenda é medir um jeito de assistir que ninguém usa**: o defeito que
@@ -282,13 +318,16 @@ class AtividadeDaTv : ComponentActivity() {
                     /// tela que faz isso. Sintonizar é entrar no que já está
                     /// acontecendo — parar numa ficha no caminho seria o mesmo
                     /// que a TV perguntar «tem certeza?» ao trocar de canal.
-                    aoTocar = { obraId, arquivoId, titulo, comecarEm, capa, canalId ->
-                        onde = Onde.Filme(obraId, arquivoId, titulo, comecarEm, capa, canalId)
+                    aoTocar = { obraId, arquivoId, titulo, comecarEm, capa, canalId, canalNome ->
+                        onde = Onde.Filme(
+                            obraId, arquivoId, titulo, comecarEm, capa, canalId, canalNome,
+                        )
                     },
                     aoSintonizarDeFora = { canalId, nome ->
                         onde = Onde.CanalDeFora(canalId, nome)
                     },
                     aoAbrirObra = { onde = Onde.Ficha(it) },
+                    aoAbrirSerie = { id, titulo -> onde = Onde.Serie(id, titulo) },
                     destinoInicial = if (agora.noAoVivo) Destino.AO_VIVO else Destino.BIBLIOTECA,
                 )
 
@@ -302,13 +341,79 @@ class AtividadeDaTv : ComponentActivity() {
                     TelaDaObraDaTv(
                         modelo = modelo,
                         tocarSozinhoEm = agora.tocarEm,
-                        aoVoltar = { onde = Onde.Casa() },
+                        aoVoltar = {
+                            val serie = agora.daSerie
+                            val titulo = agora.daSerieTitulo
+                            val temporada = agora.daTemporada
+                            onde = when {
+                                serie != null && titulo != null && temporada != null ->
+                                    Onde.Temporada(serie, titulo, temporada)
+                                serie != null && titulo != null -> Onde.Serie(serie, titulo)
+                                else -> Onde.Casa()
+                            }
+                        },
                         aoTocar = { obraId, arquivoId, titulo, comecarEm, capa ->
                             onde = Onde.Filme(
                                 obraId, arquivoId, titulo, comecarEm, capa,
                                 legenda = agora.legenda,
                             )
                         },
+                    )
+                }
+
+                is Onde.Serie -> {
+                    /// ⚠️ A chave carrega o id: sem ela, abrir uma segunda série
+                    /// reaproveitaria o modelo da primeira — e a tela nasceria
+                    /// com as temporadas erradas. É a mesma lição da ficha.
+                    val modelo = lembrarModelo("serie:${agora.serieId}") {
+                        dev.odeon.android.ui.serie.ModeloDaSerie(
+                            app.odeon, agora.serieId, agora.titulo,
+                        )
+                    }
+                    TelaDaSerieDaTv(
+                        modelo = modelo,
+                        aoAbrirTemporada = { n ->
+                            onde = Onde.Temporada(agora.serieId, agora.titulo, n)
+                        },
+                        /// ⚠️ O «continuar» **toca**, e não abre ficha: ele diz
+                        /// o episódio no próprio rótulo, e parar numa ficha no
+                        /// caminho seria perguntar «tem certeza?» a quem já
+                        /// escolheu. A ficha sabe tocar sozinha — ver `tocarEm`.
+                        /// ⚠️ `tocarEm` é **o segundo em que a ficha começa**, e
+                        /// não um sinal de «toque»: `null` é «abra e espere».
+                        /// Por isso o botão manda a posição junto — `0.0` aqui
+                        /// seria transformar o «continuar» num «do começo».
+                        aoTocar = { id, em ->
+                            onde = Onde.Ficha(
+                                id, tocarEm = em,
+                                daSerie = agora.serieId, daSerieTitulo = agora.titulo,
+                            )
+                        },
+                        aoVoltar = { onde = Onde.Casa() },
+                    )
+                }
+
+                is Onde.Temporada -> {
+                    val modelo = lembrarModelo("serie:${agora.serieId}") {
+                        dev.odeon.android.ui.serie.ModeloDaSerie(
+                            app.odeon, agora.serieId, agora.titulo,
+                        )
+                    }
+                    TelaDaTemporadaDaTv(
+                        modelo = modelo,
+                        numeroDaTemporada = agora.numero,
+                        /// Escolher um episódio abre a **ficha** dele: é lá que
+                        /// moram versão, legenda e «do começo». Só o botão da
+                        /// série toca direto.
+                        aoTocar = { id ->
+                            onde = Onde.Ficha(
+                                id,
+                                daSerie = agora.serieId,
+                                daSerieTitulo = agora.titulo,
+                                daTemporada = agora.numero,
+                            )
+                        },
+                        aoVoltar = { onde = Onde.Serie(agora.serieId, agora.titulo) },
                     )
                 }
 
@@ -332,6 +437,11 @@ class AtividadeDaTv : ComponentActivity() {
                             duracaoEmSegundos = null,
                             capaUrl = agora.capaUrl,
                             barramento = app.barramento,
+                            /// ⚠️ Canal não registra — ver `ModeloDoPlayer.doAoVivo`.
+                            /// Na sala isto pesa mais que no celular: é aqui que
+                            /// se dorme com a TV ligada.
+                            doAoVivo = agora.canalId != null,
+                            canalNome = agora.canalNome,
                         )
                     }
                     TelaDoPlayerDaTv(
@@ -458,6 +568,7 @@ class AtividadeDaTv : ComponentActivity() {
                                         comecarEm = noAr.comecarEm,
                                         capaUrl = app.odeon.urlDaArte(quadro.arte),
                                         canalId = canal,
+                                        canalNome = agora.canalNome,
                                     )
                                 }
                             }
@@ -531,6 +642,7 @@ class AtividadeDaTv : ComponentActivity() {
                                                 comecarEm = proximo.comecarEm,
                                                 capaUrl = app.odeon.urlDaArte(quadro.arte),
                                                 canalId = canal,
+                                                canalNome = agora.canalNome,
                                             )
                                             return@launch
                                         }

@@ -85,7 +85,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun TelaAoVivoDaTv(
     modelo: ModeloAoVivo,
-    aoTocar: (obraId: String, arquivoId: String, titulo: String, comecarEm: Double, capa: String?, canalId: String?) -> Unit,
+    aoTocar: (obraId: String, arquivoId: String, titulo: String, comecarEm: Double, capa: String?, canalId: String?, canalNome: String?) -> Unit,
     /// ⚠️ Canal **sem obra** — o de M3U externo. Ele não abre um filme, abre
     /// uma transmissão, e por isso tem porta própria (ver `TelaDoCanalAoVivoDaTv`).
     aoSintonizarDeFora: (canalId: String, nome: String) -> Unit = { _, _ -> },
@@ -228,6 +228,7 @@ fun TelaAoVivoDaTv(
                                         quantoJaPassou(estado.agoraMs, quadro),
                                         modelo.arte(quadro.arte),
                                         quadro.canalId,
+                                        quadro.canalNome,
                                     )
                                 }
                             },
@@ -318,7 +319,7 @@ private fun NoAr(
     canais: List<CanalNoAr>,
     escolhido: String?,
     modelo: ModeloAoVivo,
-    aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoTocar: (String, String, String, Double, String?, String?, String?) -> Unit,
     aoSintonizarDeFora: (String, String) -> Unit,
 ) {
     val quadro = noAr.firstOrNull { it.canalId == escolhido } ?: noAr.firstOrNull()
@@ -464,6 +465,7 @@ private fun NoAr(
                                 quantoJaPassou(agoraMs, quadro),
                                 modelo.arte(quadro.arte),
                                 quadro.canalId,
+                                quadro.canalNome,
                             )
                         },
                     )

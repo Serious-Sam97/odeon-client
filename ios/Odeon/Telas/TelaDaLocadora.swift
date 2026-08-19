@@ -13,19 +13,115 @@ import SwiftUI
 /// tem 600 caixas sobre 17.498 obras e o cliente **não tem como prever qual**.
 /// Está escrito como Pedido 1 no `PEDIDOS-AO-SERVIDOR.md` e continua aberto. Um
 /// botão que leva a 403 é defeito, não funcionalidade.
+/// O que dá pra fazer com uma caixa **agora**.
+///
+/// ## ⚠️ Ela existe porque o app voltou a poder prever a recusa
+///
+/// O «levar pra casa» esteve fora do produto inteiro por causa do §53 — «não
+/// oferecer o que a validação vai negar» — e a validação era imprevisível.
+/// Deixou de ser em 17/08/2026, quando o servidor passou a mandar `caixa_ids` em
+/// cada empréstimo: todos os ids que abrem aquela caixa.
+///
+/// ⚠️ Os quatro casos são os mesmos do Android, com os mesmos nomes. Divergir
+/// faria a mesma caixa dizer coisas diferentes em dois aparelhos da mesma casa.
+enum SituacaoDaCaixa: Equatable {
+    /// Dá pra levar, e o número é quantas ainda cabem no seu limite.
+    case livre(Int)
+    /// Já está com você — é o 403 «esta já está com você», previsto aqui.
+    case comigo
+    /// Está com outra pessoa. ⚠️ O nome vem junto porque «indisponível» não é
+    /// resposta numa casa de três: quem está com a fita é a informação.
+    case comOutro(String)
+    /// Você está no limite. Não é sobre esta caixa, é sobre você.
+    case noLimite
+}
+
 @Observable
 @MainActor
 final class ModeloDaLocadora {
     var loja: Loja?
+    /// O que está em mãos, e a régua do formato. `nil` até chegar — e aí toda
+    /// caixa é disco, que é o padrão honesto.
+    var prateleira: Prateleira?
     var recado: String?
+
+    /// A fita cujo «devolver» está **armado**. Ver `devolver`.
+    var confirmandoDevolver: Int?
+    /// A que está sendo devolvida agora — tranca contra dois toques.
+    var devolvendo: Int?
+    /// A caixa cujo «levar» está armado, e a que está sendo levada.
+    var confirmandoLevar: String?
+    var levando: String?
 
     private let odeon: RepositorioOdeon
     init(odeon: RepositorioOdeon) { self.odeon = odeon }
 
+    /// O que dá pra fazer com esta caixa, **sem perguntar ao servidor**.
+    ///
+    /// ⚠️ A ordem das perguntas é a ordem da verdade: primeiro «está fora?»
+    /// (porque uma caixa emprestada não é sua nem livre, independente do seu
+    /// limite), depois «é minha?», e só então o limite.
+    func situacao(daCaixa id: String) -> SituacaoDaCaixa {
+        let fora = (prateleira?.emprestadas ?? [])
+            .first { $0.caixaId == id || $0.caixaIds.contains(id) }
+        if let fora { return fora.meu ? .comigo : .comOutro(fora.quemNome) }
+        let podem = prateleira?.possoPegar ?? 0
+        return podem > 0 ? .livre(podem) : .noLimite
+    }
+
+    /// Levar a caixa. **Escreve no acervo de três pessoas** — dois toques.
+    ///
+    /// ⚠️ A regra é a mesma do Android e vem do §11: pegar e devolver pedem
+    /// confirmação na tela, e nenhum dos dois é disparado por navegação,
+    /// montagem ou retentativa automática. **Nada aqui tenta de novo sozinho**:
+    /// um `POST` que cria empréstimo repetido em silêncio é como duas fitas saem
+    /// da estante por um toque.
+    func levar(_ id: String) async {
+        guard levando == nil else { return }
+        guard confirmandoLevar == id else { confirmandoLevar = id; return }
+        confirmandoLevar = nil
+        levando = id
+        do { try await odeon.alugar(obra: id) } catch {
+            recado = (error as? FalhaDoOdeon)?.errorDescription ?? "não deu pra levar a fita"
+        }
+        levando = nil
+        await carregar()
+    }
+
+    /// Devolver. **Escreve**, e por isso pede o segundo toque como o levar.
+    func devolver(_ emprestimo: Int) async {
+        guard devolvendo == nil else { return }
+        guard confirmandoDevolver == emprestimo else { confirmandoDevolver = emprestimo; return }
+        confirmandoDevolver = nil
+        devolvendo = emprestimo
+        do { try await odeon.devolver(emprestimo: emprestimo) } catch {
+            recado = (error as? FalhaDoOdeon)?.errorDescription ?? "a devolução não completou"
+        }
+        devolvendo = nil
+        await carregar()
+    }
+
+    /// Pedir de volta. ⚠️ **Um toque só**, e é decisão: ela não encurta prazo de
+    /// ninguém — põe um recado na caixa de quem está com a fita. O efeito é um
+    /// aviso, não uma perda, e pedir confirmação pra avisar seria cerimônia.
+    func pedirDeVolta(_ emprestimo: Int) async {
+        do { try await odeon.pedirDeVolta(emprestimo: emprestimo) } catch {
+            recado = (error as? FalhaDoOdeon)?.errorDescription ?? "o pedido não foi"
+        }
+        await carregar()
+    }
+
     func carregar() async {
         do {
             _ = try? await odeon.garantirTokenDeMidia()
-            loja = try await odeon.estantes()
+            /// ⚠️ As duas em paralelo, e **a prateleira falhando não derruba a
+            /// loja**: a vitrine é o que a tela é, e o que está em mãos é um
+            /// acréscimo. Amarrá-las num `try` só faria a locadora sumir por causa
+            /// de um empréstimo.
+            async let vitrine = try await odeon.estantes()
+            async let emMaos = try? await odeon.prateleira()
+            loja = try await vitrine
+            prateleira = await emMaos
             await odeon.conferirTokenDeMidia(comArte: loja?.estantes.first?.caixas.first?.poster)
             recado = nil
         } catch {
@@ -59,6 +155,8 @@ struct TelaDaLocadora: View {
     let aoAbrirPerfil: () -> Void
     let aoSair: () -> Void
     let aoEscolher: (CaixaExposta) -> Void
+    /// ⚠️ O menu do disco leva ao player, e **só a raiz** sabe abrir um player.
+    let aoTocarDoMenu: (MenuDoDisco, Double) -> Void
 
     @Environment(\.horizontalSizeClass) private var largura
 
@@ -72,6 +170,17 @@ struct TelaDaLocadora: View {
     /// prateleira sem mudar a proporção do objeto.
     private var escala: CGFloat { largura == .regular ? 1.0 : 0.72 }
 
+    /// A obra cujo **disco está no aparelho**. `nil` é o menu fechado.
+    ///
+    /// ⚠️ Ele mora **fora** do `naMao` porque o palco fecha quando o menu abre: o
+    /// disco saiu da caixa e foi pro aparelho, e a caixa vazia continuar na tela
+    /// atrás do menu seria o objeto em dois lugares ao mesmo tempo.
+    @State private var noAparelho: NoAparelho?
+
+    /// ⚠️ Um `String?` não serve ao `fullScreenCover(item:)` — ele quer
+    /// `Identifiable`. Envolver é mais honesto que conformar `String`.
+    private struct NoAparelho: Identifiable { let id: String }
+
     /// A caixa que está **na mão**. `nil` é a loja em repouso.
     ///
     /// ⚠️ Ela mora aqui e não na prateleira: o palco fica por cima da tela inteira
@@ -84,12 +193,14 @@ struct TelaDaLocadora: View {
         odeon: RepositorioOdeon, insignia: Insignia,
         aoAbrirPerfil: @escaping () -> Void, aoSair: @escaping () -> Void,
         aoEscolher: @escaping (CaixaExposta) -> Void,
+        aoTocarDoMenu: @escaping (MenuDoDisco, Double) -> Void,
     ) {
         self.odeon = odeon
         self.insignia = insignia
         self.aoAbrirPerfil = aoAbrirPerfil
         self.aoSair = aoSair
         self.aoEscolher = aoEscolher
+        self.aoTocarDoMenu = aoTocarDoMenu
         _modelo = State(wrappedValue: ModeloDaLocadora(odeon: odeon))
     }
 
@@ -105,8 +216,18 @@ struct TelaDaLocadora: View {
                         Text(recado).font(.system(size: 14)).foregroundStyle(Cores.textoApagado)
                     }
 
+                    comigo
+
                     ForEach(modelo.loja?.estantes ?? []) { estante in
                         prateleira(estante)
+                    }
+
+                    /// ⚠️ A nota fecha a visita: anda-se pelas estantes e, na
+                    /// saída, o caixa entrega a notinha.
+                    if let p = modelo.prateleira {
+                        NotaDoCaixa(prateleira: p, noAcervo: modelo.loja?.noAcervo ?? 0)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 14)
                     }
                 }
                 .padding(.vertical, 18)
@@ -120,10 +241,184 @@ struct TelaDaLocadora: View {
                     medidas: medidasDe(caixa), ehVhs: ehVhs(caixa), cor: cor(caixa),
                     aoFechar: { withAnimation(.easeOut(duration: 0.2)) { naMao = nil } },
                     aoVerAFicha: { naMao = nil; aoEscolher(caixa) },
+                    /// A fita não tem menu, tem rebobinar (§14.4).
+                    aoPorNoAparelho: ehVhs(caixa) ? nil : {
+                        naMao = nil
+                        noAparelho = NoAparelho(id: caixa.id)
+                    },
+                    /// As frases de levar, decididas **aqui** — ver `situacao`.
+                    /// Só a `livre` vira botão; as outras três são respostas.
+                    acaoDeLevar: {
+                        if case let .livre(quantas) = modelo.situacao(daCaixa: caixa.id) {
+                            if modelo.levando == caixa.id { return "levando…" }
+                            if modelo.confirmandoLevar == caixa.id { return "levar mesmo?" }
+                            return "levar pra casa · \(quantas) \(quantas == 1 ? "resta" : "restam")"
+                        }
+                        return nil
+                    }(),
+                    avisoDaCaixa: {
+                        switch modelo.situacao(daCaixa: caixa.id) {
+                        case .comigo: "esta já está com você"
+                        case let .comOutro(quem): "está com \(quem)"
+                        case .noLimite: "você está no limite de fitas"
+                        case .livre: nil
+                        }
+                    }(),
+                    aoLevar: { Task { await modelo.levar(caixa.id) } },
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.86)))
             }
         }
+        .fullScreenCover(item: $noAparelho) { alvo in
+            MenuDeDVD(
+                odeon: odeon, obraId: alvo.id,
+                aoTocar: { disco, segundos in
+                    noAparelho = nil
+                    aoTocarDoMenu(disco, segundos)
+                },
+                aoFechar: { noAparelho = nil },
+            )
+        }
+    }
+
+    /// «COMIGO» — as fitas que estão fora da estante.
+    ///
+    /// ## ⚠️ Ela vem **antes** das prateleiras, e é decisão
+    ///
+    /// O que está na sua mão é o que você precisa devolver; o que está na estante
+    /// é o que você pode pegar. A primeira é dívida, a segunda é convite — e
+    /// dívida se lê antes.
+    ///
+    /// ⚠️ E ela mostra **as suas e as dos outros**, separadas. A prateleira mistura
+    /// tudo de propósito, porque quem te barra pode ser qualquer morador e ver isso
+    /// é parte da ideia; mas nas suas dá pra devolver e nas dos outros só dá pra
+    /// pedir, e um gesto que muda de dono não pode ficar na mesma fileira (§53).
+    ///
+    /// ⚠️ **Devolver e pedir não existem aqui ainda.** As duas escrevem no acervo
+    /// compartilhado, e o §11 é explícito: mexer no empréstimo de alguém precisa de
+    /// quem confirme na tela. Por enquanto esta seção **conta**, e não age.
+    @ViewBuilder
+    private var comigo: some View {
+        if let prateleira = modelo.prateleira, !prateleira.emprestadas.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                fileiraEmMaos("COMIGO", prateleira.minhas)
+                fileiraEmMaos("COM OS OUTROS", prateleira.dosOutros)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fileiraEmMaos(_ titulo: String, _ fitas: [Emprestada]) -> some View {
+        if !fitas.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                RotuloDeSecao(texto: titulo, contagem: "\(fitas.count)")
+                    .padding(.horizontal, 20)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .bottom, spacing: largura == .regular ? 30 : 22) {
+                        ForEach(fitas) { fita in
+                            VStack(alignment: .leading, spacing: 8) {
+                                CaixaEm3D(
+                                    medidas: medidasDaFita(fita).vezes(escala),
+                                    giravel: false,
+                                ) { lado, luz in
+                                    FaceDaCaixa(
+                                        odeon: odeon, lado: lado, luz: luz,
+                                        medidas: medidasDaFita(fita).vezes(escala),
+                                        ehVhs: ehVhsDaFita(fita), titulo: fita.titulo,
+                                        cor: corDaFita(fita), capa: fita.poster,
+                                    )
+                                }
+
+                                /// ⚠️ A cinta de papel com o prazo — e ela **some**
+                                /// quando não há data. «Sem prazo» ocuparia a cinta
+                                /// com uma não-informação (§24).
+                                if let prazo = prazoDoEmprestimo(fita.venceEm) {
+                                    Text(fita.meu ? prazo.frase : "com \(fita.quemNome)")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(prazo.dias <= 2 && fita.meu
+                                            ? Color(hex: 0xD9534F) : Cores.tintaDoBilhete)
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Cores.papel, in: .rect(cornerRadius: 2))
+                                }
+
+                                /// ## ⚠️ Devolver e pedir **passaram a existir** — 17/08/2026
+                                ///
+                                /// Esta seção «contava e não agia», e a folha
+                                /// acima dizia por quê: as duas escrevem no
+                                /// acervo compartilhado, e o §11 pede quem
+                                /// confirme na tela.
+                                ///
+                                /// A confirmação chegou, e é a mesma do Android:
+                                /// **dois toques pra devolver** (o primeiro arma,
+                                /// o segundo devolve) e **um só pra pedir** — ela
+                                /// não encurta o prazo de ninguém, põe um recado
+                                /// na caixa de quem está com a fita. O efeito é
+                                /// um aviso, não uma perda, e pedir confirmação
+                                /// pra avisar seria cerimônia.
+                                if fita.meu {
+                                    Button {
+                                        Task { await modelo.devolver(fita.id) }
+                                    } label: {
+                                        Text(modelo.devolvendo == fita.id
+                                            ? "devolvendo…"
+                                            : modelo.confirmandoDevolver == fita.id
+                                                ? "devolver mesmo?" : "devolver")
+                                            .font(.system(size: 12))
+                                            /// ⚠️ O vermelho é o mesmo hex que a
+                                            /// cinta do prazo vencido usa nesta
+                                            /// tela — não há `Cores.perigo` neste
+                                            /// cliente, e inventar um segundo
+                                            /// vermelho faria duas urgências
+                                            /// diferentes na mesma fileira.
+                                            .foregroundStyle(modelo.confirmandoDevolver == fita.id
+                                                ? Color(hex: 0xD9534F) : Cores.destaque)
+                                            .frame(minHeight: 44)
+                                            .contentShape(.rect)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Button {
+                                        Task { await modelo.pedirDeVolta(fita.id) }
+                                    } label: {
+                                        /// ⚠️ Sem «já pedida» aqui: o
+                                        /// `pedido_por_nome` chega na resposta e
+                                        /// este cliente ainda não o mapeia.
+                                        /// Escrever o estado sem ter o dado seria
+                                        /// afirmar o que não se sabe (§18) — o
+                                        /// botão diz o que faz, e a recarga
+                                        /// mostra o resultado.
+                                        Text("pedir de volta")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(Cores.destaque)
+                                            .frame(minHeight: 44)
+                                            .contentShape(.rect)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.leading, largura == .regular ? 44 : 34)
+                    .padding(.trailing, 20)
+                }
+            }
+        }
+    }
+
+    private func ehVhsDaFita(_ f: Emprestada) -> Bool {
+        modelo.prateleira?.ehVhs(ano: f.ano) ?? false
+    }
+
+    private func medidasDaFita(_ f: Emprestada) -> Medidas {
+        ehVhsDaFita(f) ? .vhs : .dvd
+    }
+
+    private func corDaFita(_ f: Emprestada) -> Color {
+        guard let hex = f.corDominante else { return Cores.fundoElevado }
+        let limpo = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard let valor = UInt32(limpo, radix: 16) else { return Cores.fundoElevado }
+        return Color(hex: valor)
     }
 
     /// A entrada da loja: a arandela acesa, o letreiro na luz dela, e as
@@ -280,18 +575,15 @@ struct TelaDaLocadora: View {
 
     /// Fita ou disco?
     ///
-    /// ## ⚠️ O corte é do **servidor**, e ainda não chega aqui
+    /// ⚠️ O corte é o `ultimo_ano_vhs` do **servidor** — o mesmo número que decide
+    /// se a caixa rebobina. Tê-lo em dois lugares é como os dois passariam a
+    /// discordar, e uma caixa desenhada como VHS recusaria o rebobinar.
     ///
-    /// No Android ele vem de `ultimo_ano_vhs`, na `/api/locadora/prateleira` — «o
-    /// mesmo número que decide se a caixa rebobina, e tê-lo em dois lugares é como
-    /// os dois passariam a discordar». Este cliente ainda não mapeia a
-    /// `Prateleira`.
-    ///
-    /// ⚠️ Enquanto não chega, **tudo é disco**, que é o padrão do Android quando
-    /// não há corte: «na dúvida, o app não afirma que uma obra é de uma era que
-    /// ele não sabe qual é — e disco é o caso mais comum do acervo». Um corte
-    /// chutado aqui seria a segunda cópia de um número que já existe.
-    private func ehVhs(_ caixa: CaixaExposta) -> Bool { false }
+    /// ⚠️ Sem a prateleira carregada, **disco**: na dúvida o app não afirma que
+    /// uma obra é de uma era que ele não sabe qual é (§18).
+    private func ehVhs(_ caixa: CaixaExposta) -> Bool {
+        modelo.prateleira?.ehVhs(ano: caixa.ano) ?? false
+    }
 
     private func medidasDe(_ caixa: CaixaExposta) -> Medidas {
         ehVhs(caixa) ? .vhs : .dvd

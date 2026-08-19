@@ -124,6 +124,19 @@ fun Palco(
     /// rebobinar».
     aoAbrirOMenu: () -> Unit,
     aoRebobinar: () -> Unit,
+    /// ## Levar a caixa pra casa
+    ///
+    /// ⚠️ **Frases prontas, e não a regra.** Este módulo desenha cenário; quem
+    /// sabe de empréstimo, limite e escassez é a locadora. Passar o texto em vez
+    /// do estado é o mesmo arranjo do [LetraDoPalco] — o palco não decide, ele
+    /// mostra.
+    ///
+    /// `acaoDeLevar` nulo é **botão que não existe**, e é o §53: ele só aparece
+    /// quando levar vai dar certo. Quando não dá, o [avisoDaCaixa] diz por quê —
+    /// e um aviso não é um botão desabilitado, é uma frase.
+    acaoDeLevar: String? = null,
+    avisoDaCaixa: String? = null,
+    aoLevar: () -> Unit = {},
     /// Ver [LetraDoPalco] — o que é do aparelho, e não do objeto.
     letra: LetraDoPalco,
 ) {
@@ -457,7 +470,24 @@ fun Palco(
                     /// com uma fita exposta era o §18 em uma linha, e passou
                     /// despercebido enquanto a caixa era igual pros dois.
                     aberta && fita?.vhs == true -> "toque na fita para assistir"
-                    aberta -> "toque no disco para assistir"
+                    /// ## ⚠️ O disco **não** diz «para assistir», e a fita diz
+                    ///
+                    /// Os dois gestos são o mesmo toque e levam a lugares
+                    /// diferentes: a fita vai direto pro filme, o disco abre o
+                    /// **menu** (ver `ModeloDaLocadora.abrirOMenu`) — «a fita não
+                    /// tem menu, tem rebobinar».
+                    ///
+                    /// Visto na tela em 17/08/2026: a dica prometia «para
+                    /// assistir», o toque abria um menu com `Tocar` e
+                    /// `Capítulos`, e o filme só começava um toque depois. Não é
+                    /// grave e é mentira do mesmo tipo que esta folha já
+                    /// corrigiu duas linhas acima, quando «toque no disco»
+                    /// aparecia com uma fita na mão.
+                    ///
+                    /// «Pôr no aparelho» é o que a mão está fazendo, e é
+                    /// verdade nos dois destinos — o menu é o que um aparelho
+                    /// mostra quando entra um disco.
+                    aberta -> "toque no disco pra pôr no aparelho"
                     /// A dica ensina **os dois gestos**, e o giro vem primeiro
                     /// porque é o que mostra que a caixa tem verso.
                     else -> "arraste pra girar · toque na abertura pra abrir"
@@ -466,6 +496,42 @@ fun Palco(
                 color = Cores.textoApagado,
                 textAlign = TextAlign.Center,
             )
+
+            /// ## ⚠️ «Levar pra casa» voltou ao app — 17/08/2026
+            ///
+            /// Ele esteve fora **do produto inteiro** por causa do §53: o
+            /// servidor recusava com 403 de forma imprevisível, e um botão que
+            /// leva a uma recusa é pior que botão nenhum. A causa saiu da
+            /// investigação do servidor e não era permissão — era o mesmo filme
+            /// existindo duas vezes. Com `caixa_ids`, a locadora prevê.
+            ///
+            /// ⚠️ Ele fica **embaixo da dica dos gestos**, e não junto do «ver a
+            /// ficha»: girar e abrir são coisas que se faz *com* a caixa; levar é
+            /// a coisa que se faz *com a loja*. A ordem na tela é a ordem da
+            /// intenção.
+            acaoDeLevar?.let { texto ->
+                BotaoDeTexto(
+                    texto = texto,
+                    cor = Cores.destaque,
+                    estilo = letra.botao,
+                    aoTocar = {
+                        haptico.performHapticFeedback(HapticFeedbackType.LongPress)
+                        aoLevar()
+                    },
+                )
+            }
+
+            /// O aviso, quando não dá pra levar. ⚠️ Em texto e não em botão
+            /// apagado: «está com o rudney» é uma **informação**, e um botão
+            /// desabilitado convida ao toque que não vai responder (§8b).
+            avisoDaCaixa?.let { aviso ->
+                Texto(
+                    text = aviso,
+                    style = letra.dica,
+                    color = Cores.textoApagado,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
         }
     }

@@ -45,22 +45,36 @@ struct FaceDaCaixa: View {
                 .clipped()
 
         case .lombada:
-            ZStack {
-                casco
+            /// ## ⚠️ O título vai em `overlay`, e não dentro da pilha
+            ///
+            /// **Rotação não muda o tamanho de layout.** O texto da lombada é
+            /// desenhado deitado com `rotationEffect(-90°)`, mas continua
+            /// reportando a largura que teria em pé — a **altura da caixa**, 292pt.
+            /// Numa `ZStack` isso vira o tamanho da face inteira.
+            ///
+            /// E aí a homografia mapeia 292pt onde deveria mapear 24, porque ela
+            /// transforma **o que é desenhado**, não o quadro. Na tela: a lombada
+            /// com 58% da largura da capa, quando o teste prova que ela tem 3,8%.
+            /// Quinze vezes maior.
+            ///
+            /// `overlay` não decide tamanho — quem manda é o casco, que é flexível
+            /// e obedece ao `frame` da face.
+            casco
                 /// O título impresso na lombada, deitado — é o que se lê numa
                 /// estante com as caixas de pé.
                 ///
                 /// ⚠️ O corpo sai da **espessura**: no DVD (11pt) sobra pouco e a
                 /// letra é miúda; no VHS (19pt) cabe quase o dobro. Um tamanho fixo
                 /// faria a fita parecer um DVD gordo.
-                Text(titulo)
-                    .font(.system(size: max(5, medidas.espessura * 0.42), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .frame(width: medidas.altura * 0.92)
-                    .rotationEffect(.degrees(-90))
-                    .fixedSize()
-            }
+                .overlay {
+                    Text(titulo)
+                        .font(.system(size: max(5, medidas.espessura * 0.42), weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(width: medidas.altura * 0.92)
+                        .rotationEffect(.degrees(-90))
+                }
 
         case .contracapa:
             ZStack {

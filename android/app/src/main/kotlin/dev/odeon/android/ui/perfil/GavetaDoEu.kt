@@ -63,6 +63,15 @@ fun GavetaDoEu(
     perfil: Perfil?,
     rosto: String?,
     aoAbrirPerfil: () -> Unit,
+    /// ⚠️ O mural entra aqui porque **saiu da barra** pra o ao vivo caber — ver
+    /// a folha do `Aba` no `AppOdeon`. A gaveta está em toda aba, que é a mesma
+    /// condição que a barra dava; o que ele perde é o toque único, não o acesso.
+    aoAbrirMural: () -> Unit,
+    /// ⚠️ «para você» desceu pra cá em 18/08/2026, pelo mesmo caminho do mural:
+    /// as séries viraram aba e a barra tem cinco lugares. Ele **não sumiu** — e
+    /// nem devia, porque descoberta é o que se procura de vez em quando, e não o
+    /// que se pega às nove da noite.
+    aoAbrirParaVoce: () -> Unit,
     aoSair: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -212,6 +221,30 @@ fun GavetaDoEu(
 
                     HorizontalDivider(thickness = 1.dp, color = Cores.linha)
                 }
+
+                /// O mural vem **antes** do perfil: é o que a casa fez, e o
+                /// perfil é o que você é. Quem abre a gaveta no meio do dia está
+                /// mais perto de perguntar «o que rolou por aqui» do que de
+                /// conferir o próprio nível.
+                LinhaDaGaveta(
+                    rotulo = "mural",
+                    cor = Cores.texto,
+                    leva = true,
+                    aoTocar = {
+                        aberta = false
+                        aoAbrirMural()
+                    },
+                )
+
+                LinhaDaGaveta(
+                    rotulo = "para você",
+                    cor = Cores.texto,
+                    leva = true,
+                    aoTocar = {
+                        aberta = false
+                        aoAbrirParaVoce()
+                    },
+                )
 
                 LinhaDaGaveta(
                     rotulo = "perfil",

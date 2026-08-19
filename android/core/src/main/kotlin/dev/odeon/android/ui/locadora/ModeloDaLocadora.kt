@@ -16,6 +16,29 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/// O que dá pra fazer com uma caixa **agora**.
+///
+/// ## ⚠️ Ela existe porque o app voltou a poder prever a recusa
+///
+/// O «pegar a fita» esteve fora do app inteiro por causa do §53 — «não oferecer o
+/// que a validação vai negar» — e a validação era imprevisível. Deixou de ser em
+/// 17/08/2026, quando o servidor passou a mandar `caixa_ids` em cada empréstimo:
+/// todos os ids que abrem aquela caixa.
+///
+/// Com isso a resposta é local e certa, sem uma ida ao servidor pra descobrir um
+/// 403.
+sealed interface SituacaoDaCaixa {
+    /// Dá pra pegar, e o número é quantas ainda cabem no seu limite.
+    data class Livre(val aindaPodePegar: Int) : SituacaoDaCaixa
+    /// Já está com você — é o 403 «esta já está com você», previsto aqui.
+    data object Comigo : SituacaoDaCaixa
+    /// Está com outra pessoa. ⚠️ O nome vem junto porque «indisponível» não é
+    /// resposta numa casa de três: quem está com a fita é a informação.
+    data class ComOutro(val quem: String) : SituacaoDaCaixa
+    /// Você está no limite de fitas. Não é sobre esta caixa, é sobre você.
+    data object NoLimite : SituacaoDaCaixa
+}
+
 data class EstadoDaLocadora(
     val carregando: Boolean = true,
     val prateleira: Prateleira? = null,
@@ -26,6 +49,12 @@ data class EstadoDaLocadora(
     /// falhar sem a outra: ver `RepositorioOdeon.estantes`.
     val loja: Loja? = null,
     val erro: String? = null,
+    /// A caixa que está sendo pegada agora — tranca o botão contra dois toques,
+    /// como o `devolvendo` faz na devolução.
+    val pegando: String? = null,
+    /// O «pegar a fita» já foi armado? Ver `SituacaoDaCaixa` e a regra da casa
+    /// aqui embaixo: pegar **pede confirmação na tela**.
+    val confirmandoPegar: String? = null,
     /// O empréstimo que está sendo devolvido agora, pra o botão não aceitar
     /// dois toques. Devolver duas vezes é mexer no acervo de alguém duas vezes.
     val devolvendo: Int? = null,
@@ -52,6 +81,23 @@ data class EstadoDaLocadora(
     /// título) em vez de um retângulo vazio.
     val obraNaMao: dev.odeon.android.dados.ObraDetalhada? = null,
 ) {
+    /// O que dá pra fazer com esta caixa, **sem perguntar ao servidor**.
+    ///
+    /// ⚠️ A ordem das perguntas é a ordem da verdade: primeiro «está fora?»
+    /// (porque uma caixa emprestada não é sua nem livre, independente do seu
+    /// limite), depois «é minha?», e só então o limite. Inverter faria alguém no
+    /// limite ver «você está no limite» sobre uma fita que já está na mão dele.
+    fun situacaoDaCaixa(id: String): SituacaoDaCaixa {
+        val fora = prateleira?.emprestadas.orEmpty()
+            .firstOrNull { id == it.caixaId || id in it.caixaIds }
+        if (fora != null) {
+            return if (fora.meu) SituacaoDaCaixa.Comigo
+            else SituacaoDaCaixa.ComOutro(fora.quemNome)
+        }
+        val podem = prateleira?.possoPegar ?: 0
+        return if (podem > 0) SituacaoDaCaixa.Livre(podem) else SituacaoDaCaixa.NoLimite
+    }
+
     /// As minhas, separadas das dos outros.
     ///
     /// A prateleira mistura tudo de propósito — quem te barra pode ser qualquer
@@ -108,12 +154,24 @@ data class EstadoDaLocadora(
     val expostas: List<dev.odeon.android.dados.EstanteExposta>
         get() {
             val estantes = loja?.estantes ?: return emptyList()
-            val fora = prateleira?.emprestadas.orEmpty().associateBy { it.caixaId }
+            /// ## ⚠️ O buraco casa por **todos** os ids da caixa — 17/08/2026
+            ///
+            /// Ele casava só pelo `caixaId`, e por isso não escasseava: neste
+            /// acervo **44 filmes existem duas vezes**, e a prateleira dizia o id
+            /// de um rip enquanto o cartão da estante conhecia o outro. A caixa
+            /// levada por alguém continuava exposta com a outra cara — que é a
+            /// mesma raiz do 403 imprevisível, vista do lado da vitrine.
+            ///
+            /// Com `caixa_ids` a conta fecha: quem levou a caixa levou **todos**
+            /// os ids dela.
+            val fora = prateleira?.emprestadas.orEmpty()
             return estantes
                 .map { estante ->
                     estante.copy(
                         caixas = estante.caixas.filterNot { caixa ->
-                            val emprestimo = fora[caixa.id]
+                            val emprestimo = fora.firstOrNull {
+                                caixa.id == it.caixaId || caixa.id in it.caixaIds
+                            }
                             emprestimo != null && (emprestimo.exclusivo || emprestimo.meu)
                         },
                     )
@@ -163,22 +221,56 @@ class ModeloDaLocadora(
     fun carregar() {
         viewModelScope.launch {
             _estado.update { it.copy(carregando = true, erro = null) }
-            try {
-                /// As duas em paralelo: elas não dependem uma da outra, e em
-                /// série a tela esperaria a soma das duas viagens pela tailnet.
-                val prateleira = async { odeon.prateleira() }
-                val loja = async { odeon.estantes() }
-                _estado.update {
-                    it.copy(
-                        carregando = false,
-                        prateleira = prateleira.await(),
-                        loja = loja.await(),
-                    )
-                }
-            } catch (e: Exception) {
-                _estado.update {
-                    it.copy(carregando = false, erro = e.message ?: "não deu pra abrir a locadora")
-                }
+            /// As duas em paralelo: elas não dependem uma da outra, e em série
+            /// a tela esperaria a soma das duas viagens pela tailnet.
+            ///
+            /// ## ⚠️ O `runCatching` vai **dentro** do `async`, e sem isso o app morria
+            ///
+            /// Medido em 17/08/2026, com a rede do aparelho desligada: abrir a
+            /// locadora **matava o processo**. As outras quatro abas seguiam de
+            /// pé; só esta caía, e caiu nas três vezes em que foi aberta.
+            ///
+            /// O código tinha `try { async { … } } catch`, que **parece** cobrir e
+            /// não cobre. Em concorrência estruturada, um `async` que falha não
+            /// guarda a exceção até o `await`: ele **cancela o job pai na hora** e
+            /// a exceção sobe pela hierarquia, direto pro tratador do escopo. O
+            /// `catch` logo abaixo nunca roda. É a pegadinha mais conhecida de
+            /// corrotinas, e ela não dá nenhum sinal em código — compila, passa no
+            /// lint, e só aparece quando a chamada falha.
+            ///
+            /// ⚠️ E o rastro **não aponta pro culpado**: o que chega ao logcat é a
+            /// pilha do OkHttp com o `UnknownHostException`, sem uma linha sequer
+            /// de `dev.odeon.android.ui`. Foi preciso cruzar «qual aba cai» com
+            /// «quem usa `async`» pra achar. Ficam os dois fatos anotados, porque o
+            /// próximo a caçar isto vai ver o mesmo rastro mudo.
+            ///
+            /// Capturando **dentro** de cada `async`, nada falha do ponto de vista
+            /// do job: as duas devolvem um `Result`, e quem decide o que fazer com
+            /// o erro é a linha de baixo, como estava previsto.
+            val prateleira = async { runCatching { odeon.prateleira() } }
+            val loja = async { runCatching { odeon.estantes() } }
+            val daPrateleira = prateleira.await()
+            val daLoja = loja.await()
+
+            /// ⚠️ O que já estava na tela **fica** quando a viagem falha. A
+            /// locadora recarrega sozinha a cada evento do barramento, e apagar a
+            /// vitrine inteira por causa de um tropeço de rede faria a loja
+            /// piscar vazia — dizendo «não há caixas» quando o que houve foi «não
+            /// deu pra perguntar». As duas falham separado, e é o que a folha do
+            /// `estantes` já defendia.
+            _estado.update {
+                it.copy(
+                    carregando = false,
+                    prateleira = daPrateleira.getOrNull() ?: it.prateleira,
+                    loja = daLoja.getOrNull() ?: it.loja,
+                    /// ⚠️ A frase é a da casa, e não o `e.message`: sem rede o
+                    /// `message` é «Unable to resolve host …», que é o resolvedor
+                    /// de DNS falando inglês no meio da loja. Ver `fraseDaFalha`.
+                    erro = (daPrateleira.exceptionOrNull() ?: daLoja.exceptionOrNull())
+                        ?.let { e ->
+                            dev.odeon.android.dados.fraseDaFalha(e, "não deu pra abrir a locadora")
+                        },
+                )
             }
         }
     }
@@ -199,6 +291,44 @@ class ModeloDaLocadora(
             carregar()
         }
     }
+
+    /// Pegar a fita. **Escreve no acervo de três pessoas.**
+    ///
+    /// ## ⚠️ Dois toques, como devolver
+    ///
+    /// A folha desta classe já fixou a regra: «pegar e devolver pedem confirmação
+    /// na tela, e nenhum dos dois é disparado por navegação, montagem ou
+    /// retentativa automática». O primeiro toque arma; o segundo cria o
+    /// empréstimo.
+    ///
+    /// ⚠️ E **nada aqui tenta de novo sozinho**: uma retentativa silenciosa num
+    /// `POST` que cria empréstimo é como duas fitas saem da estante por um toque.
+    fun pegar(caixaId: String) {
+        if (_estado.value.pegando != null) return
+        if (_estado.value.confirmandoPegar != caixaId) {
+            _estado.update { it.copy(confirmandoPegar = caixaId) }
+            return
+        }
+        _estado.update { it.copy(pegando = caixaId, confirmandoPegar = null) }
+        viewModelScope.launch {
+            val falha = runCatching { odeon.alugar(caixaId) }.exceptionOrNull()
+            _estado.update {
+                it.copy(
+                    pegando = null,
+                    /// ⚠️ A frase da casa, e não o `e.message`. O 403 previsto não
+                    /// deveria chegar aqui — se chegar, é caso novo e merece ser
+                    /// legível em vez de virar «HTTP 403».
+                    erro = falha?.let { e ->
+                        dev.odeon.android.dados.fraseDaFalha(e, "não deu pra pegar a fita")
+                    },
+                )
+            }
+            carregar()
+        }
+    }
+
+    /// Desarma a confirmação — quem largou a caixa desistiu.
+    fun esquecerPegar() = _estado.update { it.copy(confirmandoPegar = null) }
 
     fun arte(caminho: String?): String? = odeon.urlDaArte(caminho)
     /// Tira a caixa da estante e põe no palco.

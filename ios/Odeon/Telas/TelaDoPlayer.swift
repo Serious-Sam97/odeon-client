@@ -72,6 +72,9 @@ final class ModeloDoPlayer {
     /// pra quem sabe é a diferença entre uma barra e um cronômetro de transmissão.
     var duracaoDaSessao: Double? {
         if let duracao, duracao > 0 { return duracao }
+        /// ⚠️ **Antes do item**: a medida do servidor é do arquivo inteiro; a do
+        /// item, numa sessão em geração, é só o que já foi gerado.
+        if let doServidor = duracaoDoServidor, doServidor > 0 { return doServidor }
         let doItem = player?.currentItem?.duration.seconds
         return (doItem?.isFinite == true && doItem! > 0) ? doItem : nil
     }
@@ -90,6 +93,20 @@ final class ModeloDoPlayer {
     private let obra: String
     private let arquivo: String
     private let duracao: Double?
+
+    /// A duração que o **servidor mediu**, quando quem abriu não sabia.
+    ///
+    /// ## ⚠️ Ela existe porque há caminhos que abrem o player sem duração
+    ///
+    /// O canal do ao vivo passa `nil`, e sem ela a `duracaoDaSessao` cai no
+    /// `currentItem.duration` — que numa playlist `EVENT` é indefinida, e foi o
+    /// que pôs **«4:44 AM»** na barra do AVKit.
+    ///
+    /// O servidor passou a mandar `duration_seconds` no plano e na sessão
+    /// (17/08/2026), como resposta ao pedido da playlist `VOD`: declarar `VOD`
+    /// exigia varrer os keyframes da fonte, 1m33s por arquivo, contra 25s de
+    /// espera da playlist. O número resolve o mesmo pelo lado barato.
+    private var duracaoDoServidor: Double?
     /// De onde começar, **já passado pela régua** do `ondeContinuar`.
     private let comecarEm: Double
 
@@ -102,9 +119,32 @@ final class ModeloDoPlayer {
     /// Wi-Fi não é um filme guardado; é um cache com etapa extra.
     private let local: URL?
 
+    /// ## ⚠️ Veio do **ao vivo**? Então nada disto conta.
+    ///
+    /// O pedido é do dono, e a história que o motivou é a prova:
+    ///
+    /// > «eu mesmo acabei dormindo no ao vivo e quando vi o app registrou que eu
+    /// > vi um monte de filme»
+    ///
+    /// Um canal **corre sozinho**. Ninguém escolheu aqueles filmes e ninguém
+    /// decidiu parar no minuto 47 — a grade seguiu e a pessoa estava dormindo. O
+    /// progresso gravado ali não é memória do que se assistiu; é memória do que
+    /// passou na frente de uma tela ligada.
+    ///
+    /// E o estrago passa de «continuar»: o mesmo registro alimenta o «para
+    /// você». Uma noite de sono no canal de terror ensina ao algoritmo um gosto
+    /// que ninguém tem.
+    ///
+    /// ⚠️ **A regra é por onde se entrou, não pelo que se tocou.** O mesmo filme,
+    /// aberto pela biblioteca ou pela locadora, conta normalmente — lá houve
+    /// escolha. O `Alvo.doAoVivo` já viajava pra saber pra onde **voltar**; agora
+    /// diz também o que **não** registrar.
+    private let doAoVivo: Bool
+
     init(
         odeon: RepositorioOdeon, obra: String, arquivo: String,
         duracao: Double?, titulo: String = "", comecarEm: Double, local: URL? = nil,
+        doAoVivo: Bool = false,
     ) {
         self.titulo = titulo
         self.odeon = odeon
@@ -113,13 +153,37 @@ final class ModeloDoPlayer {
         self.duracao = duracao
         self.comecarEm = comecarEm
         self.local = local
+        self.doAoVivo = doAoVivo
     }
 
-    /// Já tentamos renovar o token de mídia nesta abertura? **Uma vez só.**
+    /// O progresso sobe? Só fora do ao vivo — ver `doAoVivo`.
     ///
-    /// ⚠️ Sem esta trava, um 401 que não seja de token vira laço: renova, falha,
-    /// renova. E cada renovação **aposenta o token dos outros aparelhos da casa**
-    /// — o app entraria em laço derrubando o filme de quem está na sala.
+    /// ⚠️ Ela existe como propriedade em vez de um `if` repetido nos dois pontos
+    /// que marcam (o relógio de 20s e a saída): dois `if` iguais em lugares
+    /// distantes é a receita pra um deles ser esquecido no dia em que aparecer
+    /// um terceiro ponto de marcação.
+    var registraProgresso: Bool { !doAoVivo }
+
+    /// Já tentamos renovar o token de mídia **nesta tentativa de abertura**?
+    ///
+    /// ## ⚠️ Metade do motivo desta trava acabou — 17/08/2026
+    ///
+    /// Ela tinha duas justificativas, e o servidor derrubou uma:
+    ///
+    /// | motivo | hoje |
+    /// |---|---|
+    /// | um 401 que **não** é de token vira laço: renova, falha, renova | continua valendo |
+    /// | cada renovação **aposenta o token dos outros aparelhos** | ❌ o token virou **por aparelho** |
+    ///
+    /// A resposta do servidor diz «podem tirar a trava de renovação única», e
+    /// tirar **inteira** seria trocar um defeito por outro: o laço não some
+    /// porque o token deixou de ser destrutivo.
+    ///
+    /// O que muda é o **alcance**: ela deixa de ser «uma vez por abertura do
+    /// player, para sempre» e passa a ser «uma vez por tentativa». Quem recupera
+    /// zera a trava — então um filme de três horas cujo token vença duas vezes
+    /// renova duas vezes, que era o caso que a trava velha condenava a um
+    /// «o filme não abriu» no meio da sessão.
     private var jaRenovou = false
 
     func arte(_ caminho: String) -> URL? { odeon.urlDaArte(caminho) }
@@ -135,6 +199,7 @@ final class ModeloDoPlayer {
         }
         do {
             let plano = try await odeon.plano(arquivo: arquivo, faixaDeAudio: faixaDeAudio)
+            if let medida = plano.duracaoEmSegundos, medida > 0 { duracaoDoServidor = medida }
             let ponto = apartirDe ?? comecarEm
 
             let url: URL?
@@ -153,6 +218,11 @@ final class ModeloDoPlayer {
                     faixaDeAudio: faixaDeAudio,
                 )
                 sessaoAberta = sessao.id
+                /// ⚠️ E a da sessão, pelo mesmo motivo: uma sessão retomada pode
+                /// não ter passado pelo plano.
+                if let medida = sessao.duracaoEmSegundos, medida > 0 {
+                    duracaoDoServidor = medida
+                }
                 url = try await odeon.urlDeMidia(sessao.urlDaPlaylist)
             }
 
@@ -268,6 +338,13 @@ final class ModeloDoPlayer {
                 /// ⚠️ Instantâneo do estado a cada 2 s. Sem isto, «tela preta com
                 /// cursor em `--:--`» é indistinguível de buffer, de playlist vazia e
                 /// de vídeo sem faixa — três causas com o mesmo sintoma.
+                /// ⚠️ **Voltou a tocar? A trava zera.** Com o token por aparelho a
+                /// renovação não custa nada a ninguém, então o que ela precisa
+                /// impedir é só o laço — e um laço não toca. Ver `jaRenovou`.
+                if item.status == .readyToPlay, (self.player?.rate ?? 0) > 0 {
+                    self.jaRenovou = false
+                }
+
                 if volta % 4 == 0 {
                     let d = item.duration.seconds
                     let carregado = item.loadedTimeRanges.first?.timeRangeValue.duration.seconds ?? 0
@@ -291,7 +368,8 @@ final class ModeloDoPlayer {
                     ///
                     /// A regra herdada é «não renovar por precaução», e ela
                     /// continua: aqui só se renova **depois de o token provar que
-                    /// morreu**. Uma vez, e recomeça a abertura.
+                    /// morreu**. Uma vez por tentativa, e recomeça a abertura —
+                    /// ver a folha do `jaRenovou`.
                     if !self.jaRenovou, Self.pareceTokenMorto(item) {
                         self.jaRenovou = true
                         print("-- 401 de mídia: renovando o token e reabrindo")
@@ -449,7 +527,7 @@ final class ModeloDoPlayer {
         ) { [weak self] tempo in
             guard let self else { return }
             let posicao = tempo.seconds
-            guard posicao > 0 else { return }
+            guard posicao > 0, registraProgresso else { return }
             Task { [odeon, obra, duracao, arquivo] in
                 await odeon.marcarProgresso(
                     obra: obra,
@@ -495,7 +573,7 @@ final class ModeloDoPlayer {
         observador = nil
         relogioDaTela = nil
 
-        if let posicao = player?.currentTime().seconds, posicao > 0 {
+        if let posicao = player?.currentTime().seconds, posicao > 0, registraProgresso {
             await odeon.marcarProgresso(
                 obra: obra,
                 posicao: posicao,
@@ -530,11 +608,13 @@ struct TelaDoPlayer: View {
         duracao: Double?,
         titulo: String = "",
         comecarEm: Double,
+        doAoVivo: Bool = false,
         aoVoltar: @escaping () -> Void,
     ) {
         _modelo = State(wrappedValue: ModeloDoPlayer(
             odeon: odeon, obra: obra, arquivo: arquivo,
             duracao: duracao, titulo: titulo, comecarEm: comecarEm, local: local,
+            doAoVivo: doAoVivo,
         ))
         self.aoVoltar = aoVoltar
     }

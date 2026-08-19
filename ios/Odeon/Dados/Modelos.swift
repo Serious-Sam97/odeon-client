@@ -236,6 +236,87 @@ struct ItemDaBiblioteca: Decodable, Sendable, Identifiable {
 /// caminho mais curto pra **fundir** o que só devia ser **agrupado** — e fundir
 /// apagaria o `position_seconds` de uma das duas, que é a objeção que segurou o
 /// pedido de 04/08 a 14/08/2026.
+/// Uma obra da listagem **plana** — um episódio, dentro de uma série.
+///
+/// ## ⚠️ Ela não é a `ItemDaBiblioteca`, e a diferença é o agrupamento
+///
+/// `/api/library` devolve o acervo **agrupado**: uma série é uma entrada só, com
+/// `season_count` e `work_count`. `/api/works?collection=…` devolve o mesmo
+/// acervo **plano** — cada episódio uma linha, com `season_number` e
+/// `episode_number`. É essa a listagem que a ficha da série e a visão de
+/// temporada leem.
+///
+/// Espelha a `ObraDaLista` do Android, campo a campo. Ver
+/// `core/.../dados/Modelos.kt`.
+struct ObraDaLista: Decodable, Sendable, Identifiable {
+    let id: String
+    let title: String
+    let year: Int?
+    let temporada: Int?
+    let episodio: Int?
+    let corDominante: String?
+    let poster: String?
+    let backdrop: String?
+    let still: String?
+    let tituloDaSerie: String?
+    /// A sinopse do episódio — chegou em 18/08/2026, em 7.628 dos 14.844.
+    /// ⚠️ Quem não tem manda nulo, e aí a linha não é desenhada (§18).
+    let overview: String?
+    let arquivoId: String?
+    let duracaoEmSegundos: Double?
+    let ondeParou: Double?
+    let finished: Bool?
+
+    /// A arte do cartão, da mais específica pra menos.
+    ///
+    /// ⚠️ O `still` **ganha**, e é o desenho inteiro da lista de episódios: um
+    /// quadro do próprio episódio distingue os nove de uma temporada; o pôster
+    /// da série é o mesmo nos nove.
+    var arte: String? { still ?? backdrop ?? poster }
+
+    /// `S01E04`. ⚠️ `nil` quando falta um dos dois — meio código é pior que
+    /// nenhum, e um `S01E` sozinho não diz que episódio é.
+    var codigo: String? {
+        if let temporada, let episodio {
+            String(format: "S%02dE%02d", temporada, episodio)
+        } else if let episodio {
+            "ep \(episodio)"
+        } else {
+            nil
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, year, poster, backdrop, still, finished, overview
+        case temporada = "season_number"
+        case episodio = "episode_number"
+        case corDominante = "dominant_color"
+        case tituloDaSerie = "series_title"
+        case arquivoId = "media_file_id"
+        case duracaoEmSegundos = "duration_seconds"
+        case ondeParou = "position_seconds"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        temporada = try c.decodeIfPresent(Int.self, forKey: .temporada)
+        episodio = try c.decodeIfPresent(Int.self, forKey: .episodio)
+        corDominante = try c.decodeIfPresent(String.self, forKey: .corDominante)
+        poster = try c.decodeIfPresent(String.self, forKey: .poster)
+        backdrop = try c.decodeIfPresent(String.self, forKey: .backdrop)
+        still = try c.decodeIfPresent(String.self, forKey: .still)
+        tituloDaSerie = try c.decodeIfPresent(String.self, forKey: .tituloDaSerie)
+        overview = try c.decodeIfPresent(String.self, forKey: .overview)
+        arquivoId = try c.decodeIfPresent(String.self, forKey: .arquivoId)
+        duracaoEmSegundos = try c.decodeIfPresent(Double.self, forKey: .duracaoEmSegundos)
+        ondeParou = try c.decodeIfPresent(Double.self, forKey: .ondeParou)
+        finished = try c.decodeIfPresent(Bool.self, forKey: .finished)
+    }
+}
+
 struct VersaoDaObra: Decodable, Sendable, Identifiable {
     /// O id da **obra**, e é por ele que a ficha abre.
     ///
@@ -597,6 +678,20 @@ struct PlanoDeReproducao: Decodable, Sendable {
     let faixasDeAudio: [FaixaDeAudio]
     /// **Qual** faixa este plano está falando. Sem pedido, o servidor usa a 0.
     let faixaDeAudio: Int?
+    /// A duração do arquivo, **medida pelo servidor** — 17/08/2026.
+    ///
+    /// ## ⚠️ É a resposta ao pedido da playlist `VOD`, e é melhor que ele
+    ///
+    /// O pedido era declarar a playlist `VOD` pra a barra nascer certa. A
+    /// resposta recusou com medida: declarar `VOD` exige saber o tamanho de cada
+    /// segmento antes de produzi-lo, e no caminho `video=copy` isso são os
+    /// keyframes da fonte — **1m33s por arquivo** contra 25s de espera da
+    /// playlist. Metade dos filmes ficaria certa e metade errada, sem ninguém
+    /// saber qual.
+    ///
+    /// Veio o número no lugar. É o suficiente: quem desenha a barra e o «faltam»
+    /// é o cliente, e o que faltava era só o denominador.
+    let duracaoEmSegundos: Double?
 
     var eDireto: Bool { mode == "direct_play" }
 
@@ -606,6 +701,7 @@ struct PlanoDeReproducao: Decodable, Sendable {
         case urlDireta = "direct_url"
         case faixasDeAudio = "audio_tracks"
         case faixaDeAudio = "audio_track"
+        case duracaoEmSegundos = "duration_seconds"
     }
 
     init(from decoder: Decoder) throws {
@@ -619,6 +715,61 @@ struct PlanoDeReproducao: Decodable, Sendable {
         subtitles = c.ou(.subtitles, [])
         faixasDeAudio = c.ou(.faixasDeAudio, [])
         faixaDeAudio = c.talvez(.faixaDeAudio)
+        duracaoEmSegundos = c.talvez(.duracaoEmSegundos)
+    }
+}
+
+/// Uma etiqueta **do acervo** — `GET /api/tags`.
+///
+/// ⚠️ Ela não é a `EtiquetaDaObra`: aquela é o que um filme tem, esta é o que o
+/// acervo oferece, com quantas obras cada uma alcança. É o que enche o painel de
+/// filtros.
+struct EtiquetaDoAcervo: Decodable, Sendable, Identifiable {
+    let id: String
+    let namespace: String
+    let value: String
+    let quantasObras: Int
+
+    /// `genre:Terror` — a chave que viaja pro servidor e identifica o chip.
+    var chave: String { "\(namespace):\(value)" }
+
+    enum CodingKeys: String, CodingKey {
+        case id, namespace, value
+        case quantasObras = "work_count"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.ou(.id, "")
+        namespace = c.ou(.namespace, "")
+        value = c.ou(.value, "")
+        quantasObras = c.ou(.quantasObras, 0)
+    }
+}
+
+/// O grupo de etiquetas — `GET /api/tag-namespaces`.
+///
+/// ⚠️ É dele que sai o rótulo «Gênero» e a **ordem** dos grupos. Sem ele a tela
+/// traduziria `genre` por conta própria, e a lista de namespaces existiria em
+/// dois lugares.
+struct EspacoDeEtiqueta: Decodable, Sendable, Identifiable {
+    let namespace: String
+    let rotulo: String
+    let posicao: Int
+
+    var id: String { namespace }
+
+    enum CodingKeys: String, CodingKey {
+        case namespace
+        case rotulo = "label"
+        case posicao = "position"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        namespace = c.ou(.namespace, "")
+        rotulo = c.ou(.rotulo, "")
+        posicao = c.ou(.posicao, 0)
     }
 }
 
@@ -641,6 +792,42 @@ struct EtiquetaDaObra: Decodable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey { case id, namespace, value }
+
+    /// O qualificador em português — `country` vira «país».
+    ///
+    /// ## ⚠️ A tela mostrava **chave de banco**, e o Android já tinha consertado
+    ///
+    /// Visto na ficha de «007 Contra GoldenEye» em 17/08/2026, aqui: `country
+    /// Reino Unido`, `format filme`, `genre Ação`, `lang inglês`. O mesmo defeito
+    /// que o Android corrigiu em 16/08 — e que ficou de pé neste cliente porque o
+    /// conserto de lá não atravessou.
+    ///
+    /// O desenho está certo e vem da web: o qualificador apagado diz *de que
+    /// tipo* é a etiqueta. O que ele assumia é que o namespace chegava em
+    /// português (`genero/Crime`, `pais/Estados Unidos`), como chegava quando
+    /// aquilo foi escrito. Não chega mais.
+    ///
+    /// Traduzir código em nome é **desenho**, e mora no cliente pela mesma regra
+    /// do `nomeDoIdioma`. ⚠️ Namespace desconhecido devolve `nil` e a pílula
+    /// **omite o qualificador** em vez de imprimir a chave: o valor sozinho
+    /// continua legível, e é o pior caso aceitável (§18).
+    ///
+    /// ⚠️ A tabela é a mesma do Android, entrada por entrada. Divergir aqui
+    /// significaria a mesma etiqueta lida de dois jeitos em dois aparelhos da
+    /// mesma casa.
+    var rotulo: String? {
+        switch namespace.lowercased() {
+        case "country", "pais", "país": "país"
+        case "genre", "genero", "gênero": "gênero"
+        case "format", "formato", "tipo": "formato"
+        case "lang", "language", "idioma": "idioma"
+        case "decade", "decada", "década": "década"
+        case "director", "diretor": "direção"
+        case "studio", "estudio", "estúdio": "estúdio"
+        case "collection", "saga": "saga"
+        default: nil
+        }
+    }
 }
 
 /// Um fotograma da obra — `GET /api/works/{obra}/cenas`.
@@ -676,10 +863,16 @@ struct SessaoDeTranscodificacao: Decodable, Sendable {
     let mode: String
     let reasons: [String]
     let urlDaPlaylist: String
+    /// A duração — ver a folha do mesmo campo em `PlanoDeReproducao`.
+    ///
+    /// ⚠️ Ela vem **nas duas** respostas de propósito: o caminho direto não abre
+    /// sessão, e uma sessão retomada pode não passar pelo plano.
+    let duracaoEmSegundos: Double?
 
     enum CodingKeys: String, CodingKey {
         case id, mode, reasons
         case urlDaPlaylist = "playlist_url"
+        case duracaoEmSegundos = "duration_seconds"
     }
 
     init(from decoder: Decoder) throws {
@@ -688,6 +881,7 @@ struct SessaoDeTranscodificacao: Decodable, Sendable {
         mode = c.ou(.mode, "")
         reasons = c.ou(.reasons, [])
         urlDaPlaylist = c.ou(.urlDaPlaylist, "")
+        duracaoEmSegundos = c.talvez(.duracaoEmSegundos)
     }
 }
 
@@ -1513,4 +1707,297 @@ struct CanalAberto: Decodable, Sendable {
         let canal = try? c.nestedContainer(keyedBy: ChavesDoCanal.self, forKey: .channel)
         nome = canal?.ou(.name, "") ?? ""
     }
+}
+
+// MARK: - A prateleira
+
+/// Uma fita que está **em mãos** — fora da estante.
+struct Emprestada: Decodable, Sendable, Identifiable {
+    let id: Int
+    /// ⚠️ O mesmo id que `/api/library` devolve — é por ele que a estante casa.
+    let caixaId: String
+    /// **Todos** os ids que abrem esta caixa — 17/08/2026.
+    ///
+    /// ## ⚠️ É a peça que devolve o «levar pra casa» ao app
+    ///
+    /// O botão não existia porque o 403 era imprevisível, e o §53 proíbe oferecer
+    /// o que a validação vai negar. A causa saiu da investigação do servidor e
+    /// **não era permissão**: o mesmo filme existe duas vezes neste acervo (44
+    /// casos). A biblioteca desenha um cartão pro grupo; a locadora trancava por
+    /// `work_id` — a prateleira dizia o id de um rip e o cartão conhecia o outro.
+    ///
+    /// Com a lista a conta é local: se o id que estou olhando está aqui, a caixa
+    /// **está fora**, e o `meu` diz se está comigo.
+    let caixaIds: [String]
+    let titulo: String
+    let quemNome: String
+    let meu: Bool
+    let venceEm: String?
+    let poster: String?
+    let corDominante: String?
+    let ano: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, titulo, meu, poster, ano
+        case caixaId = "caixa_id"
+        case caixaIds = "caixa_ids"
+        case quemNome = "quem_nome"
+        case venceEm = "vence_em"
+        case corDominante = "dominant_color"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.ou(.id, 0)
+        caixaId = c.ou(.caixaId, "")
+        caixaIds = c.ou(.caixaIds, [])
+        titulo = c.ou(.titulo, "")
+        quemNome = c.ou(.quemNome, "")
+        meu = c.ou(.meu, false)
+        venceEm = c.talvez(.venceEm)
+        poster = c.talvez(.poster)
+        corDominante = c.talvez(.corDominante)
+        ano = c.talvez(.ano)
+    }
+}
+
+/// Alguém que frequenta a loja, e quanto tem na mão.
+///
+/// ⚠️ São as pessoas do **servidor**, não as de um grupo: com estoque único, quem
+/// te barra pode ser qualquer uma delas.
+struct PessoaNaLoja: Decodable, Sendable, Identifiable {
+    let id: String
+    let nome: String
+    let naMao: Int
+    /// Quantas fitas dela **alguém teve que rebobinar**. A reputação, e cada
+    /// unidade é uma vez em que outra pessoa gastou os segundos por causa dela.
+    let zoadas: Int
+    /// ⚠️ E quantas ela rebobinou dos outros. **O outro lado precisa existir**: um
+    /// placar que só conta o defeito faz de todo mundo réu.
+    let rebobinou: Int
+    /// Fitas que ela deixou no meio **agora**. Estado, não histórico — some no
+    /// instante em que alguém rebobina, e é a única das três que dá pra consertar
+    /// sozinha.
+    let noMeio: Int
+
+    /// ⚠️ Quem não tem fita nem fama **não é notícia** (§24). É a mesma régua dos
+    /// chips que esta nota substituiu.
+    var temOQueDizer: Bool { naMao > 0 || zoadas > 0 || rebobinou > 0 || noMeio > 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case id, zoadas, rebobinou
+        case nome = "display_name"
+        case naMao = "na_mao"
+        case noMeio = "no_meio"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.ou(.id, "")
+        nome = c.ou(.nome, "")
+        naMao = c.ou(.naMao, 0)
+        zoadas = c.ou(.zoadas, 0)
+        rebobinou = c.ou(.rebobinou, 0)
+        noMeio = c.ou(.noMeio, 0)
+    }
+}
+
+struct OpcoesDaLocadora: Decodable, Sendable {
+    let prazoEmDias: Int
+
+    enum CodingKeys: String, CodingKey { case prazoEmDias = "prazo_dias" }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        prazoEmDias = c.ou(.prazoEmDias, 0)
+    }
+}
+
+/// `GET /api/locadora/prateleira` — o que está **em mãos**, e a régua do formato.
+///
+/// ⚠️ «Não devolve o estado das 746 caixas — devolve as poucas que estão em mãos.
+/// Quem cruza com a estante é a tela, que já tem as caixas carregadas.»
+struct Prateleira: Decodable, Sendable {
+    let emprestadas: [Emprestada]
+    let pessoas: [PessoaNaLoja]
+    let opcoes: OpcoesDaLocadora?
+    /// Quantas ainda dá pra pegar. Zero é o limite — e a nota diz isso com todas
+    /// as letras, porque «não dá» sem motivo é o §8b.
+    let possoPegar: Int
+
+    /// O corte entre fita e disco.
+    ///
+    /// ## ⚠️ **Não é constante daqui, de propósito**
+    ///
+    /// O servidor usa o mesmo número pra decidir se uma caixa **rebobina**. Se os
+    /// dois divergissem, uma caixa desenhada como VHS recusaria o rebobinar — a
+    /// mesma família do botão que dizia «ver as 644» e abria 1.424.
+    ///
+    /// Foi por isso que a locadora deste app desenhou tudo como DVD até agora: eu
+    /// não tinha este número, e inventar um ano de corte seria a segunda cópia de
+    /// uma regra que já existe.
+    let ultimoAnoVhs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case emprestadas, pessoas, opcoes
+        case possoPegar = "posso_pegar"
+        case ultimoAnoVhs = "ultimo_ano_vhs"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        emprestadas = c.ou(.emprestadas, [])
+        pessoas = c.ou(.pessoas, [])
+        opcoes = c.talvez(.opcoes)
+        possoPegar = c.ou(.possoPegar, 0)
+        ultimoAnoVhs = c.ou(.ultimoAnoVhs, 0)
+    }
+
+    /// Esta obra é fita ou disco?
+    ///
+    /// ⚠️ **Sem ano, é disco.** É o §18: na dúvida, o app não afirma que uma obra
+    /// é de uma era que ele não sabe qual é — e disco é o caso mais comum do
+    /// acervo.
+    func ehVhs(ano: Int?) -> Bool {
+        guard ultimoAnoVhs > 0, let ano else { return false }
+        return ano <= ultimoAnoVhs
+    }
+
+    /// As minhas, separadas das dos outros.
+    ///
+    /// ⚠️ A prateleira mistura tudo de propósito — quem te barra pode ser qualquer
+    /// morador, e ver isso é parte da ideia. Mas a tela precisa da separação: nas
+    /// minhas dá pra devolver, nas dos outros só dá pra pedir.
+    var minhas: [Emprestada] { emprestadas.filter(\.meu) }
+    var dosOutros: [Emprestada] { emprestadas.filter { !$0.meu } }
+}
+
+// MARK: - O menu do disco
+
+/// Um capítulo, como o **autor do disco** o cortou.
+struct Capitulo: Decodable, Sendable, Identifiable {
+    let inicio: Double
+    let fim: Double?
+    /// ⚠️ `nil` em **98,4% deste acervo**. Exibir o timecode como nome de
+    /// capítulo seria inventar um metadado com cara de dado (§18) — quem desenha
+    /// numera («Capítulo 03») e assume a numeração como sua.
+    let titulo: String?
+
+    var id: Double { inicio }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        inicio = c.ou(.inicio, 0)
+        fim = c.talvez(.fim)
+        titulo = c.talvez(.titulo)
+    }
+
+    enum CodingKeys: String, CodingKey { case inicio, fim, titulo }
+}
+
+/// `GET /api/works/{obra}/menu` — o menu do disco.
+///
+/// ## ⚠️ Ele existe porque um DVD **não é um arquivo**
+///
+/// A biblioteca toca; o disco tem menu. É a diferença que a locadora inteira
+/// existe pra encenar, e é por isso que este menu abre **só por ela** e **só em
+/// DVD**: a fita não tem menu, tem rebobinar (§14.4).
+struct MenuDoDisco: Decodable, Sendable {
+    let obraId: String
+    let arquivoId: String
+    let titulo: String
+    let ano: Int?
+    let cor: String?
+    let backdrop: String?
+    let duracao: Double?
+    /// ⚠️ `nil` quando não há de onde continuar — e aí **o item nem existe** no
+    /// menu (§24). Um «continuar» que começa do zero é um «do começo» com outro
+    /// nome.
+    let posicao: Double?
+    let terminado: Bool
+    let capitulos: [Capitulo]
+    /// Idiomas distintos, na ordem das faixas do disco.
+    let legendas: [String]
+    /// O clima: o índice da estante que reivindicaria este filme na locadora.
+    ///
+    /// ⚠️ **O índice é o contrato.** Ele é a posição na lista `ESTANTES` do
+    /// servidor, e a tabela de climas do app é indexada por ele — mexer na ordem
+    /// de lá sem mexer aqui troca o clima de todo mundo.
+    let clima: Int
+    let climaNome: String
+
+    /// Dá pra continuar? Só com posição, não terminado, e passando de um minuto
+    /// — a mesma régua da ficha.
+    var temComoContinuar: Bool { !terminado && (posicao ?? 0) > 60 }
+
+    /// `1:23:45` de onde parou, pro rótulo do «continuar».
+    var ponteiro: String { relogioDaSessao(posicao ?? 0) }
+
+    enum CodingKeys: String, CodingKey {
+        case titulo, ano, cor, backdrop, duracao, posicao, terminado, capitulos, legendas, clima
+        case obraId = "work_id"
+        case arquivoId = "media_file_id"
+        case climaNome = "clima_nome"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        obraId = c.ou(.obraId, "")
+        arquivoId = c.ou(.arquivoId, "")
+        titulo = c.ou(.titulo, "")
+        ano = c.talvez(.ano)
+        cor = c.talvez(.cor)
+        backdrop = c.talvez(.backdrop)
+        duracao = c.talvez(.duracao)
+        posicao = c.talvez(.posicao)
+        terminado = c.ou(.terminado, false)
+        capitulos = c.ou(.capitulos, [])
+        legendas = c.ou(.legendas, [])
+        clima = c.ou(.clima, 11)
+        climaNome = c.ou(.climaNome, "")
+    }
+}
+
+/// Uma **coleção** — a série, e cada temporada dela.
+///
+/// ⚠️ Chegou em 18/08/2026 e substitui um monte de reserva: pôster de temporada
+/// (461 de 473), sinopse (232), nome próprio (26), e sinopse e backdrop da série
+/// (115 e 118 das 120). Ver `PEDIDOS-AO-SERVIDOR.md, «já entregue» 10`.
+struct Colecao: Decodable, Sendable, Identifiable {
+    let id: String
+    let title: String
+    let year: Int?
+    let overview: String?
+    /// O número da temporada. ⚠️ É `position`: numa coleção genérica ele é a
+    /// ordem, e numa temporada ele **é** o número.
+    let position: Int?
+    let poster: String?
+    let backdrop: String?
+    let quantosItens: Int
+    let quantosVistos: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, year, overview, position, poster, backdrop
+        case quantosItens = "item_count"
+        case quantosVistos = "finished_count"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        overview = try c.decodeIfPresent(String.self, forKey: .overview)
+        position = try c.decodeIfPresent(Int.self, forKey: .position)
+        poster = try c.decodeIfPresent(String.self, forKey: .poster)
+        backdrop = try c.decodeIfPresent(String.self, forKey: .backdrop)
+        quantosItens = try c.decodeIfPresent(Int.self, forKey: .quantosItens) ?? 0
+        quantosVistos = try c.decodeIfPresent(Int.self, forKey: .quantosVistos) ?? 0
+    }
+}
+
+/// A resposta de `GET /api/collections/{id}`: a série e as temporadas dela.
+struct ColecaoComFilhos: Decodable, Sendable {
+    let collection: Colecao
+    let children: [Colecao]
 }

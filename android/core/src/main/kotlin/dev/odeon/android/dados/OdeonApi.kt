@@ -48,6 +48,8 @@ interface OdeonApi {
         @Query("q") busca: String? = null,
         @Query("kind") tipo: String? = null,
         @Query("tags") etiquetas: String? = null,
+        /// ⚠️ `any`, e sem opção de trocar — ver `Filtros.excluindo`.
+        @Query("tags_not") excluindo: String? = null,
         @Query("tag_mode") modoDasEtiquetas: String? = null,
         @Query("year_from") anoDe: Int? = null,
         @Query("year_to") anoAte: Int? = null,
@@ -71,6 +73,8 @@ interface OdeonApi {
         @Query("q") busca: String? = null,
         @Query("kind") tipo: String? = null,
         @Query("tags") etiquetas: String? = null,
+        /// ⚠️ `any`, e sem opção de trocar — ver `Filtros.excluindo`.
+        @Query("tags_not") excluindo: String? = null,
         @Query("tag_mode") modoDasEtiquetas: String? = null,
         @Query("year_from") anoDe: Int? = null,
         @Query("year_to") anoAte: Int? = null,
@@ -80,6 +84,13 @@ interface OdeonApi {
         @Query("person") pessoa: String? = null,
         @Query("sort") ordem: String? = null,
     ): List<ObraDaLista>
+
+    /// A coleção e os filhos dela — pra uma série, as **temporadas**.
+    ///
+    /// ⚠️ Não é rota nova: ela já existia e agora devolve `poster`, `backdrop`,
+    /// `dominant_color` e `finished_count`. Ver `Colecao`.
+    @GET("api/collections/{id}")
+    suspend fun colecao(@Path("id") id: String): ColecaoComFilhos
 
     /// As etiquetas do acervo, com a contagem de cada uma.
     ///

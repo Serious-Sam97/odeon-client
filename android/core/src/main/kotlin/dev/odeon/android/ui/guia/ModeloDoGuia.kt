@@ -39,10 +39,27 @@ class ModeloDoGuia(private val odeon: RepositorioOdeon) : ViewModel() {
     private fun carregar() {
         viewModelScope.launch {
             _estado.update { it.copy(carregando = true) }
-            val eixos = async { odeon.guia() }
-            val revista = async { odeon.revista() }
+            /// ⚠️ **`runCatching` dentro do `async`** — ver a folha do
+            /// `ModeloDaLocadora.carregar`, que documenta o defeito inteiro.
+            ///
+            /// Aqui ele nunca chegou a estourar, e só por sorte de camada: as duas
+            /// rotas já são tratadas dentro do `RepositorioOdeon`, então o `async`
+            /// não tem o que propagar. Mas a proteção estar **na outra ponta**
+            /// significa que o dia em que alguém fizer `guia()` lançar, esta tela
+            /// mata o app — sem mudar uma linha daqui.
+            val eixos = async { runCatching { odeon.guia() }.getOrNull() }
+            val revista = async { runCatching { odeon.revista() }.getOrNull() }
+            /// ⚠️ O que já estava desenhado **fica** se a viagem falhar, pelo
+            /// mesmo motivo da locadora: um guia que pisca vazio diz «não há
+            /// eixos», e o que houve foi «não deu pra perguntar».
+            val osEixos = eixos.await()
+            val aRevista = revista.await()
             _estado.update {
-                it.copy(carregando = false, eixos = eixos.await(), revista = revista.await())
+                it.copy(
+                    carregando = false,
+                    eixos = osEixos ?: it.eixos,
+                    revista = aRevista ?: it.revista,
+                )
             }
         }
     }

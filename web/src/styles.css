@@ -771,22 +771,236 @@ button.ghost {
   margin-top: var(--s6);
 }
 
-/* Faixa de temporada dentro da série. Usa a mesma `.strip` do painel de
-   propósito: é o mesmo gesto — "esta é uma faixa de conteúdo" — e repetir o
-   vocabulário é o que faz as telas parecerem o mesmo produto. */
-.temporada + .temporada {
-  margin-top: var(--s6);
+/* ═══ A ficha da série e a visão de temporada — 18/08/2026 ═══════════════════
+
+   Antes, entrar numa série empilhava TODAS as temporadas na mesma rolagem, cada
+   uma com sua grade: em Malcolm são 151 cartões em sete blocos. Agora são dois
+   níveis — a série apresenta e oferece continuar; a temporada lista.
+
+   Desenho aprovado pelo dono e igual ao da TV, do celular e do iOS. */
+
+.ficha-serie-pano {
+  position: relative;
+  aspect-ratio: 16 / 7;
+  max-height: 340px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  margin-bottom: var(--s4);
 }
 
-.temporada .strip {
-  margin-top: var(--s5);
+.ficha-serie-pano img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-/* Episódio é 16:9 (o `still` do provider é 780×439), então a coluna precisa ser
-   mais larga que a de pôster — senão cabem oito por linha e o quadro fica do
-   tamanho de uma miniatura. */
-.grid.larga {
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+/* O véu pro letreiro encostar na arte sem flutuar sobre ela: um still de série
+   não tem lugar previsível pra texto. */
+.ficha-serie-pano::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 35%, var(--bg) 100%);
+}
+
+.ficha-serie-titulo {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.4vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.ficha-serie-conta {
+  color: var(--fg-muted);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin: var(--s2) 0 0;
+}
+
+.ficha-serie-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+/* O botão principal é o alvo mais clicado da tela, e o único cheio. */
+.chip.principal {
+  background: var(--accent-hot);
+  border-color: var(--accent-hot);
+  color: var(--bg-sunken);
+  font-weight: 600;
+}
+
+/* A fileira de temporadas rola na horizontal: vertical empurraria a primeira
+   ação pra fora da dobra numa série de sete. */
+.fileira-temporadas {
+  display: flex;
+  gap: var(--s4);
+  overflow-x: auto;
+  padding-bottom: var(--s3);
+  margin-top: var(--s3);
+}
+
+/* ⚠️ Retrato desde 18/08/2026: o servidor passou a mandar o pôster da temporada
+   do TMDB, e pôster é 2:3. Num quadro 16:9 a "Temporada 1" do Arcane virava um
+   olho — a moldura segue a imagem. */
+.thumb.retrato {
+  aspect-ratio: 2 / 3;
+}
+
+.cartao-temporada {
+  flex: 0 0 170px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cartao-temporada h3 {
+  margin: var(--s2) 0 0;
+  font-size: 15px;
+}
+
+.cartao-temporada:hover .thumb,
+.cartao-temporada:focus-visible .thumb {
+  border-color: var(--accent-dim);
+}
+
+/* ── A temporada, em lista ────────────────────────────────────────────────── */
+
+.lista-temporada .chip.voltar {
+  margin-bottom: var(--s4);
+}
+
+.episodios {
+  list-style: none;
+  margin: var(--s5) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.episodio {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--s2);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.episodio:hover,
+.episodio:focus-visible {
+  background: var(--bg-raised);
+  border-color: var(--accent-dim);
+}
+
+.episodio-quadro {
+  flex: 0 0 168px;
+  padding: 0;
+}
+
+/* Visto apaga a fileira inteira — é a marca que se lê de relance numa lista de
+   vinte e duas. */
+.episodio.visto .episodio-quadro img {
+  opacity: 0.55;
+}
+
+.episodio.visto .episodio-titulo {
+  color: var(--fg-muted);
+}
+
+.marca-visto {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 78%);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.episodio-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.episodio-linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.episodio-numero {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--accent-dim);
+}
+
+.episodio-titulo {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.episodio-sub {
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Onde a pessoa parou fala em dourado — é a única linha da lista que pede
+   atenção. */
+.episodio-sub.aqui {
+  color: var(--accent);
+}
+
+/* A sinopse do episódio — duas linhas, e some inteira quando não há. */
+.episodio-sinopse {
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ficha-serie-sinopse {
+  color: var(--fg-muted);
+  max-width: 62ch;
+  margin: var(--s3) 0 0;
+}
+
+@media (max-width: 640px) {
+  .episodio-quadro {
+    flex-basis: 124px;
+  }
+
+  .cartao-temporada {
+    flex-basis: 208px;
+  }
 }
 
 .thumb {
@@ -12275,4 +12489,27 @@ a.cur-fonte:focus-visible {
 .chip-pendentes:hover {
   border-color: var(--accent-dim);
   color: var(--accent);
+}
+
+/* ═══ As prateleiras — `tudo · série · filme · anime` ════════════════════════
+
+   Acima da barra de filtros, e com a mesma `.chip` de propósito: é o mesmo
+   gesto de escolher. O que a distingue é a posição — prateleira vem antes de
+   filtro porque decide o conjunto sobre o qual o filtro age. */
+.prateleiras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+
+/* A contagem dentro da pílula, mais apagada que o nome: ela informa, não é o
+   que se lê primeiro. */
+.prateleiras .chip .conta {
+  margin-left: var(--s2);
+  color: var(--fg-muted);
+}
+
+.prateleiras .chip.on .conta {
+  color: var(--accent-dim);
 }

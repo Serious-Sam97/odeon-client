@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ao vivo — o ponto que transmite.
+
+  Um círculo cheio no centro e duas ondas abrindo pros lados: é a antena, e é o
+  desenho que todo aparelho de transmissão usa desde o rádio. O ponto é a fonte;
+  as ondas são o que sai dele **agora** — que é a única coisa que separa um canal
+  de uma lista de arquivos.
+
+  ## ⚠️ Ele estava torto, e o dono viu
+
+  A primeira versão tinha o miolo em `y=9.6` e um mastro descendo até `y=19.8`.
+  O desenho ocupava 5,2–19,8 e a **massa** ficava em cima, com um rabo embaixo —
+  ao lado da grade da biblioteca e da estrela do «para você», que são simétricos,
+  ele lia como desalinhado.
+
+  Agora o círculo está em `12,12` — o centro exato do quadro de 24 — e as ondas
+  abrem simétricas em volta dele. Sem mastro: ele era o que puxava tudo pra
+  baixo, e um ponto com ondas já diz «transmite» sem precisar de haste.
+
+  ⚠️ Não é um botão de gravar, apesar do miolo cheio. A diferença está nas ondas:
+  sem elas, um disco sólido no meio da barra leria como «gravar», e gravar é a
+  coisa que este app não faz.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,12m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6.9,6.9a7.2,7.2 0,0 0,0 10.2" />
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M17.1,6.9a7.2,7.2 0,0 1,0 10.2" />
+</vector>

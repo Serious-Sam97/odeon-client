@@ -19,6 +19,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import dev.odeon.android.dados.Barramento
+import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.dados.RepositorioOdeon
 import dev.odeon.android.tv.lembrarModelo
 import androidx.compose.foundation.layout.padding
@@ -69,10 +70,13 @@ fun TelaInicialDaTv(
     barramento: Barramento,
     /// Tocar direto, sem passar pela ficha — é o que o ao vivo faz ao
     /// sintonizar: ele já sabe a obra, o arquivo e onde a transmissão está.
-    aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoTocar: (String, String, String, Double, String?, String?, String?) -> Unit,
     aoSintonizarDeFora: (String, String) -> Unit,
     destinoInicial: Destino = Destino.BIBLIOTECA,
     aoAbrirObra: (String) -> Unit,
+    /// Uma série escolhida em qualquer tela daqui vira destino lá fora — ver
+    /// `Onde.Serie`, na `AtividadeDaTv`.
+    aoAbrirSerie: (id: String, titulo: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     /// `rememberSaveable` e não `remember`: numa Google TV, o sistema mata o app
@@ -271,6 +275,7 @@ fun TelaInicialDaTv(
         ) {
             ConteudoDoDestino(
                 destino = destino,
+                odeon = odeon,
                 biblioteca = biblioteca,
                 locadora = locadora,
                 mural = mural,
@@ -282,6 +287,12 @@ fun TelaInicialDaTv(
                 aoTocar = aoTocar,
                 aoSintonizarDeFora = aoSintonizarDeFora,
                 aoAbrirObra = aoAbrirObra,
+                /// ⚠️ Abrir uma série é **trocar de destino**, e não empilhar
+                /// tela: a série mora na biblioteca, e é lá que o «‹ sair da
+                /// série» já sabe devolver. O `pediramSair` é o mesmo recado que
+                /// o trilho usa — ele tira o foco daqui e o entrega ao conteúdo
+                /// no quadro seguinte, quando a nova tela já existe.
+                aoAbrirSerie = aoAbrirSerie,
                 saidaEsquerda = focoDoTrilho,
             )
         }
@@ -422,6 +433,8 @@ private const val FORCA_DO_FEIXE = 0.85f
 @Composable
 private fun ConteudoDoDestino(
     destino: Destino,
+    /// Pro modelo das séries, que nasce aqui dentro — ver `Destino.SERIES`.
+    odeon: RepositorioOdeon,
     biblioteca: ModeloDaBiblioteca,
     locadora: ModeloDaLocadora,
     mural: ModeloDoMural,
@@ -430,18 +443,39 @@ private fun ConteudoDoDestino(
     perfil: ModeloDoPerfil,
     aoVivo: ModeloAoVivo,
     busca: ModeloDaBusca,
-    aoTocar: (String, String, String, Double, String?, String?) -> Unit,
+    aoTocar: (String, String, String, Double, String?, String?, String?) -> Unit,
     aoSintonizarDeFora: (String, String) -> Unit,
     aoAbrirObra: (String) -> Unit,
+    /// Ver `TelaDaBuscaDaTv.aoAbrirSerie` — o 404 que isto conserta, e desde
+    /// 18/08/2026 o destino de toda série: a ficha, não a grade plana.
+    aoAbrirSerie: (id: String, titulo: String) -> Unit,
     saidaEsquerda: FocusRequester,
 ) {
     when (destino) {
         Destino.BIBLIOTECA -> TelaDaBibliotecaDaTv(
             modelo = biblioteca,
             aoAbrirObra = aoAbrirObra,
+            aoAbrirSerie = aoAbrirSerie,
+            /// ⚠️ **A biblioteca da TV é a dos filmes** desde 18/08/2026. Quem
+            /// tira as séries é o servidor, com `?tags_not=` — ver `semSéries`.
+            escondendoSeries = true,
             aoTocar = { item -> aoAbrirObra(item.id) },
             saidaEsquerda = saidaEsquerda,
         )
+
+        Destino.SERIES -> {
+            /// ⚠️ **O mesmo `ModeloDaBiblioteca`**, com a prateleira fixada — a
+            /// grade, a paginação, a busca e os filtros já estão ali. A aba das
+            /// séries acrescenta a **organização**, não uma segunda biblioteca.
+            val modelo = lembrarModelo("series") { ModeloDaBiblioteca(odeon) }
+            LaunchedEffect(Unit) { modelo.sóSéries() }
+            TelaDasSeriesDaTv(
+                modelo = modelo,
+                aoAbrirSerie = aoAbrirSerie,
+                aoAbrirObra = aoAbrirObra,
+                saidaEsquerda = saidaEsquerda,
+            )
+        }
 
         Destino.LOCADORA -> TelaDaLocadoraDaTv(locadora, aoAbrirObra)
         Destino.MURAL -> TelaDoMuralDaTv(mural, aoAbrirObra)
@@ -452,6 +486,7 @@ private fun ConteudoDoDestino(
         Destino.BUSCA -> TelaDaBuscaDaTv(
             modelo = busca,
             aoAbrirObra = aoAbrirObra,
+            aoAbrirSerie = aoAbrirSerie,
             saidaEsquerda = saidaEsquerda,
         )
 

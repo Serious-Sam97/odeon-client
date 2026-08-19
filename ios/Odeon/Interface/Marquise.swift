@@ -369,9 +369,13 @@ struct PilulaDeEtiqueta: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(etiqueta.namespace)
-                .font(.system(size: 13))
-                .foregroundStyle(Cores.textoApagado)
+            /// ⚠️ O qualificador **some** quando não se sabe traduzi-lo, em vez de
+            /// virar a chave crua do banco. Ver `EtiquetaDaObra.rotulo`.
+            if let rotulo = etiqueta.rotulo {
+                Text(rotulo)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Cores.textoApagado)
+            }
             Text(etiqueta.value)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Cores.texto)

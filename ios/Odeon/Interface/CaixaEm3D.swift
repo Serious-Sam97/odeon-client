@@ -26,6 +26,14 @@ struct CaixaEm3D<Face: View>: View {
     /// Android e vale igual aqui.
     var giravel: Bool = false
     var abertura: CGFloat = 0
+    /// O interior é de **disco** (cubo no fundo) ou de **fita** (berço do
+    /// cassete)? ⚠️ Só importa com a caixa **aberta** — fechada, interior não
+    /// existe. É o único pedaço de «arte» que a geometria carrega, porque o forro
+    /// é desenhado aqui e não nas faces.
+    var interiorDeDisco: Bool = true
+    /// A cor do casco, pro lábio da tampa: plástico preto no disco, papelão
+    /// tingido na fita. Quem sabe essa cor é quem desenha as faces.
+    var ehEscuro: Bool = true
     /// A pose de fora, quando alguém quer controlá-la. `nil` deixa a caixa cuidar
     /// da própria.
     var poseControlada: Pose?
@@ -55,6 +63,24 @@ struct CaixaEm3D<Face: View>: View {
         let centro = CGPoint(x: quadro.width / 2, y: quadro.height / 2)
 
         ZStack(alignment: .topLeading) {
+            /// ## O forro — o interior que a tampa aberta revela
+            ///
+            /// ⚠️ **Sem ele, abrir a caixa mostra um buraco.** As faces só são
+            /// desenhadas de frente (o recorte de costas da projeção), o que é
+            /// exato numa caixa **fechada**: ela é sólida, o interior não existe.
+            /// Com a tampa a 118° o olho passa a ver por dentro, e o que há lá é o
+            /// fundo do palco — a caixa aberta vira uma lombada flutuando no nada.
+            /// É o «cenário de teatro visto de trás» voltando pela porta da tampa.
+            ///
+            /// O forro são as faces **de costas** desenhadas como quadriláteros
+            /// chapados: sem homografia, sem conteúdo, só o polígono na cor do
+            /// plástico interno. É o que um estojo aberto mostra de verdade — o
+            /// lado de dentro não é impresso.
+            ///
+            /// ⚠️ Fechada, nada disto roda: o custo do forro só existe enquanto há
+            /// interior pra ver.
+            if abertura > 0.5 { forro(centro: centro) }
+
             /// ⚠️ **Da mais funda pra mais próxima** — a ordem do pintor. Sem ela a
             /// lombada some por baixo da capa em vez de encostar nela.
             ForEach(Array(ladosVisiveis(pose: poseAtual, m: medidas, abertura: abertura).enumerated()),
@@ -66,6 +92,17 @@ struct CaixaEm3D<Face: View>: View {
                                                     altura: tamanho.height, para: cantos) {
                     face(lado, luzDoLado(lado, pose: poseAtual, m: medidas, abertura: abertura))
                         .frame(width: tamanho.width, height: tamanho.height)
+                        /// ## ⚠️ **Recortar antes de projetar**, e não é zelo
+                        ///
+                        /// A homografia mapeia **o que é desenhado**, não o quadro.
+                        /// Conteúdo que transborda o `frame` é mapeado junto, e o
+                        /// resultado é uma face do tamanho errado — foi o que o
+                        /// título deitado da lombada fez: reportou 292pt de largura
+                        /// numa face de 24, e a lombada saiu quinze vezes maior.
+                        ///
+                        /// O `clipped` é o que garante que a face projetada é a
+                        /// face, e não o que por acaso coube dentro dela.
+                        .clipped()
                         .projectionEffect(ProjectionTransform(matriz))
                 }
             }
@@ -76,6 +113,96 @@ struct CaixaEm3D<Face: View>: View {
         .shadow(color: .black.opacity(0.6), radius: 9, x: 3, y: 9)
         .contentShape(.rect)
         .gesture(giravel ? arrasto : nil)
+    }
+
+    /// O forro e o lábio da concha.
+    private func forro(centro: CGPoint) -> some View {
+        Canvas { contexto, _ in
+            let deCostas = Lado.allCases
+                .filter { !deFrente($0, pose: poseAtual, m: medidas, abertura: abertura) }
+                .sorted { profundidade($0, pose: poseAtual, m: medidas, abertura: abertura)
+                    < profundidade($1, pose: poseAtual, m: medidas, abertura: abertura) }
+
+            for lado in deCostas {
+                let pontos = cantosNaTela(lado, pose: poseAtual, m: medidas,
+                                          distancia: distancia, abertura: abertura,
+                                          centro: centro)
+                /// ⚠️ Três tons, e eles são **a luz do palco**: a tampa por dentro
+                /// é o forro mais claro — está virada pra cima, de cara pro facho,
+                /// e é isso que faz a tampa aberta ser vista como tampa em vez de
+                /// sumir de gume no escuro. O fundo pega a luz que entra pela
+                /// abertura; as paredes ficam na própria sombra.
+                let tom: Color = switch lado {
+                case .capa: Color(hex: 0x26262E)
+                case .contracapa: Color(hex: 0x1C1C22)
+                default: Color(hex: 0x121217)
+                }
+                contexto.fill(quadrilatero(pontos), with: .color(tom))
+
+                /// ## As peças do interior
+                ///
+                /// ⚠️ Um estojo aberto **não é liso por dentro**: o keep case tem o
+                /// cubo que prende o disco no fundo; o clamshell tem o berço onde o
+                /// cassete assenta. Sem elas o interior é «uma textura morta».
+                ///
+                /// Elas saem de interpolação bilinear dos **mesmos quatro cantos** —
+                /// a perspectiva vem de graça da própria face, sem matriz nova.
+                if lado == .contracapa { pecaDoInterior(pontos, em: contexto) }
+            }
+
+            /// ⚠️ **O lábio da concha** — a meia-lateral que viaja com a tampa. Sem
+            /// ela só a capa gira, e o olho lê uma tampa chapada colada numa caixa
+            /// maciça. Uma caixa são duas conchas presas na lombada.
+            let labio = cantosDaMeiaLateral(medidas, abertura: abertura).map { canto in
+                let p = projetado(girado(canto, poseAtual), distancia: distancia)
+                return CGPoint(x: p.x + centro.x, y: p.y + centro.y)
+            }
+            contexto.fill(quadrilatero(labio),
+                          with: .color(ehEscuro ? Color(hex: 0x101014) : Color(hex: 0x2A2622)))
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// O cubo do disco, ou o berço do cassete.
+    private func pecaDoInterior(_ pontos: [CGPoint], em contexto: GraphicsContext) {
+        func ponto(_ u: CGFloat, _ v: CGFloat) -> CGPoint {
+            let topo = CGPoint(x: pontos[0].x + (pontos[1].x - pontos[0].x) * u,
+                               y: pontos[0].y + (pontos[1].y - pontos[0].y) * u)
+            let base = CGPoint(x: pontos[3].x + (pontos[2].x - pontos[3].x) * u,
+                               y: pontos[3].y + (pontos[2].y - pontos[3].y) * u)
+            return CGPoint(x: topo.x + (base.x - topo.x) * v, y: topo.y + (base.y - topo.y) * v)
+        }
+
+        if interiorDeDisco {
+            /// O cubo: o anel que prende o disco, no centro do fundo.
+            var anel = Path()
+            let passos = 28
+            for i in 0 ... passos {
+                let a = CGFloat(i) / CGFloat(passos) * 2 * .pi
+                let p = ponto(0.5 + cos(a) * 0.16, 0.5 + sin(a) * 0.11)
+                if i == 0 { anel.move(to: p) } else { anel.addLine(to: p) }
+            }
+            anel.closeSubpath()
+            contexto.stroke(anel, with: .color(.white.opacity(0.14)), lineWidth: 2)
+        } else {
+            /// O berço: a cavidade retangular onde o cassete assenta.
+            var berco = Path()
+            berco.move(to: ponto(0.10, 0.14))
+            berco.addLine(to: ponto(0.90, 0.14))
+            berco.addLine(to: ponto(0.90, 0.86))
+            berco.addLine(to: ponto(0.10, 0.86))
+            berco.closeSubpath()
+            contexto.fill(berco, with: .color(.black.opacity(0.35)))
+            contexto.stroke(berco, with: .color(.white.opacity(0.10)), lineWidth: 1.5)
+        }
+    }
+
+    private func quadrilatero(_ p: [CGPoint]) -> Path {
+        var caminho = Path()
+        caminho.move(to: p[0])
+        for i in 1 ..< p.count { caminho.addLine(to: p[i]) }
+        caminho.closeSubpath()
+        return caminho
     }
 
     private var arrasto: some Gesture {

@@ -39,6 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.odeon.android.ui.Cores
+import androidx.compose.ui.unit.em
+import dev.odeon.android.ui.Tipo
 import kotlinx.coroutines.delay
 
 /// O cabeçalho do player, refeito em 06/08/2026.
@@ -109,6 +111,15 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun CabecalhoDoPlayer(
     titulo: String,
+    /// O canal, quando isto é uma transmissão. `null` num filme.
+    ///
+    /// ## ⚠️ Ele é o que faz este cromo ser **o player ao vivo**
+    ///
+    /// Sem ele o canal vira «o player normal com menos botões», e o dono relatou
+    /// justamente a confusão de dois players. Com o ponto vermelho e o nome, a
+    /// tela diz o que é antes de qualquer botão — e diz de **onde** vem, que o
+    /// título sozinho não diz: ele é o nome do programa, não o do canal.
+    canalNome: String? = null,
     /// A palavra do plano: `direto`, `remux`, `transcodificando`. `null` enquanto
     /// o plano não chegou — e aí a lâmpada não nasce, em vez de nascer apagada
     /// fingindo que já se sabe.
@@ -176,7 +187,32 @@ internal fun CabecalhoDoPlayer(
         ) {
             AlvoDeToque(rotulo = "voltar", aoTocar = aoVoltar) { desenharGalo() }
 
-            plano?.let { palavra ->
+            /// ⚠️ Num canal a lâmpada do plano **dá lugar** ao ponto vermelho:
+            /// «direto ou transcodificando» é uma conta sobre o arquivo, e quem
+            /// está vendo uma transmissão não escolheu arquivo nenhum. O que
+            /// importa ali é que isto está no ar.
+            if (canalNome != null) {
+                Box(
+                    Modifier
+                        .padding(horizontal = 8.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Cores.perigo),
+                )
+                Text(
+                    "NO AR",
+                    style = Tipo.rotulo.copy(fontSize = 9.sp, letterSpacing = 0.12.em),
+                    color = Cores.perigo,
+                )
+                Text(
+                    canalNome,
+                    style = Tipo.rotulo.copy(fontSize = 9.sp, letterSpacing = 0.12.em),
+                    color = Cores.textoApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            } else plano?.let { palavra ->
                 Lampada(
                     direto = planoEDireto,
                     aoTocar = {

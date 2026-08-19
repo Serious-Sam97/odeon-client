@@ -91,6 +91,23 @@ private const val COLUNAS_DO_TECLADO = 6
 fun TelaDaBuscaDaTv(
     modelo: ModeloDaBusca,
     aoAbrirObra: (String) -> Unit,
+    /// ## ⚠️ Série pela busca dava **404** — visto na TCL, 17/08/2026
+    ///
+    /// `Arcane` aparece nos resultados como qualquer outra obra, e escolhê-la
+    /// caía em `aoAbrirObra(item.id)` → `/api/works/{id}` → «a ficha não abriu ·
+    /// o servidor respondeu 404». O erro era legível; o destino é que estava
+    /// errado.
+    ///
+    /// A causa é a mesma que a locadora já tinha pago: **o id de uma série não é
+    /// um id de obra**, é o id de uma *coleção*. A grade da biblioteca sempre
+    /// soube disso (`item.eSerie -> entrarNaSerie`); a busca mandava todo mundo
+    /// pelo mesmo cano.
+    ///
+    /// ⚠️ Id e título bastam: a ficha da série conta os episódios a partir da
+    /// listagem, e não do `work_count` — que é justamente o campo que devolveu
+    /// **1** pra `Arcane` e **84** pro `Arrested` na mesma pergunta. Ver o
+    /// `PEDIDOS-AO-SERVIDOR.md, «já entregue» 9`.
+    aoAbrirSerie: (id: String, titulo: String) -> Unit,
     saidaEsquerda: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -182,8 +199,15 @@ fun TelaDaBuscaDaTv(
                     /// abrir, igual à grade. Ver `escolhendoVersao` acima pro que
                     /// acontecia sem isto.
                     aoEscolherItem = { item ->
-                        if (item.temEscolhaDeVersao) escolhendoVersao = item
-                        else aoAbrirObra(item.id)
+                        /// ⚠️ A série vem **antes** da escolha de versão: uma
+                        /// coleção não tem versões, e perguntar «qual delas?»
+                        /// sobre uma série seria a segunda pergunta errada em
+                        /// cima da primeira.
+                        when {
+                            item.eSerie -> aoAbrirSerie(item.id, item.title)
+                            item.temEscolhaDeVersao -> escolhendoVersao = item
+                            else -> aoAbrirObra(item.id)
+                        }
                     },
                 )
             }

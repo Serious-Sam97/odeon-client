@@ -77,7 +77,17 @@ import dev.odeon.android.ui.desenhaOCone
 /// Odeon passa a ter a mesma iconografia nos dois aparelhos, que era o argumento
 /// da `Cores` aplicado a desenho em vez de a cor.
 enum class Destino(val rotulo: String, @DrawableRes val icone: Int) {
-    BIBLIOTECA("biblioteca", R.drawable.ic_aba_biblioteca),
+    /// ⚠️ Ela se chama **filmes** desde 18/08/2026: as séries saíram daqui e
+    /// viraram destino próprio. «biblioteca» prometia as duas coisas, e numa
+    /// grade de 8.333 onde 120 eram séries a promessa não se cumpria.
+    BIBLIOTECA("filmes", R.drawable.ic_aba_biblioteca),
+
+    /// ## As séries, logo abaixo dos filmes
+    ///
+    /// Duas bibliotecas separadas, como o dono aprovou e como o Jellyfin faz.
+    /// A trilha é vertical e tem espaço — o que não tinha era a barra do
+    /// celular, e lá o «para você» desceu pra gaveta pra abrir a vaga.
+    SERIES("séries", R.drawable.ic_aba_series),
 
     /// ⚠️ **O ao vivo é o sétimo destino, e o único que a TV tem e o celular
     /// não.** Ele fica logo abaixo da biblioteca porque é o segundo lugar onde
@@ -265,7 +275,29 @@ fun Trilho(
         ///
         /// > «Um campo de texto aqui seria oferecer o pior caminho como se fosse
         /// > o principal.»
-        BotaoDaBusca(aberto = aberto, escolhido = atual == Destino.BUSCA, aoEscolher = aoBuscar)
+        /// ## ⚠️ **A âncora do foco também mora aqui** — visto na TCL em 17/08/2026
+        ///
+        /// A busca é filtrada do laço abaixo (ela não é um `ItemDoTrilho`), e o
+        /// `foco` era amarrado **só** lá dentro, no item do destino atual. Estando
+        /// na busca, portanto, nenhum nó do trilho segurava o `FocusRequester` —
+        /// e o `focusProperties { left = … }` das teclas apontava pro vazio.
+        ///
+        /// O sintoma na TV: ◀ na primeira coluna do teclado (`a`/`g`/`m`) não saía
+        /// pro menu. O foco simplesmente não se movia, e a única porta era o
+        /// `voltar` do controle — que numa TV não é onde a mão procura o menu.
+        ///
+        /// ⚠️ Não é um caso de borda: **a busca é justamente a tela em que se fica
+        /// mais tempo preso**, porque soletrar leva dezenas de apertos.
+        BotaoDaBusca(
+            aberto = aberto,
+            escolhido = atual == Destino.BUSCA,
+            modifier = if (foco != null && atual == Destino.BUSCA) {
+                Modifier.focusRequester(foco)
+            } else {
+                Modifier
+            },
+            aoEscolher = aoBuscar,
+        )
 
         Spacer(Modifier.height(10.dp))
         Divisoria(aberto)
@@ -428,11 +460,16 @@ private fun RetratoDoTrilho(
 
 /// A busca, que é a do sistema.
 @Composable
-private fun BotaoDaBusca(aberto: Boolean, escolhido: Boolean, aoEscolher: () -> Unit) {
+private fun BotaoDaBusca(
+    aberto: Boolean,
+    escolhido: Boolean,
+    modifier: Modifier = Modifier,
+    aoEscolher: () -> Unit,
+) {
     val forma = RoundedCornerShape(10.dp)
     Focavel(
         aoEscolher = aoEscolher,
-        modifier = Modifier.padding(horizontal = 2.dp),
+        modifier = modifier.padding(horizontal = 2.dp),
         forma = forma,
         anel = false,
     ) { focado ->

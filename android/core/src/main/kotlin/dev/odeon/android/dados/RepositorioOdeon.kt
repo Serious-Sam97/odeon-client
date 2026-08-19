@@ -115,6 +115,7 @@ class RepositorioOdeon(private val cofre: Cofre) {
             busca = filtros.busca.takeIf { it.isNotBlank() },
             tipo = filtros.tipo,
             etiquetas = filtros.etiquetasEmTexto,
+            excluindo = filtros.excluindoEmTexto,
             modoDasEtiquetas = filtros.modoParaMandar,
             anoDe = filtros.anoDe,
             anoAte = filtros.anoAte,
@@ -124,6 +125,15 @@ class RepositorioOdeon(private val cofre: Cofre) {
             pessoa = filtros.pessoa,
             ordem = filtros.ordem,
         )
+    }
+
+    /// A coleção e os filhos dela — pra uma série, as temporadas com pôster.
+    ///
+    /// ⚠️ **Não lança**: a ficha da série funciona sem ela (as reservas montadas
+    /// dos episódios continuam lá). Uma série que o servidor não conheça abre
+    /// como abria ontem, em vez de abrir com um erro.
+    suspend fun colecao(id: String): ColecaoComFilhos? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().colecao(id) }.getOrNull()
     }
 
     /// A listagem plana — os episódios de dentro de uma série.
@@ -139,6 +149,7 @@ class RepositorioOdeon(private val cofre: Cofre) {
             busca = filtros.busca.takeIf { it.isNotBlank() },
             tipo = filtros.tipo,
             etiquetas = filtros.etiquetasEmTexto,
+            excluindo = filtros.excluindoEmTexto,
             modoDasEtiquetas = filtros.modoParaMandar,
             anoDe = filtros.anoDe,
             anoAte = filtros.anoAte,
@@ -276,12 +287,29 @@ class RepositorioOdeon(private val cofre: Cofre) {
 
     /// A loja: as estantes com as caixas expostas.
     ///
-    /// Falha devolve loja **vazia** em vez de estourar. A locadora tem duas
-    /// fontes — os empréstimos e a vitrine — e uma tela que morre inteira porque
-    /// a segunda não respondeu perderia a primeira junto. A vitrine some, os
-    /// empréstimos ficam.
-    suspend fun estantes(): Loja = withContext(Dispatchers.IO) {
-        runCatching { exigirApi().estantes() }.getOrDefault(Loja())
+    /// Falha **não estoura**. A locadora tem duas fontes — os empréstimos e a
+    /// vitrine — e uma tela que morre inteira porque a segunda não respondeu
+    /// perderia a primeira junto. A vitrine some, os empréstimos ficam.
+    ///
+    /// ## ⚠️ `null` e não `Loja()`, e a diferença apareceu com a rede desligada
+    ///
+    /// Ela devolvia **loja vazia**, e isso anulava uma guarda que a tela tinha
+    /// escrito com todas as letras: «só nasce com a vitrine na mão — sem ela,
+    /// "nada com capa por aqui" seria o app afirmando sobre um acervo que ele não
+    /// conseguiu ler. Erro de rede não é resposta vazia (§18)».
+    ///
+    /// A guarda é `estado.loja?.let`, e um `Loja()` vazio **passa por ela**.
+    /// Medido em 17/08/2026, sem rede: a locadora dizia «nada com capa por aqui»
+    /// — afirmando que o acervo não tem capa nenhuma quando o que houve foi não
+    /// ter perguntado a ninguém.
+    ///
+    /// Devolvendo `null`, as duas decisões passam a valer juntas: a vitrine
+    /// desaparece (a tela não afirma nada sobre ela) e os empréstimos continuam
+    /// na tela, que era o ponto de não estourar.
+    suspend fun estantes(): Loja? = withContext(Dispatchers.IO) {
+        runCatching { exigirApi().estantes() }
+            .onFailure { android.util.Log.w("Odeon", "a vitrine não veio: $it") }
+            .getOrNull()
     }
 
     /// Pegar a fita. **Escreve em produção** — ver `OdeonApi.alugar`.
@@ -336,8 +364,12 @@ class RepositorioOdeon(private val cofre: Cofre) {
     /// **acima** da biblioteca, e derrubar a tela inteira porque essa consulta
     /// não voltou seria trocar o acervo por um erro. Sem ela, a grade aparece
     /// igual — a fileira é que some.
+    /// ⚠️ **Colapsa por série aqui**, e não em cada tela. Os três consumidores
+    /// — a grade, o widget e o canal da home da TV — pedem a mesma fileira; a
+    /// regra escrita três vezes é a regra divergindo três vezes. Ver
+    /// `colapsarPorSerie`.
     suspend fun paraContinuar(): List<ItemPraContinuar> = withContext(Dispatchers.IO) {
-        runCatching { exigirApi().paraContinuar() }.getOrDefault(emptyList())
+        colapsarPorSerie(runCatching { exigirApi().paraContinuar() }.getOrDefault(emptyList()))
     }
 
     /// O perfil. `null` quando não deu.

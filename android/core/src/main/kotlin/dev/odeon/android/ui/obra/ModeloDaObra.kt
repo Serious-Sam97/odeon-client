@@ -104,9 +104,31 @@ class ModeloDaObra(
 
                 if (arquivo != null) pedirPlano(arquivo)
                 pedirCenas()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                /// ## ⚠️ A frase da casa, e não o `e.message`
+                ///
+                /// Visto na tela em 17/08/2026: uma caixa de série no palco levou
+                /// a ficha a falhar, e a tela mostrou **`HTTP 404 `** — com o
+                /// espaço sobrando no fim, do jeitinho que o Retrofit escreve.
+                ///
+                /// É o mesmo defeito que esta classe já corrigiu uma vez, e o
+                /// argumento está escrito no `recadoDaFalha` aqui embaixo: «o §8b
+                /// manda o erro ser visível, e ele era — mas visível não é
+                /// legível. "HTTP 403 Forbidden" é status de protocolo». A frase
+                /// do «pegar a fita» foi arrumada; a do **carregamento da ficha**
+                /// ficou para trás, mostrando o mesmo tipo de coisa.
+                ///
+                /// Agora as duas passam por tradução: esta pela `fraseDaFalha`,
+                /// que é a peça comum, e a do empréstimo pelo `recadoDaFalha`, que
+                /// continua separada porque as recusas dela têm significados de
+                /// **produto** (403 é «não está na locadora»), e não de protocolo.
                 _estado.update {
-                    it.copy(carregando = false, erro = e.message ?: "não deu pra abrir a ficha")
+                    it.copy(
+                        carregando = false,
+                        erro = dev.odeon.android.dados.fraseDaFalha(e, "não deu pra abrir a ficha"),
+                    )
                 }
             }
         }

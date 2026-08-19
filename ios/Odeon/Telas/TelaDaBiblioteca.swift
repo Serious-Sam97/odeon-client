@@ -30,6 +30,90 @@ final class ModeloDaBiblioteca {
     /// digita «goldfinger»; aqui há exatamente uma, e adiá-la faria a grade ficar
     /// um quarto de segundo mostrando o acervo inteiro depois de a pessoa já ter
     /// escolhido «Terror».
+    /// O catálogo do painel. Vazio até alguém abrir os filtros — ver
+    /// `RepositorioOdeon.etiquetasDoAcervo`.
+    var etiquetasDoAcervo: [EtiquetaDoAcervo] = []
+    var espacosDeEtiqueta: [EspacoDeEtiqueta] = []
+
+    /// ## As prateleiras — 18/08/2026
+    ///
+    /// Medido no acervo: **120 séries** contra 8.333 entradas. Uma série é 1
+    /// cartão em 69 — elas não estavam misturadas, estavam afogadas.
+    ///
+    /// ⚠️ Vêm do espaço `format` que o **servidor** declara, e não de uma lista
+    /// escrita aqui: se ele acrescentar um formato amanhã, ele aparece.
+    var prateleiras: [EtiquetaDoAcervo] = []
+
+    /// Quantas **entradas** cada prateleira tem — agrupadas, como a grade mostra.
+    ///
+    /// ⚠️ Não é a `quantasObras` da etiqueta: ela conta **8.475 obras** pra
+    /// `format:série` e a grade mostra **120 entradas**. Pôr 8.475 ao lado de uma
+    /// grade de 120 é o mesmo erro do `18 de 1`. Cada número é **perguntado**,
+    /// com uma consulta de uma linha.
+    var quantasPorPrateleira: [String: Int] = [:]
+
+    private static let espacoDoFormato = "format"
+
+    /// As prateleiras e quantas entradas cada uma tem.
+    func carregarPrateleiras() async {
+        guard prateleiras.isEmpty else { return }
+        let (etiquetas, espacos) = await odeon.etiquetasDoAcervo()
+        etiquetasDoAcervo = etiquetas
+        espacosDeEtiqueta = espacos
+        let formatos = etiquetas
+            .filter { $0.namespace == Self.espacoDoFormato && $0.quantasObras > 0 }
+            .sorted { $0.quantasObras > $1.quantasObras }
+        guard !formatos.isEmpty else { return }
+        prateleiras = formatos
+
+        for formato in formatos {
+            var filtro = filtros
+            filtro.prateleira = formato.chave
+            let quantos = (try? await odeon.biblioteca(limite: 1, filtros: filtro))?.first?.total ?? 0
+            quantasPorPrateleira[formato.chave] = quantos
+        }
+    }
+
+    /// A biblioteca **sem** as séries — a aba dos filmes.
+    ///
+    /// ⚠️ Fixar `format:filme` daria 981 e esconderia as 2.182 entradas que o
+    /// scanner não classifica. Tirar as séries dá **3.187**.
+    ///
+    /// ⚠️ O anime entra na exclusão: `tags_not=format:série` sozinho deixa passar
+    /// o `Beyblade` — 43 episódios que carregam `format:anime`.
+    func semSéries() {
+        let fora = prateleiras
+            .filter { $0.value.hasPrefix("série") || $0.value.hasPrefix("anime") }
+            .map(\.chave)
+        guard !fora.isEmpty else { return }
+        filtros.excluindo = fora
+    }
+
+    /// Trocar de prateleira. `nil` é «tudo».
+    func escolherPrateleira(_ chave: String?) {
+        guard filtros.prateleira != chave else { return }
+        filtros.prateleira = chave
+    }
+
+    /// `nas séries`, `nos filmes`, `na biblioteca` — o que o campo de busca diz.
+    ///
+    /// ⚠️ A busca **sempre** respeitou a prateleira (as duas viajam no mesmo
+    /// pedido); o que faltava era dizer isso. Quem digita e recebe um resultado
+    /// precisa saber se procurou em tudo ou só numa prateleira.
+    var ondeSeProcura: String {
+        guard let formato = prateleiras.first(where: { $0.chave == filtros.prateleira })
+        else { return "na biblioteca" }
+        return formato.value == "série" ? "nas séries" : "nos \(formato.value)s"
+    }
+
+    /// Carrega o catálogo **uma vez**, na primeira abertura do painel.
+    func garantirCatalogo() async {
+        guard etiquetasDoAcervo.isEmpty else { return }
+        let (etiquetas, espacos) = await odeon.etiquetasDoAcervo()
+        etiquetasDoAcervo = etiquetas
+        espacosDeEtiqueta = espacos
+    }
+
     var filtros = Filtros() {
         didSet { if filtros != oldValue { Task { await recomecar() } } }
     }
@@ -147,6 +231,9 @@ struct TelaDaBiblioteca: View {
     /// estado próprio — dois donos do mesmo filtro é o defeito do `Destino` de
     /// novo, com outra roupa.
     @Binding var filtros: Filtros
+    /// O painel está aberto? Vive na tela e não no modelo: é cromo, e fechar o
+    /// app não deve guardar um painel aberto.
+    @State private var painelAberto = false
     let aoAbrirPerfil: () -> Void
     let aoAbrirBaixados: () -> Void
     let aoSair: () -> Void
@@ -238,6 +325,14 @@ struct TelaDaBiblioteca: View {
             }
         }
         .task { await modelo.primeiraPagina() }
+        /// ⚠️ **A biblioteca do iOS é a dos filmes.** Quem tira as séries é o
+        /// servidor, com `?tags_not=format:série,format:anime` — o par, e não só
+        /// a série: `format:anime` sozinho deixa passar o `Beyblade`, 43
+        /// episódios. Ver `PEDIDOS-AO-SERVIDOR.md, «já entregue» 12`.
+        .task {
+            await modelo.carregarPrateleiras()
+            modelo.semSéries()
+        }
         .task(id: filtros) { modelo.filtros = filtros }
     }
 
@@ -254,7 +349,7 @@ struct TelaDaBiblioteca: View {
             )
             .padding(.horizontal, -16)
 
-            TextField("buscar na biblioteca…", text: $modelo.busca)
+            TextField("buscar nos filmes…", text: $modelo.busca)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 15))
@@ -262,7 +357,23 @@ struct TelaDaBiblioteca: View {
                 .padding(.horizontal, 14).padding(.vertical, 11)
                 .background(Cores.fundoElevado, in: .capsule)
 
+            /// ⚠️ **A fileira de prateleiras saiu daqui** — 18/08/2026. Ela
+            /// parecia o que não era: uma segunda barra de filtros. Séries virou
+            /// aba própria; esta tela é a dos **filmes**. Ver `TelaDasSeries`.
             chips
+
+            /// ⚠️ O painel fica **logo abaixo do chip que o abre**, e empurra a
+            /// grade em vez de flutuar por cima: quem filtra quer ver o resultado
+            /// mudando, e uma folha cobrindo a grade esconde justamente o que o
+            /// toque acabou de fazer.
+            if painelAberto {
+                PainelDeFiltros(
+                    etiquetas: modelo.etiquetasDoAcervo,
+                    espacos: modelo.espacosDeEtiqueta,
+                    filtros: $filtros,
+                )
+                .task { await modelo.garantirCatalogo() }
+            }
 
             if let recado = modelo.recado {
                 Text(recado).font(.system(size: 13)).foregroundStyle(Cores.textoApagado)
@@ -291,12 +402,17 @@ struct TelaDaBiblioteca: View {
 
     /// A barra de chips.
     ///
-    /// ## ⚠️ Dois dos três do Android, e a falta é declarada
+    /// ## Os três do Android, enfim — 17/08/2026
     ///
-    /// Lá são `filtros ▾`, `em destaque ▾` e `↓ N no aparelho`. Aqui estão a
-    /// ordem e os baixados. **`filtros ▾` não entra** porque o painel de filtros
-    /// não existe neste app — um chip que abre nada é o §8b, e o `Filtros` daqui
-    /// é a fatia que o guia pede (etiqueta, década, tipo), não as doze do Android.
+    /// Esta folha dizia, e com razão: «`filtros ▾` não entra porque o painel de
+    /// filtros não existe neste app — um chip que abre nada é o §8b». A ausência
+    /// foi honesta enquanto durou. Agora o painel existe (`PainelDeFiltros`), e o
+    /// chip entrou com ele.
+    ///
+    /// ⚠️ O `Filtros` daqui continua sendo a fatia que o guia pede — etiqueta,
+    /// década, tipo. O painel oferece **o que este modelo sabe carregar**, e não
+    /// as doze faixas do Android: um chip que ligasse um campo que a busca ignora
+    /// seria o §8b outra vez, com outra cara.
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -304,6 +420,14 @@ struct TelaDaBiblioteca: View {
                 /// tocar em «Terror» seria uma armadilha sem volta.
                 if filtros.ligado {
                     chip(texto: "só \(filtros.rotulo)", ligado: true, marca: "✕") { filtros = Filtros() }
+                }
+
+                /// ⚠️ **O chip só abre o painel; ele não filtra.** A marca é `▾` e
+                /// não `✕` por isso — quem desliga um filtro é o chip aceso à
+                /// esquerda, e dar duas caras à mesma marca faria o `▾` parecer
+                /// que desfaz alguma coisa.
+                chip(texto: "filtros", ligado: painelAberto, marca: painelAberto ? "▴" : "▾") {
+                    painelAberto.toggle()
                 }
 
                 Menu {
@@ -584,5 +708,39 @@ extension Int {
         f.numberStyle = .decimal
         f.locale = Locale(identifier: "pt_BR")
         return f.string(from: NSNumber(value: self)) ?? String(self)
+    }
+}
+
+/// Uma pílula de prateleira.
+///
+/// ⚠️ A contagem só é escrita quando o servidor **respondeu** por aquela
+/// prateleira: enquanto não chega, a pílula tem só o nome — e não um `0`, que é
+/// uma afirmação («não há nada ali») que o app ainda não pode fazer.
+private struct PilulaDaPrateleira: View {
+    let rotulo: String
+    let contagem: Int?
+    let acesa: Bool
+    let aoTocar: () -> Void
+
+    var body: some View {
+        Button(action: aoTocar) {
+            HStack(spacing: 8) {
+                Text(rotulo)
+                if let contagem {
+                    Text("\(contagem)")
+                        .foregroundStyle(acesa ? Cores.destaque.opacity(0.7) : Cores.textoApagado)
+                }
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(acesa ? Cores.destaque : Cores.textoApagado)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .background(acesa ? Cores.destaque.opacity(0.12) : Cores.fundoElevado, in: .capsule)
+            .overlay {
+                Capsule().strokeBorder(acesa ? Cores.destaque : .clear, lineWidth: 1)
+            }
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Séries — três lombadas na estante.
+
+  ## Por que não uma tela de TV, e não um «play»
+
+  Uma TV diria «ao vivo», e a aba ao lado já é essa. Um `play` diria «tocar», que
+  é o que **toda** aba deste app leva a fazer. O que só a série tem é ser **muitas
+  coisas guardadas juntas** — e o desenho que diz isso em qualquer cultura é a
+  fileira de lombadas na estante.
+
+  ⚠️ Três barras e não quatro: com quatro, a 24dp, o vão entre elas cai pra 1,5dp
+  e vira um bloco cinzento na barra de baixo. Três leem como três a três metros.
+
+  ⚠️ **Sem `?attr/colorControlNormal` aqui.** O tema da sala não é AppCompat e o
+  atributo não existe — a build quebra no link dos recursos, não no Kotlin. A
+  cópia do `:app` trazia o atributo junto; na TV quem tinge é o `Icon` do
+  chamador.
+
+  ⚠️ Elas têm **alturas diferentes** de propósito. Iguais, o desenho vira um
+  ícone de «lista» — que é o que a grade da biblioteca já usa. Desiguais, é
+  estante.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,6h3.2v13.5h-3.2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9.4,3.8h3.2v15.7h-3.2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14.8,7.6h3.2v11.9h-3.2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,20.2h18v1.6h-18z" />
+</vector>

@@ -55,6 +55,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import dev.odeon.android.dados.EtiquetaDoAcervo
+import dev.odeon.android.ui.PilulaDeFiltro
 import dev.odeon.android.dados.ItemDaBiblioteca
 import dev.odeon.android.dados.ObraDaLista
 import dev.odeon.android.dados.VersaoDaObra
@@ -87,6 +91,21 @@ import androidx.compose.foundation.layout.width
 fun TelaDaBiblioteca(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit = {},
+    /// ⚠️ Série **sai desta tela** — 18/08/2026. Ela era um modo daqui
+    /// (`entrarNaSerie` trocava a grade no lugar) e virou destino próprio, com
+    /// ficha e temporadas. Ver `docs/SERIES.md`.
+    /// ⚠️ Continua existindo porque a busca e a locadora ainda trazem série pra
+    /// cá — e uma série que caia nesta grade deve abrir a ficha dela, não a
+    /// ficha de obra (que dá 404).
+    aoAbrirSerie: (id: String, titulo: String) -> Unit = { _, _ -> },
+    /// ⚠️ A aba dos **filmes** liga isto, e hoje ele só muda **as palavras** —
+    /// o título e o texto da busca.
+    ///
+    /// Ele já foi um corte na tela: `itens.filter { !it.eSerie }`, porque a API
+    /// não sabia dizer «tudo menos série». Com o `?tags_not=` de 18/08/2026 quem
+    /// tira é o servidor, e o corte saiu daqui — junto com o custo dele, que era
+    /// o cabeçalho contar um conjunto e a grade mostrar outro.
+    escondendoSeries: Boolean = false,
     aoAbrirBaixados: () -> Unit = {},
     /// Quantos filmes estão no aparelho — a pastilha acesa da fileira de
     /// filtros. Vem do `AppOdeon`, que já segura o `Baixados`: dar ao modelo da
@@ -97,6 +116,22 @@ fun TelaDaBiblioteca(
     moldura: MolduraDoCartaz = MolduraDoCartaz.Nenhuma,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
+
+    /// ## ⚠️ **Série não aparece no «continuar» dos filmes** — 18/08/2026
+    ///
+    /// O dono viu: o episódio de `Arcane` que ele tinha começado abria o **herói
+    /// da aba dos filmes**. A grade já não trazia série (o servidor tira, com
+    /// `?tags_not=`), mas a fileira de continuar vem de outra rota e trazia.
+    ///
+    /// Cada aba fala do que ela guarda: série começada é assunto da aba das
+    /// séries, que tem uma seção só pra isso (`na metade`).
+    val paraContinuar = remember(estado.paraContinuar, escondendoSeries) {
+        if (escondendoSeries) {
+            estado.paraContinuar.filter { it.tituloDaSerie == null }
+        } else {
+            estado.paraContinuar
+        }
+    }
     val grade = rememberLazyGridState()
 
     /// O item cuja escolha de versão está aberta. `null` é a folha fechada.
@@ -134,9 +169,57 @@ fun TelaDaBiblioteca(
             )
         }
 
+        /// ## ⚠️ Carregando, a tela é **a própria tela** — não um risquinho
+        ///
+        /// Medido no emulador em 16/08/2026: da abertura até a grade aparecer
+        /// passam-se **cerca de dez segundos**, e nesses dez segundos a porta de
+        /// entrada do app era um vão preto com um risco dourado girando no meio.
+        /// Nem título, nem busca, nem forma — nada que dissesse sequer *qual* app
+        /// tinha aberto.
+        ///
+        /// A regra da casa é a §15, e ela já está aplicada na locadora e na grade
+        /// de capítulos: **moldura vazia em vez de «carregando»**. Uma moldura diz
+        /// duas coisas que um indicador não diz — o que vem (cartazes, neste
+        /// tamanho, nesta quantidade) e onde vai estar. O indicador só diz
+        /// «espere», que a pessoa já sabia.
+        ///
+        /// ⚠️ O cabeçalho é o mesmo, com os mesmos callbacks — **não é um
+        /// desenho de mentira**. A contagem se omite sozinha enquanto o total é
+        /// nulo (§24, ver `Cabecalho`), e a busca já funciona: digitar aqui vale
+        /// pra carga que está vindo, em vez de ser um campo morto esperando o fim
+        /// de uma espera.
         if (estado.carregando) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Cores.destaque)
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 108.dp),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Cabecalho(
+                        titulo = if (escondendoSeries) "filmes" else "biblioteca",
+                        ondeProcura = if (escondendoSeries) "nos filmes" else "na biblioteca",
+                        quantos = estado.quantosNaTela,
+                        total = estado.total,
+                        busca = estado.filtros.busca,
+                        aoBuscar = modelo::mudouBusca,
+                        serie = estado.serie,
+                        aoSairDaSerie = modelo::sairDaSerie,
+                    )
+                }
+                /// Doze é o que cobre a tela de um celular sem passar muito: o
+                /// bastante pra a grade ter forma, e não tanto que a chegada dos
+                /// cartazes de verdade pareça uma segunda tela.
+                items(12) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Cores.fundoElevado),
+                    )
+                }
             }
             return@Column
         }
@@ -187,6 +270,8 @@ fun TelaDaBiblioteca(
             /// acervo, e volta ao topo pra reler.
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Cabecalho(
+                    titulo = if (escondendoSeries) "filmes" else "biblioteca",
+                    ondeProcura = if (escondendoSeries) "nos filmes" else "na biblioteca",
                     quantos = estado.quantosNaTela,
                     total = estado.total,
                     busca = estado.filtros.busca,
@@ -202,8 +287,38 @@ fun TelaDaBiblioteca(
             /// episódios por gênero devolveria os mesmos 62, e por duração
             /// devolveria um recorte que ninguém pediu. O que serve ali é sair,
             /// e o chip «Dentro de» já faz isso.
+            /// ## ⚠️ A frase do vazio vai **junto da barra**, e foi preciso medir
+            ///
+            /// Ela era um `item` próprio da grade, logo depois deste — e **nunca
+            /// aparecia**. Buscar «zzzqqq» dava «0 de 0» e um vão preto, que é
+            /// exatamente o defeito que ela existe pra não ter: «uma grade em
+            /// branco depois de digitar parece defeito».
+            ///
+            /// Medido em 17/08/2026, com dois `Log` temporários:
+            ///
+            /// | pergunta | resposta |
+            /// |---|---|
+            /// | a condição liga? | `vazioComFiltro=true`, `naTela=0`, `erro=null` |
+            /// | o `item` é registrado? | sim, o bloco roda |
+            /// | o item **compõe**? | **nunca**, zero vezes |
+            ///
+            /// A grade recebia o item e não o punha na tela. Fora dela a frase
+            /// aparece, mas **acima do cabeçalho** — a resposta antes da pergunta.
+            /// Dentro deste item, que comprovadamente compõe, ela cai onde
+            /// pertence: colada nos chips, no lugar em que os resultados
+            /// começariam.
+            ///
+            /// ⚠️ A causa dentro da `LazyVerticalGrid` ficou **sem explicação**.
+            /// Está anotado como tal em vez de virar uma teoria bonita: o que se
+            /// sabe é que o item era registrado e não compunha, e que daqui ele
+            /// compõe.
             if (!estado.dentroDaSerie) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
+                  Column {
+                    /// ⚠️ **A fileira de prateleiras saiu daqui** — 18/08/2026.
+                    /// Ela era `tudo · série · filme · anime` e parecia o que
+                    /// não era: uma segunda barra de filtros. Séries virou aba;
+                    /// esta tela é a dos **filmes**. Ver `TelaDasSeries`.
                     BarraDeFiltros(
                         filtros = estado.filtros,
                         etiquetasPorEspaco = estado.etiquetasPorEspaco,
@@ -213,6 +328,20 @@ fun TelaDaBiblioteca(
                         quantosBaixados = quantosBaixados,
                         aoAbrirBaixados = aoAbrirBaixados,
                     )
+
+                    if (estado.vazioComFiltro) {
+                        Text(
+                            text = if (estado.filtros.busca.isNotBlank()) {
+                                "nada com «${estado.filtros.busca}» no acervo"
+                            } else {
+                                "nada no acervo com esses filtros"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Cores.textoApagado,
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        )
+                    }
+                  }
                 }
             }
 
@@ -223,20 +352,6 @@ fun TelaDaBiblioteca(
             /// — o campo tem texto, a tela não tem nada, e nada explica a
             /// ligação. A frase repete o que foi pedido porque é ela que fecha
             /// a pergunta.
-            if (estado.vazioComFiltro) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(
-                        text = if (estado.filtros.busca.isNotBlank()) {
-                            "nada com «${estado.filtros.busca}» no acervo"
-                        } else {
-                            "nada no acervo com esses filtros"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Cores.textoApagado,
-                        modifier = Modifier.padding(vertical = 24.dp),
-                    )
-                }
-            }
 
             /// A fileira de "continuar de onde parou", **acima** do acervo.
             ///
@@ -291,23 +406,23 @@ fun TelaDaBiblioteca(
                 estado.filtros.algumLigado ||
                 estado.dentroDaSerie
 
-            if (!buscando && estado.paraContinuar.isNotEmpty()) {
+            if (!buscando && paraContinuar.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     HeroiDaChegada(
-                        item = estado.paraContinuar.first(),
-                        arte = modelo.arte(estado.paraContinuar.first()),
-                        aoTocar = { aoAbrirObra(estado.paraContinuar.first().id) },
+                        item = paraContinuar.first(),
+                        arte = modelo.arte(paraContinuar.first()),
+                        aoTocar = { aoAbrirObra(paraContinuar.first().id) },
                     )
                 }
             }
 
-            if (!buscando && estado.paraContinuar.size > 1) {
+            if (!buscando && paraContinuar.size > 1) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     FileiraParaContinuar(
                         /// O primeiro virou herói, então a fileira mostra o
                         /// resto. Repeti-lo seria a mesma obra duas vezes na
                         /// mesma tela, a 30dp de distância.
-                        itens = estado.paraContinuar.drop(1),
+                        itens = paraContinuar.drop(1),
                         arte = modelo::arte,
                         aoTocar = { aoAbrirObra(it.id) },
                     )
@@ -360,7 +475,7 @@ fun TelaDaBiblioteca(
                         /// de abrir a ficha. Ver `EscolhaDeVersao`.
                         aoTocar = {
                             when {
-                                item.eSerie -> modelo.entrarNaSerie(item)
+                                item.eSerie -> aoAbrirSerie(item.id, item.title)
                                 item.temEscolhaDeVersao -> escolhendoVersao = item
                                 else -> aoAbrirObra(item.id)
                             }
@@ -394,6 +509,7 @@ fun TelaDaBiblioteca(
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             BarraCondensada(
+                ondeProcura = if (escondendoSeries) "nos filmes" else "na biblioteca",
                 busca = estado.filtros.busca,
                 aoBuscar = modelo::mudouBusca,
                 filtrosLigados = estado.filtros.quantosLigados,
@@ -569,6 +685,8 @@ private fun BarraCondensada(
     aoAbrirFiltros: () -> Unit,
     quantosBaixados: Int,
     aoAbrirBaixados: () -> Unit,
+    /// Ver `CampoDeBusca.ondeProcura`.
+    ondeProcura: String = "na biblioteca",
 ) {
     Row(
         modifier = Modifier
@@ -592,7 +710,7 @@ private fun BarraCondensada(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) {
-            CampoDeBusca(valor = busca, aoMudar = aoBuscar, compacto = true)
+            CampoDeBusca(valor = busca, aoMudar = aoBuscar, compacto = true, ondeProcura = ondeProcura)
         }
 
         Text(
@@ -745,6 +863,12 @@ private fun Cabecalho(
     aoBuscar: (String) -> Unit,
     serie: SerieAberta?,
     aoSairDaSerie: () -> Unit,
+    /// Ver `CampoDeBusca.ondeProcura`.
+    ondeProcura: String = "na biblioteca",
+    /// ⚠️ **«filmes», e não «biblioteca»** — 18/08/2026. As séries viraram aba
+    /// própria, e um título que diz «biblioteca» numa tela que não tem série
+    /// promete as duas coisas. Ver `TelaDasSeries`.
+    titulo: String = "biblioteca",
 ) {
     /// Sem padding lateral próprio: dentro da grade quem alinha é o
     /// `contentPadding` de 16.dp dela, e somar os dois afastaria o título dos
@@ -767,7 +891,7 @@ private fun Cabecalho(
                 /// Dentro da série, o título **é a série**. Manter «biblioteca»
                 /// com os episódios de *Breaking Bad* embaixo faria a tela mentir
                 /// sobre onde se está — e o chip logo abaixo é o caminho de volta.
-                text = serie?.titulo ?: "biblioteca",
+                text = serie?.titulo ?: titulo,
                 style = MaterialTheme.typography.headlineSmall,
                 color = Cores.texto,
                 maxLines = 2,
@@ -829,7 +953,7 @@ private fun Cabecalho(
         /// As duas respondem a mesma coisa — *o que estou vendo desta grade* —,
         /// e o screenshot mostrou o custo de separá-las: com o `no aparelho ›`
         /// no meio, o link ficava boiando entre dois pedaços do mesmo assunto.
-        CampoDeBusca(valor = busca, aoMudar = aoBuscar)
+        CampoDeBusca(valor = busca, aoMudar = aoBuscar, ondeProcura = ondeProcura)
 
         /// ## Os três links saíram daqui
         ///
@@ -908,7 +1032,18 @@ private fun Cabecalho(
 /// `EsquemaEscuro` cai no padrão de fábrica. Foi assim que a cápsula da barra
 /// virou lilás. Aqui são quatro cores da casa e nada mais.
 @Composable
-private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit, compacto: Boolean = false) {
+private fun CampoDeBusca(
+    valor: String,
+    aoMudar: (String) -> Unit,
+    compacto: Boolean = false,
+    /// ## ⚠️ O texto diz **onde** se procura — 18/08/2026
+    ///
+    /// A busca sempre respeitou a prateleira (os dois viajam no mesmo pedido);
+    /// o que faltava era **dizer isso**. Numa biblioteca de 8.333 entradas, quem
+    /// digita `arcane` e recebe um resultado precisa saber se procurou em tudo
+    /// ou só nas séries — foi o que me confundiu ao medir o acervo hoje.
+    ondeProcura: String = "na biblioteca",
+) {
     val foco = LocalFocusManager.current
 
     BasicTextField(
@@ -942,7 +1077,7 @@ private fun CampoDeBusca(valor: String, aoMudar: (String) -> Unit, compacto: Boo
                     /// como um produto parece dois.
                     if (valor.isEmpty()) {
                         Text(
-                            text = "buscar na biblioteca…",
+                            text = "buscar $ondeProcura…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Cores.textoApagado,
                         )
@@ -1586,3 +1721,5 @@ private fun contraste(a: Color, b: Color): Float {
     val lb = b.luminance()
     return (max(la, lb) + 0.05f) / (min(la, lb) + 0.05f)
 }
+
+

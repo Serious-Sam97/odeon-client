@@ -96,6 +96,7 @@ struct Abas: View {
     @State private var escolhendoVersao: ItemDaBiblioteca?
     /// O perfil, aberto pelo rosto do canto.
     @State private var perfilAberto = false
+    @State private var paraVoceAberto = false
     /// Os baixados, abertos pelo chip da barra de filtros da biblioteca.
     @State private var baixadosAbertos = false
     @State private var muralAberto = false
@@ -147,7 +148,11 @@ struct Abas: View {
     /// importante, mas por ser o que menos se abre num dia: ele conta o que os
     /// outros fizeram, e isso se lê de vez em quando. «Ao vivo» é uma pergunta
     /// que se faz **agora**, e pergunta de agora não pode estar a dois toques.
-    enum Aba: Hashable { case biblioteca, locadora, aoVivo, guia, paraVoce }
+    /// ⚠️ **`series` entrou e `paraVoce` saiu da barra** — 18/08/2026. As séries
+    /// viraram biblioteca própria, como o dono aprovou; o «para você» desceu pra
+    /// gaveta do canto, o mesmo caminho que o mural fez no Android quando o ao
+    /// vivo entrou. Cinco lugares, e a régua é a de sempre.
+    enum Aba: Hashable { case biblioteca, series, aoVivo, locadora, guia }
 
     /// O filtro da biblioteca.
     ///
@@ -183,12 +188,20 @@ struct Abas: View {
         /// campo a mais — é **não haver arquivo nem obra**. O player recebe uma
         /// playlist e um nome, e nada mais existe pra pedir.
         case canal(QuadroNoAr)
+        /// ## ⚠️ A ficha de uma série — 18/08/2026
+        ///
+        /// Um caso próprio, e não `.ficha` com outro id: o id de uma série é de
+        /// **coleção**, e `/api/works/{id}` não conhece coleção. Tocar numa série
+        /// abria a ficha da obra e dava **404** — o mesmo defeito que a locadora
+        /// pagou com a caixa de temporadas, e que a TV pagou na busca.
+        case serie(id: String, titulo: String)
         var id: String {
             switch self {
             case let .ficha(obra): "ficha:" + obra
             case let .tocando(alvo): "toca:" + alvo.arquivo
             case let .doDisco(ficha): "disco:" + ficha.arquivoId
             case let .canal(q): "canal:" + q.canalId
+            case let .serie(id, _): "serie:" + id
             }
         }
     }
@@ -213,7 +226,8 @@ struct Abas: View {
 
     var body: some View {
         TabView(selection: $aba) {
-            Tab("biblioteca", systemImage: "square.grid.2x2", value: Aba.biblioteca) {
+            /// ⚠️ Ela se chama **filmes**: as séries saíram daqui.
+            Tab("filmes", systemImage: "square.grid.2x2", value: Aba.biblioteca) {
                 TelaDaBiblioteca(
                     odeon: odeon, insignia: insignia, baixados: baixados,
                     filtros: $filtros,
@@ -230,7 +244,13 @@ struct Abas: View {
                         /// de abrir a ficha — os 43 grupos. E a escolha leva pra a
                         /// ficha **da obra escolhida**: nada é fundido, e cada
                         /// versão tem ficha própria.
-                        if item.temEscolhaDeVersao {
+                        /// ⚠️ A série vem **antes** da escolha de versão: uma
+                        /// coleção não tem versões, e perguntar «qual delas?»
+                        /// sobre uma série seria a segunda pergunta errada em
+                        /// cima da primeira.
+                        if item.eSerie {
+                            destino = .serie(id: item.id, titulo: item.title)
+                        } else if item.temEscolhaDeVersao {
                             escolhendoVersao = item
                         } else {
                             destino = .ficha(item.id)
@@ -239,10 +259,32 @@ struct Abas: View {
                     aoContinuar: { destino = .ficha($0.id) },
                 )
             }
+            /// ## As séries, biblioteca própria · 18/08/2026
+            ///
+            /// ⚠️ **Três lombadas na estante**, e não uma TV nem um `play`: uma
+            /// TV diria «ao vivo» (a aba do lado já é essa) e um `play` diria
+            /// «tocar», que é o que toda aba leva a fazer. O que só a série tem é
+            /// ser muitas coisas guardadas juntas.
+            Tab("séries", systemImage: "books.vertical", value: Aba.series) {
+                TelaDasSeries(
+                    odeon: odeon, insignia: insignia,
+                    aoAbrirPerfil: { perfilAberto = true },
+                    aoSair: aoSair,
+                    aoAbrirSerie: { destino = .serie(id: $0.id, titulo: $0.title) },
+                    aoAbrirObra: { destino = .ficha($0) },
+                )
+            }
             Tab("locadora", systemImage: "film.stack", value: Aba.locadora) {
                 TelaDaLocadora(odeon: odeon, insignia: insignia,
                                aoAbrirPerfil: { perfilAberto = true }, aoSair: aoSair)
                 { caixa in destino = .ficha(caixa.id) }
+                aoTocarDoMenu: { disco, segundos in
+                    destino = .tocando(Alvo(
+                        obra: disco.obraId, arquivo: disco.arquivoId,
+                        duracao: disco.duracao, titulo: disco.titulo,
+                        comecarEm: segundos,
+                    ))
+                }
             }
             Tab("guia", systemImage: "newspaper", value: Aba.guia) {
                 TelaDoGuia(
@@ -285,11 +327,6 @@ struct Abas: View {
                     },
                 )
             }
-            Tab("para você", systemImage: "star", value: Aba.paraVoce) {
-                TelaParaVoce(odeon: odeon, insignia: insignia,
-                             aoAbrirPerfil: { perfilAberto = true }, aoSair: aoSair)
-                { item in destino = .ficha(item.id) }
-            }
         }
         .tint(Cores.destaque)
         .sheet(item: $escolhendoVersao) { item in
@@ -301,6 +338,19 @@ struct Abas: View {
         }
         .sheet(isPresented: $perfilAberto) {
             TelaDoPerfil(odeon: odeon) { perfilAberto = false }
+        }
+        /// ⚠️ **«para você» virou folha** — 18/08/2026. Ele saiu da barra pra as
+        /// séries entrarem, e não sumiu: abre pelo mesmo canto que o perfil. É a
+        /// mesma decisão que o Android tomou com o mural, com o mesmo argumento —
+        /// descoberta é o que se procura de vez em quando, e não o que se pega
+        /// às nove da noite.
+        .sheet(isPresented: $paraVoceAberto) {
+            TelaParaVoce(odeon: odeon, insignia: insignia,
+                         aoAbrirPerfil: { perfilAberto = true }, aoSair: aoSair)
+            { item in
+                paraVoceAberto = false
+                destino = .ficha(item.id)
+            }
         }
         .sheet(isPresented: $muralAberto) {
             TelaDoMural(
@@ -350,6 +400,27 @@ struct Abas: View {
                     },
                     aoVoltar: { destino = nil },
                 )
+            case let .serie(id, titulo):
+                /// ⚠️ Uma `NavigationStack` **aqui dentro**, e não uma cobertura
+                /// nova por temporada: série → temporada é uma pilha de dois, e o
+                /// «voltar» do iOS já sabe desenhar isso. Empilhar coberturas
+                /// daria duas telas cheias sem gesto de voltar entre elas.
+                NavigationStack {
+                    TelaDaSerie(
+                        odeon: odeon,
+                        modelo: ModeloDaSerie(odeon: odeon, serieId: id, titulo: titulo),
+                        aoTocar: { episodio, em in
+                            destino = .tocando(Alvo(
+                                obra: episodio.id,
+                                arquivo: episodio.arquivoId ?? "",
+                                duracao: episodio.duracaoEmSegundos,
+                                titulo: episodio.title,
+                                comecarEm: em,
+                            ))
+                        },
+                        aoFechar: { destino = nil },
+                    )
+                }
             case let .canal(quadro):
                 TelaDoCanal(odeon: odeon, quadro: quadro) {
                     destino = nil
@@ -368,6 +439,10 @@ struct Abas: View {
                 TelaDoPlayer(
                     odeon: odeon, obra: alvo.obra, arquivo: alvo.arquivo,
                     duracao: alvo.duracao, titulo: alvo.titulo, comecarEm: alvo.comecarEm,
+                    /// ⚠️ Canal **não registra**. Ver `ModeloDoPlayer.doAoVivo`: o
+                    /// mesmo campo que já dizia pra onde voltar agora diz o que
+                    /// não gravar.
+                    doAoVivo: alvo.doAoVivo,
                     /// ⚠️ Sair do filme volta pra **ficha**, não pra a grade: é de
                     /// lá que se veio, e é lá que estão as outras coisas pra fazer
                     /// com esta obra.

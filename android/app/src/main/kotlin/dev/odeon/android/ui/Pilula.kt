@@ -105,6 +105,17 @@ fun PilulaDeFiltro(
 /// Desenhar só o valor economizaria espaço e perderia isso — "Crime" e
 /// "Estados Unidos" lado a lado, sem qualificador, viram duas palavras soltas.
 ///
+/// ## ⚠️ O qualificador é **opcional**, e virou opcional por defeito visto
+///
+/// Aquela folha assumia que o namespace chegava em português, e a ficha de «Sr.
+/// Ninguém» mostrou que não chega: nove pílulas, quatro começando com `country`.
+/// Quem traduz agora é `Etiqueta.rotulo`, e **o que ele não conhece vira `null`**
+/// — aí a pílula desenha só o valor.
+///
+/// Perder o qualificador é o pior caso aceitável; imprimir a chave do banco não
+/// é. Uma palavra solta ainda se lê; `collection` numa pílula é um nome de coluna
+/// com cara de categoria (§18).
+///
 /// ## A cor tinge a **borda**, e não o fundo
 ///
 /// É o que a web faz (`style={{ borderColor: t.color }}`), e é a escolha certa
@@ -116,7 +127,8 @@ fun PilulaDeFiltro(
 /// Nulo é o caso comum, e cai na linha da casa. **Não há sorteio de cor.**
 @Composable
 fun PilulaDeEtiqueta(
-    namespace: String,
+    /// O qualificador apagado. `null` desenha só o valor — ver a folha acima.
+    rotulo: String?,
     valor: String,
     modifier: Modifier = Modifier,
     cor: Color? = null,
@@ -130,7 +142,9 @@ fun PilulaDeEtiqueta(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(namespace, style = Tipo.pilula, color = Cores.textoApagado)
+        if (rotulo != null) {
+            Text(rotulo, style = Tipo.pilula, color = Cores.textoApagado)
+        }
         Text(
             text = valor,
             style = Tipo.pilula.copy(fontWeight = FontWeight.SemiBold),

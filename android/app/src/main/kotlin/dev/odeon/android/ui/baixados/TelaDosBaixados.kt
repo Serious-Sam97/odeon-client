@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -183,6 +185,29 @@ private fun Cartao(
     /// interrompe a tela inteira por uma decisão de um item.
     var confirmando by remember(item.id) { mutableStateOf(false) }
 
+    /// ## ⚠️ A confirmação **desarma sozinha**, e sem isso ela era uma armadilha
+    ///
+    /// O segundo toque estava certo; o que faltava era o esquecimento. Uma vez
+    /// armado, o `confirmando` só voltava a `false` se o **id do item** mudasse —
+    /// ou seja, nunca, enquanto aquele filme estivesse na lista.
+    ///
+    /// O estrago desse detalhe é o pior tipo: alguém toca em «apagar», muda de
+    /// ideia e sai da tela. Meia hora depois volta, encosta no mesmo lugar
+    /// procurando outra coisa, e **2,3 GB somem** — com a tela tendo perguntado
+    /// «apagar mesmo?» meia hora antes, para uma pessoa que já esqueceu que
+    /// perguntou.
+    ///
+    /// Uma pergunta que não expira não é pergunta, é um gatilho armado. Quatro
+    /// segundos é o tempo de ler três palavras e decidir; passando disso, a
+    /// resposta honesta é «você não respondeu», e a única leitura segura disso é
+    /// «não».
+    LaunchedEffect(confirmando) {
+        if (confirmando) {
+            kotlinx.coroutines.delay(4_000)
+            confirmando = false
+        }
+    }
+
     val podeTocar = item.pronto && !venceu
 
     Column(
@@ -344,15 +369,34 @@ private fun Cartao(
             ///
             /// Em texto apagado, e não em vermelho **até virar pergunta**: o
             /// vermelho é a cor do que já é perigo, não do que ainda é opção.
-            Text(
-                text = if (confirmando) "apagar mesmo?" else "apagar",
-                style = Tipo.pilula.copy(fontSize = 11.sp),
-                color = if (confirmando) Cores.perigo else Cores.textoApagado,
+            ///
+            /// ⚠️ **44dp de altura**, e não os 20 que ele tinha. Com `pilula` de
+            /// 11sp e 4dp de respiro, o alvo mais destrutivo do app era o menor
+            /// dele — menos da metade do mínimo do Material, e menor que o
+            /// `AlvoDeToque` de 44dp que o player usa até pro botão de legenda.
+            ///
+            /// A régua da gaveta não vale aqui, e vale a pena dizer por quê: lá
+            /// os 38dp se defendem porque «a linha ocupa a largura inteira de um
+            /// painel que só tem duas — errar o toque significa acertar a outra».
+            /// Este é um alvo **isolado** no canto de um cartão, com a linha de
+            /// estado do lado. Errar aqui é acertar o nada, e acertar de leve é o
+            /// que arma a pergunta sem querer.
+            Box(
                 modifier = Modifier
+                    .heightIn(min = 44.dp)
                     .clip(CircleShape)
-                    .clickable { if (confirmando) aoApagar() else confirmando = true }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+                    .clickable(
+                        onClickLabel = if (confirmando) "apagar de vez" else "apagar",
+                    ) { if (confirmando) aoApagar() else confirmando = true }
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (confirmando) "apagar mesmo?" else "apagar",
+                    style = Tipo.pilula.copy(fontSize = 11.sp),
+                    color = if (confirmando) Cores.perigo else Cores.textoApagado,
+                )
+            }
         }
     }
 }

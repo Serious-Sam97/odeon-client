@@ -53,6 +53,24 @@ data class EstadoDaBiblioteca(
     /// O catálogo de etiquetas, buscado na primeira abertura do painel.
     val etiquetas: List<EtiquetaDoAcervo> = emptyList(),
     val espacos: List<EspacoDeEtiqueta> = emptyList(),
+    /// ## As prateleiras — `filmes` e `séries` — 18/08/2026
+    ///
+    /// Medido no acervo desta casa: **120 séries** contra ~8.200 filmes na
+    /// listagem agrupada. Uma série é **1 cartão em 69** — elas não estão
+    /// misturadas, estão afogadas. Ver `docs/SERIES.md §11`.
+    ///
+    /// ⚠️ Elas vêm do espaço `format` que o **servidor** declara, e não de uma
+    /// lista escrita aqui: se ele acrescentar um formato amanhã, ele aparece.
+    val prateleiras: List<EtiquetaDoAcervo> = emptyList(),
+    /// Quantas **entradas** cada prateleira tem — agrupadas, como a grade mostra.
+    ///
+    /// ⚠️ Não é a `quantasObras` da etiqueta. A etiqueta `format:série` conta
+    /// **8.475 obras** (episódios); a grade mostra **120 entradas**. Pôr 8.475
+    /// ao lado de uma grade de 120 é o mesmo erro do `18 de 1` — ver
+    /// `PEDIDOS-AO-SERVIDOR.md, «já entregue» 9`. Por isso cada número é **perguntado** ao
+    /// servidor, com uma consulta de uma linha só.
+    val quantasPorPrateleira: Map<String, Int> = emptyMap(),
+
     val painelAberto: Boolean = false,
     val carregando: Boolean = false,
     val carregandoMais: Boolean = false,
@@ -100,11 +118,115 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
 
     init {
         primeiraPagina()
+        /// ⚠️ As etiquetas passaram a ser buscadas **na abertura**, e não só na
+        /// primeira vez que alguém abre o painel: sem elas não há prateleira, e
+        /// a prateleira é a primeira coisa da tela. Corre em paralelo com a
+        /// grade — quem chega vê o acervo sem esperar por isto.
+        viewModelScope.launch { carregarPrateleiras() }
+    }
+
+    /// As duas prateleiras e quantas entradas cada uma tem.
+    private suspend fun carregarPrateleiras() {
+        val (etiquetas, espacos) = odeon.etiquetasDoAcervo()
+        val formatos = etiquetas
+            .filter { it.namespace == ESPACO_DO_FORMATO && it.quantasObras > 0 }
+            .sortedByDescending { it.quantasObras }
+        if (formatos.isEmpty()) return
+        _estado.update { it.copy(prateleiras = formatos, etiquetas = etiquetas, espacos = espacos) }
+
+        /// ## ⚠️ As sondas de contagem **saíram** — 18/08/2026
+        ///
+        /// Eram quatro consultas de uma linha, uma por prateleira, pra escrever
+        /// `série 5143` dentro da pílula. As pílulas viraram abas e os números
+        /// saíram delas — mas as consultas ficaram, e o `sóSéries` esperava por
+        /// elas antes de filtrar.
+        ///
+        /// Medido no emulador: **8 segundos** entre abrir a aba das séries e ela
+        /// deixar de mostrar o acervo inteiro. Uma aba que mostra a coisa errada
+        /// por oito segundos não está carregando — está mentindo, e depois se
+        /// corrige.
+        ///
+        /// O que sobrou aqui é só a lista de formatos, que é o que a aba precisa
+        /// pra saber o que excluir. A contagem de cada aba vem do `total` da
+        /// própria consulta dela.
+    }
+
+    /// A biblioteca **sem** as séries — a aba dos filmes.
+    ///
+    /// ## ⚠️ Ela **tira**, e é o que o `?tags_not=` comprou · 18/08/2026
+    ///
+    /// Fixar `format:filme` daria 981 e deixaria de fora as **2.182** entradas
+    /// que o scanner não classifica. Tirar as séries dá **3.187** — os filmes
+    /// identificados, os clipes, os animes e as não classificadas, que é o que
+    /// uma biblioteca de filmes pode prometer honestamente.
+    ///
+    /// ⚠️ **O anime entra na exclusão, e não é detalhe.** O servidor mediu:
+    /// `tags_not=format:série` sozinho deixa passar o `Beyblade` — 43 episódios
+    /// que carregam `format:anime` e **não** `format:série`. Uma série de 43
+    /// episódios na aba dos filmes é o defeito que esta aba existe pra não ter.
+    ///
+    /// ⚠️ E agora o `total` fala do **mesmo conjunto** que a grade: o cabeçalho
+    /// e a paginação voltam a fechar. O corte na tela sai junto.
+    fun semSéries() {
+        viewModelScope.launch {
+            if (_estado.value.prateleiras.isEmpty()) carregarPrateleiras()
+            val fora = _estado.value.prateleiras
+                .filter { it.value.startsWith("série") || it.value.startsWith("anime") }
+                .map { it.chave }
+            if (fora.isEmpty()) return@launch
+            _estado.update {
+                it.copy(filtros = it.filtros.copy(excluindo = fora), carregando = true)
+            }
+            trabalhoDaBusca?.cancel()
+            trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
+        }
+    }
+
+    /// Fixa este modelo na prateleira das **séries**, e é o que faz a aba de
+    /// séries existir sem uma segunda cópia da biblioteca.
+    ///
+    /// ## ⚠️ Ela espera as prateleiras chegarem
+    ///
+    /// A chave (`format:série`) vem do servidor, e o `carregarPrateleiras` corre
+    /// em paralelo com a primeira página. Fixar «a etiqueta cujo valor começa
+    /// com série» **antes** dela chegar fixaria em nada — e a aba abriria com o
+    /// acervo inteiro por um piscar, que é pior do que abrir vazia.
+    fun sóSéries() {
+        viewModelScope.launch {
+            if (_estado.value.prateleiras.isEmpty()) carregarPrateleiras()
+            val serie = _estado.value.prateleiras.firstOrNull { it.value.startsWith("série") }
+            if (serie == null) return@launch
+            escolherPrateleira(serie.chave)
+        }
+    }
+
+    /// Trocar de prateleira. `null` é «tudo».
+    ///
+    /// ⚠️ Zera a **paginação** e a busca, mas mantém os outros filtros: quem
+    /// filtrou por «Comédia» e trocou pra séries quer comédias em série.
+    fun escolherPrateleira(chave: String?) {
+        if (_estado.value.filtros.prateleira == chave) return
+        _estado.update {
+            it.copy(filtros = it.filtros.copy(prateleira = chave), carregando = true, erro = null)
+        }
+        trabalhoDaBusca?.cancel()
+        trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
     }
 
     fun primeiraPagina() {
         _estado.update { it.copy(carregando = true, erro = null) }
-        viewModelScope.launch {
+        /// ## ⚠️ Ela **entra no `trabalhoDaBusca`** — visto no emulador, 18/08/2026
+        ///
+        /// Ela lançava uma corrotina solta. Ninguém conseguia cancelá-la, e a
+        /// aba das séries mostrou o defeito: `sóSéries()` fixava a prateleira,
+        /// disparava a consulta filtrada, e **esta** — que já estava no ar —
+        /// chegava depois e sobrescrevia com o acervo inteiro. A tela dizia
+        /// «TODAS AS SÉRIES 8333» com uma grade de 007.
+        ///
+        /// ⚠️ O sintoma é de corrida, então ele **some sozinho** num servidor
+        /// rápido e volta num lento. Quem mandou nunca é quem chega por último.
+        trabalhoDaBusca?.cancel()
+        trabalhoDaBusca = viewModelScope.launch {
             // O token de mídia antes da primeira página: sem ele o `urlDoPoster`
             // devolve nulo e a tela desenha a grade inteira sem capa nenhuma.
             odeon.garantirTokenDeMidia()
@@ -202,6 +324,39 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
     /// não quer os episódios cujo título contenha «breaking» — quer os
     /// episódios. Manter o texto filtraria a série por dentro em silêncio, e o
     /// resultado (dois episódios de 62) pareceria uma série incompleta.
+    /// Abre uma série **vinda de outra tela** — hoje, a caixa da locadora.
+    ///
+    /// ## ⚠️ Ela existe porque a caixa de série era um beco sem saída
+    ///
+    /// Medido em 17/08/2026: tocar no disco de «The White Lotus» na locadora dava
+    /// 404 no menu, caía pra ficha como previsto, e a **ficha também dava 404** —
+    /// sobrando uma tela de erro cujo «tentar de novo» não podia funcionar nunca.
+    ///
+    /// A causa é de contrato, e é simples de dizer: o id de uma caixa de série
+    /// **não é um id de obra**. Ele é um id de *coleção* — funciona em
+    /// `/api/works?colecao=…`, que é exatamente o que o [entrarNaSerie] usa. O
+    /// destino existia o tempo todo; faltava a locadora saber mandar pra ele.
+    ///
+    /// ⚠️ **Sem contagem, e tudo bem.** A `CaixaExposta` não traz quantos
+    /// episódios a série tem, e o `total` nulo cai na regra que o `buscar` já
+    /// tinha escrito: «se a série tinha zero lá, o que se tem agora é o que
+    /// chegou». O cabeçalho mostra o título da série e a contagem aparece da
+    /// primeira página — em vez de o app afirmar um número que não recebeu.
+    fun abrirSerieDeFora(id: String, titulo: String) {
+        _estado.update {
+            it.copy(
+                serie = SerieAberta(id, titulo, 0),
+                filtros = it.filtros.copy(colecao = id, busca = ""),
+                episodios = emptyList(),
+                total = null,
+                carregando = true,
+                erro = null,
+            )
+        }
+        trabalhoDaBusca?.cancel()
+        trabalhoDaBusca = viewModelScope.launch { buscar(pulando = 0, primeira = true) }
+    }
+
     fun entrarNaSerie(item: ItemDaBiblioteca) {
         _estado.update {
             it.copy(
@@ -282,12 +437,30 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
                     erro = null,
                 )
             }
-        } catch (e: HttpException) {
-            falhou(
-                if (e.code() == 401) "a sessão expirou — entre de novo" else "o servidor respondeu ${e.code()}",
-            )
-        } catch (e: IOException) {
-            falhou("sem resposta do servidor")
+            /// ⚠️ As frases saíram daqui e viraram `fraseDaFalha`, no `:core` —
+            /// esta classificação estava certa e era a **única** do app; o resto
+            /// das telas mostrava `e.message`, que sem rede é inglês de DNS.
+            ///
+            /// ## ⚠️ `CancellationException` **passa reto**, e eu já errei isto aqui
+            ///
+            /// A primeira versão desta mudança trocou os dois `catch` específicos
+            /// por um `catch (e: Exception)` — que também pega o cancelamento. E
+            /// esta tela cancela o tempo todo: cada tecla digitada na busca
+            /// derruba a requisição anterior.
+            ///
+            /// O efeito é pior que um erro à toa: o cancelamento virava `erro`, e
+            /// `erro != null` desliga o `vazioComFiltro` — ou seja, a frase «nada
+            /// com «x» no acervo» **parava de aparecer**, e uma busca sem
+            /// resultado voltava a ser uma grade em branco sem explicação, que é
+            /// exatamente o defeito que aquela frase existe pra não ter.
+            ///
+            /// Cancelamento não é falha: é a corrotina sendo desfeita de
+            /// propósito, e engoli-lo quebra a concorrência estruturada inteira.
+            /// Ele sobe.
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            falhou(dev.odeon.android.dados.fraseDaFalha(e, "a biblioteca não abriu"))
         }
     }
 
@@ -338,5 +511,13 @@ class ModeloDaBiblioteca(private val odeon: RepositorioOdeon) : ViewModel() {
         /// parecer imediata e longo o bastante pra uma palavra inteira valer uma
         /// consulta, e não onze.
         const val ESPERA_DA_BUSCA = 250L
+
+        /// O espaço de etiqueta que separa filme de série.
+        ///
+        /// ⚠️ O nome vem do servidor (`/api/tag-namespaces`), e é o mesmo que o
+        /// painel de filtros já rotula como «FORMATO» — ver a tabela de rótulos
+        /// em `Modelos.kt`. A constante existe pra a prateleira e o painel não
+        /// discordarem sobre o que é formato.
+        const val ESPACO_DO_FORMATO = "format"
     }
 }

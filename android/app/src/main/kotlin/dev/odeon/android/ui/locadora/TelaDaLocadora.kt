@@ -113,6 +113,10 @@ import kotlin.math.sin
 fun TelaDaLocadora(
     modelo: ModeloDaLocadora,
     aoAbrirObra: (String) -> Unit = {},
+    /// Abrir a **série** de uma caixa de temporadas — ver a folha do
+    /// `aoAbrirOMenu` mais abaixo, que explica por que ela não pode ir pela
+    /// ficha.
+    aoAbrirSerie: (id: String, titulo: String) -> Unit = { _, _ -> },
     /// Tocar direto, vindo do menu do disco — com o ponto de partida escolhido
     /// lá (o começo, o «continuar» ou um capítulo).
     aoTocar: (obraId: String, arquivoId: String, titulo: String, de: Double, duracao: Double?) -> Unit =
@@ -143,6 +147,7 @@ fun TelaDaLocadora(
             modelo = modelo,
             estado = estado,
             aoAbrirObra = aoAbrirObra,
+            aoAbrirSerie = aoAbrirSerie,
             aoTocarDoMenu = { menu, segundos ->
                 modelo.fecharOMenu()
                 modelo.guardar()
@@ -519,6 +524,7 @@ private fun PalcoPorCima(
     modelo: ModeloDaLocadora,
     estado: EstadoDaLocadora,
     aoAbrirObra: (String) -> Unit,
+    aoAbrirSerie: (id: String, titulo: String) -> Unit,
     aoTocarDoMenu: (dev.odeon.android.dados.MenuDoDisco, Double) -> Unit,
     aoTocarOFilme: (obraId: String, arquivoId: String, titulo: String, de: Double, duracao: Double?) -> Unit,
 ) {
@@ -575,13 +581,61 @@ private fun PalcoPorCima(
         /// O disco abre o menu — §14.4, «só pela locadora, e só em DVD». Quando
         /// o menu não vem, cai na ficha: um caminho que às vezes não leva a
         /// lugar nenhum é o §8b.
+        ///
+        /// ## ⚠️ Menos na caixa de **série**, que não tem menu nem ficha
+        ///
+        /// Medido em 17/08/2026 com «The White Lotus» e «Dexter»: o menu dava
+        /// 404, caía pra ficha como previsto, e **a ficha também dava 404** —
+        /// sobrando uma tela de erro cujo «tentar de novo» não podia funcionar
+        /// nunca. Dois caminhos encadeados, os dois errados, e o §8b no fim.
+        ///
+        /// O id de uma caixa de série **não é um id de obra**: ele é de
+        /// *coleção*, e o lugar onde ele funciona é a lista de episódios da
+        /// biblioteca (ver `ModeloDaBiblioteca.abrirSerieDeFora`). Uma caixa de
+        /// temporadas não tem menu de disco pra ter — ela tem episódios.
+        ///
+        /// ⚠️ E a decisão é tomada **antes de perguntar**: a `CaixaExposta` já diz
+        /// `serie`, e é o mesmo campo que desenha o selo «3 TEMPORADAS» na
+        /// lombada. Gastar uma ida ao servidor pra descobrir um 404 que o objeto
+        /// na mão já anunciava é o §53 — não pedir o que se sabe que será negado.
         aoAbrirOMenu = {
-            modelo.abrirOMenu(naMao.id) {
+            if (naMao.serie) {
                 modelo.guardar()
-                aoAbrirObra(naMao.id)
+                aoAbrirSerie(naMao.id, naMao.titulo)
+            } else {
+                modelo.abrirOMenu(naMao.id) {
+                    modelo.guardar()
+                    aoAbrirObra(naMao.id)
+                }
             }
         },
         aoRebobinar = modelo::rebobinar,
+        /// ## As frases de levar, decididas **aqui** e não no cenário
+        ///
+        /// A `situacaoDaCaixa` é conta local: `caixa_ids` diz todos os ids que
+        /// abrem esta caixa, então o app sabe se ela está fora **antes** de
+        /// perguntar. Ver `SituacaoDaCaixa`.
+        ///
+        /// ⚠️ Só a `Livre` vira botão. As outras três viram frase — «esta já está
+        /// com você», «está com o rudney», «você está no limite» —, porque as
+        /// três são respostas e nenhuma é uma ação.
+        acaoDeLevar = when (val onde = estado.situacaoDaCaixa(naMao.id)) {
+            is SituacaoDaCaixa.Livre ->
+                if (estado.pegando == naMao.id) "levando…"
+                else if (estado.confirmandoPegar == naMao.id) "levar mesmo?"
+                /// ⚠️ O número entra no rótulo porque a escassez é o produto: são
+                /// três por pessoa, e «levar pra casa · 2 restam» é o que faz a
+                /// pessoa escolher em vez de pegar por pegar.
+                else "levar pra casa · ${onde.aindaPodePegar} ${if (onde.aindaPodePegar == 1) "resta" else "restam"}"
+            else -> null
+        },
+        avisoDaCaixa = when (val onde = estado.situacaoDaCaixa(naMao.id)) {
+            SituacaoDaCaixa.Comigo -> "esta já está com você"
+            is SituacaoDaCaixa.ComOutro -> "está com ${onde.quem}"
+            SituacaoDaCaixa.NoLimite -> "você está no limite de fitas"
+            else -> null
+        },
+        aoLevar = { modelo.pegar(naMao.id) },
         /// Os corpos do **celular**. Ver [LetraDoPalco]: eles não têm padrão de
         /// propósito, pra que o `:tv` seja obrigado a escolher os dele em vez de
         /// herdar 16sp e ninguém reparar.

@@ -31,6 +31,31 @@ data class NaSala(val nome: String, val posicaoEmSegundos: Double)
 
 data class EstadoDoPlayer(
     val preparando: Boolean = true,
+    /// ## ⚠️ Este filme está sendo visto **como canal**?
+    ///
+    /// O dono relatou o defeito assim: «de vez em quando aparece um player
+    /// diferente mostrando ao vivo e outro com o nosso player usual».
+    ///
+    /// A causa é que **eram mesmo dois**. O `TelaDoCanalAoVivoDaTv` é mínimo —
+    /// sem barra, sem pausa — e serve o canal **sem obra atrás**; o player normal
+    /// serve o canal que **tem** obra, com linha do tempo, tira de miniaturas e
+    /// salto de 10s. Como quem decide é o programa que está no ar naquele
+    /// minuto, o mesmo canal abria um ou outro conforme a hora — e daí o «de vez
+    /// em quando».
+    ///
+    /// Agora quem manda é **de onde se entrou**, e não o que há atrás: vindo do
+    /// ao vivo, o cromo é o de canal nos dois casos.
+    ///
+    /// ⚠️ E ele esconde o **transporte**, não o filme: pausar, saltar e arrastar
+    /// numa transmissão são gestos sobre um tempo que não é seu — a grade segue
+    /// correndo, e voltar 10s só afasta você do que está no ar. A legenda e a
+    /// faixa de áudio ficam: essas são sobre **como** se vê, não sobre quando.
+    val aoVivo: Boolean = false,
+    /// O nome do canal, quando se está num. ⚠️ Ele **importa**: a folha do
+    /// `TelaDoCanalAoVivoDaTv` já dizia que «num canal sem guia, quem não vê o
+    /// nome não sabe onde caiu», e o título sozinho é o do programa — não diz de
+    /// onde ele está vindo.
+    val canalNome: String? = null,
     /// O id do arquivo. Vai pro `MediaItem` como chave de cache, pra o player
     /// achar no disco o que o download escreveu. Ver `TelaDoPlayer`.
     val arquivoId: String = "",
@@ -272,6 +297,30 @@ class ModeloDoPlayer(
     /// O barramento, quando há — é por ele que este player sabe que **outro
     /// aparelho** mexeu na mesma obra.
     private val barramento: dev.odeon.android.dados.Barramento? = null,
+    /// ## ⚠️ Veio do **ao vivo**? Então nada disto conta.
+    ///
+    /// O pedido é do dono, e a história que o motivou é a prova:
+    ///
+    /// > «eu mesmo acabei dormindo no ao vivo e quando vi o app registrou que eu
+    /// > vi um monte de filme»
+    ///
+    /// Um canal **corre sozinho**. Ninguém escolheu aqueles filmes, ninguém
+    /// decidiu parar no minuto 47 — a grade seguiu e a pessoa estava dormindo. Um
+    /// progresso gravado ali não é uma memória do que se assistiu; é uma memória
+    /// do que passou na frente de uma tela ligada.
+    ///
+    /// E o estrago é maior do que uma linha errada em «continuar»: o mesmo
+    /// registro alimenta o «para você». Uma noite de sono no canal de terror
+    /// ensina ao algoritmo um gosto que ninguém tem.
+    ///
+    /// ⚠️ **A regra é por onde se entrou, não pelo que se tocou.** O mesmo filme,
+    /// aberto pela biblioteca ou pela locadora, conta normalmente — lá houve
+    /// escolha. Ver `Onde.Assistindo.canalId` no celular e `Onde.Filme.canalId`
+    /// na TV: os dois já carregavam de onde se veio, pra saber pra onde voltar.
+    /// Agora carregam também o que registrar.
+    private val doAoVivo: Boolean = false,
+    /// O nome do canal — ver `EstadoDoPlayer.canalNome`.
+    private val canalNome: String? = null,
 ) : ViewModel() {
 
     /// Quem eu sou, pra distinguir «outro aparelho meu» de «outra pessoa».
@@ -453,6 +502,8 @@ class ModeloDoPlayer(
 
     private val _estado = MutableStateFlow(
         EstadoDoPlayer(
+            aoVivo = doAoVivo,
+            canalNome = canalNome,
             arquivoId = arquivoId,
             titulo = titulo,
             capaUrl = capaUrl,
@@ -632,7 +683,12 @@ class ModeloDoPlayer(
     /// filme, e o deslocamento em vigor ainda é o da sessão que está morrendo.
     private fun marcarNoFilme(posicaoMs: Long, duracaoDoPlayerMs: Long, tipo: String) {
         if (posicaoMs <= 0) return
+        /// ⚠️ A posição **local** continua sendo anotada mesmo no ao vivo: ela é
+        /// o que a tela usa pra não voltar pro começo se o player se refizer no
+        /// meio. O que não sai daqui é o registro **no servidor**, que é o que
+        /// vira «continuar», histórico e gosto. Ver `doAoVivo`.
         anotarPosicao(posicaoMs)
+        if (doAoVivo) return
         /// ⚠️ A duração que sobe é a **conhecida**, não a do player. Ver o campo
         /// `duracaoConhecidaMs` pro que a do player grava no banco quando a
         /// fonte é HLS em geração.
@@ -769,6 +825,27 @@ class ModeloDoPlayer(
                 val plano = odeon.plano(arquivoId, paraCast = paraCast, faixaDeAudio = faixaDeAudio)
                 _estado.update {
                     it.copy(
+                        /// ## ⚠️ A duração do **servidor** entra quando a nossa é zero
+                        ///
+                        /// `duracaoConhecidaMs` nasce do que a ficha sabia, e há
+                        /// caminhos que abrem o player sem saber: o canal do ao
+                        /// vivo passa `null`, e a TV também. Nesses, o denominador
+                        /// da barra virava o `Player.duration` — que numa sessão
+                        /// de HLS em geração é **só o que já foi gerado**, e por
+                        /// isso cresce enquanto o filme corre.
+                        ///
+                        /// O servidor passou a mandar a duração medida no plano e
+                        /// na sessão (17/08/2026), justamente porque declarar a
+                        /// playlist como `VOD` custava 1m33s de varredura de
+                        /// keyframes por arquivo. Este é o mesmo conserto, pelo
+                        /// lado barato.
+                        ///
+                        /// ⚠️ Só entra quando a nossa é **zero**. A da ficha vem do
+                        /// probe da obra e é a mesma medida; sobrescrevê-la a cada
+                        /// preparo trocaria um número certo por outro igual, e
+                        /// numa troca de faixa de áudio isso é trabalho à toa.
+                        duracaoConhecidaMs = it.duracaoConhecidaMs.takeIf { d -> d > 0 }
+                            ?: ((plano.duracaoEmSegundos ?: 0.0) * 1000).toLong(),
                         legendas = legendasDe(plano),
                         faixasDeAudio = plano.faixasDeAudio,
                         /// O que o servidor **confirmou**, com a faixa pedida como
@@ -812,9 +889,22 @@ class ModeloDoPlayer(
                         faixaDeAudio = faixaDeAudio,
                     )
                     val url = odeon.urlDeMidia(sessao.urlDaPlaylist)
+                    /// ⚠️ **Este log fica.** Ele nasceu num diagnóstico de
+                    /// 18/08/2026 («nenhuma série toca, só tela preta») e foi o
+                    /// que permitiu pegar a sessão viva e olhar a playlist dela
+                    /// de fora. Sem ele, o que se tem é um player em `BUFFERING`
+                    /// sem erro — que não diz nada.
+                    android.util.Log.i("Odeon", "sessao=${sessao.id} playlist=$url " +
+                        "dur=${sessao.duracaoEmSegundos}")
                         ?: error("sessão sem playlist")
                     /// Guardado pra ser encerrado em `onCleared`. Ver lá.
                     sessaoAberta = sessao.id
+                    /// ⚠️ E a duração da **sessão**, pelo mesmo motivo do plano:
+                    /// uma sessão retomada pode não ter passado por ele.
+                    if (_estado.value.duracaoConhecidaMs <= 0) {
+                        val medida = ((sessao.duracaoEmSegundos ?: 0.0) * 1000).toLong()
+                        if (medida > 0) _estado.update { it.copy(duracaoConhecidaMs = medida) }
+                    }
                     _estado.update {
                         it.copy(
                             preparando = false,

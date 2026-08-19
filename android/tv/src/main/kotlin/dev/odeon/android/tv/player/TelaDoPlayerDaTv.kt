@@ -595,8 +595,10 @@ private fun Cromo(
         /// dentro do cromo, e por isso a transição de uma pra outra não pula: se
         /// a pessoa apertar `OK` no meio da busca, o cromo nasce em volta de uma
         /// película que já está na tela.
+        /// ⚠️ **Nunca num canal**: espiar é olhar adiante no rolo, e num canal não
+        /// há rolo — ver a película escondida logo abaixo.
         AnimatedVisibility(
-            visible = espiando && !aberto,
+            visible = espiando && !aberto && !estado.aoVivo,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -629,7 +631,25 @@ private fun Cromo(
                             listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f)),
                         ),
                     )
-                    .padding(horizontal = Sala.overscanH, vertical = Sala.overscanV),
+                    .padding(horizontal = Sala.overscanH)
+                    /// ## ⚠️ **No canal a coluna sobe 60dp, e é o `SAIR`** — 17/08/2026
+                    ///
+                    /// Visto na TCL: tirada a película, o cromo do canal ficou com
+                    /// uma linha só — e ela desceu até o rodapé, **em cima** do
+                    /// `SAIR`, que mora ancorado no `BottomStart` da tela inteira e
+                    /// não dentro desta coluna. Lia-se `NO AR` e `SAIR` sobrepostos
+                    /// no mesmo canto.
+                    ///
+                    /// Os 60dp são o botão (44 de altura mínima) mais um respiro. É
+                    /// a conta do próprio `BotaoDeSair` — não um número escolhido
+                    /// até parecer certo.
+                    ///
+                    /// ⚠️ Só no canal: no filme a coluna é alta e o `SAIR` fica
+                    /// naturalmente abaixo dela, que é onde o dono pediu que ficasse.
+                    .padding(
+                        top = Sala.overscanV,
+                        bottom = Sala.overscanV + if (estado.aoVivo) 60.dp else 0.dp,
+                    ),
             ) {
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -649,7 +669,32 @@ private fun Cromo(
                     ///
                     /// É a mesma linha do celular, que já usa o ponto no
                     /// cabeçalho do player.
-                    estado.plano?.let { plano ->
+                    /// ## ⚠️ Num canal a lâmpada do plano **dá lugar ao ponto
+                    /// vermelho** — 17/08/2026
+                    ///
+                    /// `direto × transcodificando` é uma conta sobre o arquivo, e
+                    /// quem sintonizou não escolheu arquivo nenhum. O que importa
+                    /// ali é que isto está **no ar** — e de qual canal.
+                    ///
+                    /// É a mesma troca que o celular já faz no `Cabecalho`, com as
+                    /// mesmas palavras. Ver `EstadoDoPlayer.canalNome`.
+                    val canal = estado.canalNome
+                    if (canal != null) {
+                        Box(Modifier.size(12.dp).background(Cores.perigo, CircleShape))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "NO AR",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Cores.perigo,
+                        )
+                        Text(
+                            text = canal,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Cores.textoApagado,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 14.dp, end = 14.dp),
+                        )
+                    } else estado.plano?.let { plano ->
                         Box(
                             Modifier
                                 .size(12.dp)
@@ -672,6 +717,25 @@ private fun Cromo(
                 }
                 Spacer(Modifier.height(10.dp))
 
+                /// ## ⚠️ **No canal não há película** — 17/08/2026
+                ///
+                /// > «no ao vivo somente apareça esse player ao vivo sem mostrar
+                /// > timeline pausar etc»
+                ///
+                /// O primeiro conserto tirou os três botões de transporte e parou
+                /// ali; a tira de quadros, o `1:21:21` e o `faltam 7:05` ficaram —
+                /// e vistos na TCL eram justamente a metade que mais parece um
+                /// player de filme. A `PeliculaDaSala` desenha os três juntos, então
+                /// escondê-la leva os três de uma vez.
+                ///
+                /// O argumento é o mesmo do transporte: **o tempo não é seu**. Uma
+                /// barra que anda até o fim promete um fim que não existe num canal,
+                /// e «faltam 7:05» é o resto do *arquivo* — não do que está no ar.
+                ///
+                /// ⚠️ O que sobra no cromo é `● NO AR · canal`, o título do programa
+                /// e o `SAIR`. O `SAIR` fica: sem ele, sintonizado num canal, não há
+                /// como voltar sem o controle da TV.
+                if (!estado.aoVivo) {
                 PeliculaDaSala(
                     /// ⚠️ **Enquanto se viaja, a película mostra o alvo e não o
                     /// filme.** É o ponto inteiro: a lente vai pra onde a pessoa
@@ -721,6 +785,7 @@ private fun Cromo(
                         runCatching { foco.requestFocus() }
                     },
                 )
+                }
                 /// ⚠️ **Sem vão aqui, e é de propósito** — «desce um pouco a
                 /// timeline film roll junto com o nome para mais próximo do play
                 /// button».
@@ -751,6 +816,19 @@ private fun Cromo(
                 /// **os mesmos objetos do celular** — não uma segunda versão
                 /// deles. É a §3 sendo cobrada: o `Botoes.kt` tinha 254 linhas e
                 /// zero `material3`, e «atravessa de graça».
+                /// ## ⚠️ **No canal não há transporte** — 17/08/2026
+                ///
+                /// O dono relatou dois players no ao vivo, e eram mesmo dois: o
+                /// `TelaDoCanalAoVivoDaTv`, mínimo, servia o canal **sem obra**, e
+                /// este servia o canal **com** obra — com voltar 10s, pausar e
+                /// adiantar 30s. Qual aparecia dependia do programa que estava no
+                /// ar naquele minuto, e daí o «de vez em quando».
+                ///
+                /// Agora quem manda é de **onde se entrou**. E os três somem
+                /// porque são gestos sobre um tempo que não é seu: a grade segue
+                /// correndo, pausar não pausa a transmissão, e voltar 10s só
+                /// afasta você do que está no ar.
+                if (!estado.aoVivo) {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -834,6 +912,7 @@ private fun Cromo(
                     /// §53, a mesma régua do celular: «com uma faixa só, o botão
                     /// não nasce». Eles ficam **depois** do transporte porque são
                     /// ajuste de sessão, não comando de filme.
+                }
                 }
             }
         }

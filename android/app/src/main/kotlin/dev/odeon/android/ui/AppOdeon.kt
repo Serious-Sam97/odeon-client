@@ -41,6 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,6 +70,8 @@ import dev.odeon.android.ui.login.ModeloDeLogin
 import dev.odeon.android.ui.login.TelaDeLogin
 import dev.odeon.android.ui.mural.ModeloDoMural
 import dev.odeon.android.ui.mural.TelaDoMural
+import dev.odeon.android.ui.aovivo.ModeloAoVivo
+import dev.odeon.android.ui.aovivo.TelaAoVivo
 import dev.odeon.android.ui.paravoce.ModeloParaVoce
 import dev.odeon.android.ui.paravoce.TelaParaVoce
 import dev.odeon.android.ui.perfil.GavetaDoEu
@@ -118,17 +122,56 @@ private sealed interface Onde {
         /// corrida o botão sairia do dado velho. Ver
         /// `ModeloDoPlayer.ultimaPosicaoNoFilmeMs`.
         val dicaDeOndeParou: Double? = null,
+        /// ## ⚠️ De onde esta ficha veio — 18/08/2026
+        ///
+        /// A ficha sempre voltou pra biblioteca, e estava certo enquanto era a
+        /// grade que a abria. Vinda de uma temporada, «voltar» pularia dois
+        /// degraus. É o mesmo par `canalId`/`canalNome` do player, com outro
+        /// nome — e o mesmo defeito que a TCL cobrou na TV nesta mesma tarde.
+        val daSerie: String? = null,
+        val daSerieTitulo: String? = null,
+        val daTemporada: Int? = null,
     ) : Onde
+    /// ## A série e a temporada — 18/08/2026
+    ///
+    /// Telas empilhadas, como a ficha: elas têm o próprio «voltar» e não moram na
+    /// barra de baixo. A pilha é `temporada ▸ série ▸ biblioteca`.
+    ///
+    /// ⚠️ Elas substituem o modo «dentro da série» do `ModeloDaBiblioteca`, que
+    /// trocava a grade no lugar — ver `docs/SERIES.md` pro que a TCL cobrou dele.
+    data class Serie(val serieId: String, val titulo: String) : Onde
+    data class Temporada(
+        val serieId: String,
+        val titulo: String,
+        val numero: Int,
+    ) : Onde
+
     /// As quatro que são **aba**, e não tela empilhada.
     ///
     /// A distinção não é decorativa: quem está nesta lista aparece na barra de
     /// navegação e é alcançável de qualquer outra da lista com um toque. A ficha
     /// e o player não estão, e é o que os deixa serem tela cheia.
     data object Biblioteca : Onde
+    /// ## ⚠️ As séries viraram **aba** — 18/08/2026
+    ///
+    /// Elas eram uma prateleira dentro da biblioteca, escolhida por uma pílula.
+    /// O dono olhou e disse o que estava errado: **a separação parecia um
+    /// filtro** — uma fileira de chips igual à de `filtros ▾` logo abaixo, e a
+    /// mais importante das duas com a cara da menos.
+    ///
+    /// Duas bibliotecas separadas, como o Jellyfin faz e como ele tinha proposto
+    /// de saída. A biblioteca vira **filmes**; séries tem título, busca e
+    /// filtros próprios. Ver `docs/SERIES.md §13`.
+    data object Series : Onde
+
+    /// A **transmissão** de um canal — o caminho de quem não tem obra casada.
+    /// Ver `TelaDoCanal`.
+    data class Canal(val canalId: String, val nome: String) : Onde
     data object Locadora : Onde
     data object Mural : Onde
     data object Guia : Onde
     data object ParaVoce : Onde
+    data object AoVivo : Onde
 
     /// ⚠️ **Baixados saiu da barra e continua existindo.**
     ///
@@ -166,6 +209,32 @@ private sealed interface Onde {
         /// quando a fonte é HLS em transcodificação: ali `Player.duration`
         /// devolve só o que já foi gerado. Ver `ModeloDoPlayer`.
         val duracaoEmSegundos: Double?,
+        /// ## ⚠️ De **onde se veio**, porque sair tem de devolver ao mesmo lugar
+        ///
+        /// `null` é o caso normal — abriu-se pela ficha, e sair volta pra ficha.
+        /// Preenchido quando o filme entrou por um **canal**, e aí voltar pra
+        /// ficha seria o app contando outra história do que aconteceu: eu
+        /// sintonizei um canal, não escolhi aquele filme.
+        ///
+        /// É o mesmo defeito que o iOS registrou tendo visto na tela — sintonizar
+        /// o Odeon 1 e cair, ao sair, na ficha de «O Lagosta», uma tela que
+        /// ninguém abriu sobre um filme que ninguém escolheu.
+        val canalId: String? = null,
+        /// O nome do canal, pro cromo dizer de onde a transmissão vem.
+        val canalNome: String? = null,
+        /// ## ⚠️ A origem atravessa o player — visto no emulador em 18/08/2026
+        ///
+        /// A ficha já sabia de onde tinha vindo (`Onde.Ficha.daSerie`), mas quem
+        /// **voltava do player** remontava a ficha do zero, sem esses campos: o
+        /// «‹ voltar» que devia devolver à temporada devolvia à biblioteca — e o
+        /// rótulo dizia «biblioteca», coerente com o destino errado.
+        ///
+        /// É o mesmo par `canalId`/`canalNome` logo acima, pela terceira vez
+        /// neste arquivo. A lição, escrita: **quem empilha uma tela por cima da
+        /// outra carrega a de baixo junto**, ou a volta inventa um caminho.
+        val daSerie: String? = null,
+        val daSerieTitulo: String? = null,
+        val daTemporada: Int? = null,
     ) : Onde
 }
 
@@ -190,12 +259,41 @@ private sealed interface Onde {
 /// acervo, e "para você" fica no fim porque é onde se vai quando não se sabe o
 /// que assistir — que é a pergunta feita depois de olhar, não antes.
 private enum class Aba(val rotulo: String, val icone: Int, val destino: Onde) {
-    Biblioteca("biblioteca", R.drawable.ic_aba_biblioteca, Onde.Biblioteca),
+    /// ⚠️ Ela se chama **filmes** desde 18/08/2026: as séries saíram daqui e
+    /// viraram aba. «biblioteca» prometia as duas coisas.
+    Biblioteca("filmes", R.drawable.ic_aba_biblioteca, Onde.Biblioteca),
+    Series("séries", R.drawable.ic_aba_series, Onde.Series),
+    /// ## ⚠️ O ao vivo fica **no meio**, e é pedido do dono — 17/08/2026
+    ///
+    /// Ele entrou em quarto lugar, entre o guia e o «para você», e o meio é
+    /// melhor por uma razão que a barra inteira já usa: **a ordem é a de uso
+    /// esperado**, e o centro é o lugar que o polegar alcança sem reposicionar a
+    /// mão. Numa barra de cinco, o terceiro é o único que os dois polegares
+    /// pegam.
+    ///
+    /// E há o argumento do conteúdo: das cinco, esta é a única com **hora
+    /// marcada**. Perder o mural de hoje é lê-lo amanhã; perder o filme das 21h é
+    /// perdê-lo. O destino que passa merece o lugar que se alcança mais rápido.
+    AoVivo("ao vivo", R.drawable.ic_aba_aovivo, Onde.AoVivo),
     Locadora("locadora", R.drawable.ic_aba_locadora, Onde.Locadora),
-    Mural("mural", R.drawable.ic_aba_mural, Onde.Mural),
     Guia("guia", R.drawable.ic_aba_guia, Onde.Guia),
-    ParaVoce("para você", R.drawable.ic_aba_paravoce, Onde.ParaVoce),
 }
+
+/// ## ⚠️ O mural **saiu da barra** pra o ao vivo entrar, e a conta é a de cima
+///
+/// São cinco lugares e havia cinco donos. A régua já estava escrita neste
+/// arquivo, medida em 04/08/2026: a seis abas cada uma fica com 68,5dp e
+/// «biblioteca» ocupa 61dp a 12sp — **não cabe** com o respiro. Então entrar
+/// custava sair.
+///
+/// Saiu o mural, e não porque valha menos: ele é o que **já aconteceu**. O ao
+/// vivo é o único destino do app com hora marcada — perder o mural de hoje é
+/// lê-lo amanhã; perder o filme das 21h é perdê-lo. Um lugar permanente na barra
+/// serve melhor ao que passa do que ao que fica.
+///
+/// ⚠️ E ele **não sumiu**: virou linha da gaveta do canto, que está em toda aba —
+/// o mesmo caminho do perfil. É também o que o iOS faz, e as duas casas ficam
+/// com a mesma barra: biblioteca · locadora · guia · ao vivo · para você.
 
 /// Como uma aba **se apresenta agora**.
 ///
@@ -376,6 +474,13 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
     /// mais abaixo.
     var filtroPedido: dev.odeon.android.dados.Filtros? by remember { mutableStateOf(null) }
 
+    /// A série pedida de fora — hoje, a caixa de série da locadora.
+    ///
+    /// Espelha o `filtroPedido` acima e pelo mesmo motivo: quem pede está numa
+    /// tela e quem atende está noutra, e o `ViewModel` da biblioteca só existe
+    /// depois da troca de aba. Consumir é zerar, senão qualquer recomposição
+    /// reabriria a série e a pessoa não sairia mais dela.
+
     /// Quantas vezes se voltou do player. Serve de sinal, não de contagem: o que
     /// importa é que o número **mudou**, pra a ficha reler o `position_seconds`.
     var voltasDoPlayer by remember { mutableIntStateOf(0) }
@@ -497,11 +602,13 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
     /// recomposição infinita.
     val corpo: @Composable (MolduraDoCartaz) -> Unit = { molduraDoCartaz ->
         when (onde) {
+                /// ⚠️ A marca, e **não** um risquinho — ver `Saguao`. Esta é a
+                /// primeira tela composta do app, e ela dura segundos.
                 Onde.Decidindo -> Box(
                     Modifier.fillMaxSize().safeDrawingPadding(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(color = Cores.destaque)
+                    Saguao()
                 }
 
                 Onde.Login -> {
@@ -511,8 +618,58 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     TelaDeLogin(modelo)
                 }
 
+                is Onde.Canal -> {
+                    val alvo = onde as Onde.Canal
+                    val modelo: ModeloAoVivo = viewModel(factory = fabricaAoVivo(app.odeon))
+                    dev.odeon.android.ui.aovivo.TelaDoCanal(
+                        modelo = modelo,
+                        canalId = alvo.canalId,
+                        nome = alvo.nome,
+                        aoSair = { onde = Onde.AoVivo },
+                    )
+                }
+
+                Onde.Series -> {
+                    /// ⚠️ **O mesmo `ModeloDaBiblioteca`**, com a prateleira
+                    /// fixada: a grade, a paginação, a busca e os filtros já
+                    /// estão todos ali. O que a aba de séries acrescenta é a
+                    /// **organização** — `na metade` antes de `não começadas` —
+                    /// e não uma segunda cópia da biblioteca.
+                    val modelo: ModeloDaBiblioteca = viewModel(
+                        key = "series",
+                        factory = fabrica(app.odeon),
+                    )
+                    LaunchedEffect(Unit) { modelo.sóSéries() }
+                    LaunchedEffect(voltasDoPlayer, progressoDeFora.intValue) {
+                        if (voltasDoPlayer > 0 || progressoDeFora.intValue > 0) {
+                            modelo.recarregarParaContinuar()
+                        }
+                    }
+                    dev.odeon.android.ui.serie.TelaDasSeries(
+                        modelo = modelo,
+                        aoAbrirSerie = { id, titulo -> onde = Onde.Serie(id, titulo) },
+                        /// ⚠️ O episódio de «na metade» **carrega a série**, pra
+                        /// o «voltar» dele saber que existe uma ficha de série
+                        /// entre ele e a aba.
+                        aoAbrirObra = { id, serie ->
+                            onde = Onde.Ficha(
+                                id,
+                                daSerie = serie?.first,
+                                /// ⚠️ Sem id de série, o título sozinho já basta
+                                /// pro «voltar» saber que isto é episódio e
+                                /// devolver à aba das séries — ver `sairDaFicha`.
+                                daSerieTitulo = serie?.second ?: "séries",
+                            )
+                        },
+                    )
+                }
+
                 Onde.Biblioteca -> {
                     val modelo: ModeloDaBiblioteca = viewModel(factory = fabrica(app.odeon))
+                    /// ⚠️ **A biblioteca é a dos filmes** desde 18/08/2026.
+                    /// Quem tira as séries é o servidor, com `?tags_not=` — ver
+                    /// `semSéries`.
+                    LaunchedEffect(Unit) { modelo.semSéries() }
                     /// O filtro que veio do guia.
                     LaunchedEffect(filtroPedido) {
                         filtroPedido?.let {
@@ -540,6 +697,16 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         TelaDaBiblioteca(
                             modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
+                            aoAbrirSerie = { id, titulo -> onde = Onde.Serie(id, titulo) },
+                            /// ⚠️ **A aba dos filmes não mostra série** — 18/08/2026.
+                            ///
+                            /// O corte é **na tela**, e não no pedido, porque a
+                            /// API não tem «exclua esta etiqueta»: `?tags=` só
+                            /// soma. Fixar `format:filme` deixaria de fora as
+                            /// ~7.400 entradas que a identificação ainda não
+                            /// classificou — 88% do acervo. Ver
+                            /// `PEDIDOS-AO-SERVIDOR.md, «já entregue» 12`.
+                            escondendoSeries = true,
                             aoAbrirBaixados = { onde = Onde.Baixados },
                             /// ⚠️ **Relido a cada visita à biblioteca**, e não
                             /// uma vez na montagem: quem baixa um filme pela
@@ -567,6 +734,13 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         TelaDaLocadora(
                             modelo = modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
+                            /// A caixa de temporadas leva à **ficha da série**,
+                            /// e não à ficha da obra: o id dela é de coleção.
+                            ///
+                            /// ⚠️ Ela ia pela biblioteca (`seriePedida` →
+                            /// `abrirSerieDeFora`) enquanto série era um modo da
+                            /// grade. Agora é destino, e o desvio some junto.
+                            aoAbrirSerie = { id, titulo -> onde = Onde.Serie(id, titulo) },
                             /// O menu do disco toca **direto**, sem passar pela
                             /// ficha: escolher «do começo» ou um capítulo já é a
                             /// decisão que a ficha existiria pra ajudar a tomar.
@@ -634,8 +808,17 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                 Onde.Mural -> {
                     val modelo: ModeloDoMural = viewModel(factory = fabricaDoMural(app.odeon))
                     BackHandler { onde = Onde.Biblioteca }
+                    /// ⚠️ **Um «voltar» desenhado** — 18/08/2026. As duas telas
+                    /// da gaveta são as únicas sem barra de baixo, e até hoje a
+                    /// única saída era o gesto do sistema. Numa tela cheia sem
+                    /// nenhuma âncora, isso é um beco.
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        TelaDoMural(modelo = modelo, aoAbrirObra = { onde = Onde.Ficha(it) })
+                        BotaoDeVoltar { onde = Onde.Biblioteca }
+                        TelaDoMural(
+                            modelo = modelo,
+                            aoAbrirObra = { onde = Onde.Ficha(it) },
+                            aoVoltar = { onde = Onde.Biblioteca },
+                        )
                     }
                 }
 
@@ -658,15 +841,111 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     }
                 }
 
+                Onde.AoVivo -> {
+                    val modelo: ModeloAoVivo = viewModel(factory = fabricaAoVivo(app.odeon))
+                    BackHandler { onde = Onde.Biblioteca }
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        TelaAoVivo(
+                            modelo = modelo,
+                            /// ⚠️ Sem obra casada, **sintoniza o canal** — não
+                            /// desiste. Ver `TelaDoCanal`.
+                            aoSintonizarDeFora = { canalId, nome ->
+                                onde = Onde.Canal(canalId, nome)
+                            },
+                            aoSintonizar = { quadro, comecarEm ->
+                                val obra = quadro.obraId
+                                val arquivo = quadro.arquivoId
+                                /// ⚠️ Sem obra e sem arquivo, sintonizar **não faz
+                                /// nada** — o mesmo que a TV decidiu. A linha já
+                                /// diz «sem programação»; abrir um recado repetiria
+                                /// no toque o que a tela informou antes dele.
+                                ///
+                                /// ⚠️ Neste acervo esse ramo **não é alcançado**: o
+                                /// ErsatzTV serve o próprio acervo com EPG casado,
+                                /// então todo canal tem obra atrás. Fica anotado
+                                /// como não exercitado, e não como «funciona».
+                                if (obra != null && arquivo != null) {
+                                    onde = Onde.Assistindo(
+                                        obraId = obra,
+                                        arquivoId = arquivo,
+                                        titulo = quadro.titulo,
+                                        ondeParou = comecarEm,
+                                        capaUrl = modelo.arte(quadro.arte),
+                                        duracaoEmSegundos = null,
+                                        canalId = quadro.canalId,
+                                        canalNome = quadro.canalNome,
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+
                 Onde.ParaVoce -> {
                     val modelo: ModeloParaVoce = viewModel(factory = fabricaParaVoce(app.odeon))
                     BackHandler { onde = Onde.Biblioteca }
                     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        BotaoDeVoltar { onde = Onde.Biblioteca }
                         TelaParaVoce(
                             modelo = modelo,
                             aoAbrirObra = { onde = Onde.Ficha(it) },
                         )
                     }
+                }
+
+                is Onde.Serie -> {
+                    val alvo = onde as Onde.Serie
+                    /// A `key` carrega o id pelo mesmo motivo da ficha: sem ela,
+                    /// abrir a segunda série mostraria as temporadas da primeira
+                    /// — e mostraria com cara de certo.
+                    val modelo: dev.odeon.android.ui.serie.ModeloDaSerie = viewModel(
+                        key = "serie:${alvo.serieId}",
+                        factory = fabricaDaSerie(app.odeon, alvo.serieId, alvo.titulo),
+                    )
+                    BackHandler { onde = Onde.Series }
+                    dev.odeon.android.ui.serie.TelaDaSerie(
+                        modelo = modelo,
+                        aoAbrirTemporada = { n ->
+                            onde = Onde.Temporada(alvo.serieId, alvo.titulo, n)
+                        },
+                        /// ⚠️ O segundo viaja junto: `0.0` no «continuar» faria
+                        /// o botão que promete continuar começar do zero.
+                        aoTocar = { id, em ->
+                            onde = Onde.Ficha(
+                                id,
+                                dicaDeOndeParou = em,
+                                daSerie = alvo.serieId,
+                                daSerieTitulo = alvo.titulo,
+                            )
+                        },
+                        /// ⚠️ A ficha da série volta pra **aba das séries** —
+                        /// 18/08/2026. Ela voltava pra biblioteca, que agora é a
+                        /// dos filmes: um lugar onde a série que se acabou de
+                        /// fechar não existe.
+                        aoVoltar = { onde = Onde.Series },
+                    )
+                }
+
+                is Onde.Temporada -> {
+                    val alvo = onde as Onde.Temporada
+                    val modelo: dev.odeon.android.ui.serie.ModeloDaSerie = viewModel(
+                        key = "serie:${alvo.serieId}",
+                        factory = fabricaDaSerie(app.odeon, alvo.serieId, alvo.titulo),
+                    )
+                    BackHandler { onde = Onde.Serie(alvo.serieId, alvo.titulo) }
+                    dev.odeon.android.ui.serie.TelaDaTemporada(
+                        modelo = modelo,
+                        numeroDaTemporada = alvo.numero,
+                        aoTocar = { id ->
+                            onde = Onde.Ficha(
+                                id,
+                                daSerie = alvo.serieId,
+                                daSerieTitulo = alvo.titulo,
+                                daTemporada = alvo.numero,
+                            )
+                        },
+                        aoVoltar = { onde = Onde.Serie(alvo.serieId, alvo.titulo) },
+                    )
                 }
 
                 is Onde.Ficha -> {
@@ -685,7 +964,24 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                             modelo.relerSeJaTem()
                         }
                     }
-                    BackHandler { onde = Onde.Biblioteca }
+                    /// ⚠️ Volta pra **de onde veio** — ver `Onde.Ficha.daSerie`.
+                    val sairDaFicha = {
+                        val serie = alvo.daSerie
+                        val titulo = alvo.daSerieTitulo
+                        val temporada = alvo.daTemporada
+                        onde = when {
+                            serie != null && titulo != null && temporada != null ->
+                                Onde.Temporada(serie, titulo, temporada)
+                            serie != null && titulo != null -> Onde.Serie(serie, titulo)
+                            /// ⚠️ **Sem origem, volta pras séries se for
+                            /// episódio.** Um episódio que caiu aqui sem
+                            /// `daSerie` (pela busca, por exemplo) voltava pra
+                            /// aba dos filmes — uma aba onde ele nem aparece.
+                            alvo.daSerieTitulo != null -> Onde.Series
+                            else -> Onde.Biblioteca
+                        }
+                    }
+                    BackHandler(onBack = sairDaFicha)
                     /// **Sem `safeDrawingPadding` aqui, e é a R8.**
                     ///
                     /// A ficha é borda a borda: o backdrop sobe até debaixo da
@@ -702,7 +998,16 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                             modelo = modelo,
                             dicaDeOndeParou = alvo.dicaDeOndeParou,
                             moldura = molduraDoCartaz,
-                            aoVoltar = { onde = Onde.Biblioteca },
+                            /// ⚠️ O botão desenhado e a **tecla** voltar têm que
+                            /// concordar: dois caminhos de saída que levam a
+                            /// lugares diferentes é o defeito mais fácil de
+                            /// escrever e o mais difícil de notar lendo.
+                            aoVoltar = sairDaFicha,
+                            voltaPara = when {
+                                alvo.daTemporada != null -> "Temporada ${alvo.daTemporada}"
+                                alvo.daSerieTitulo != null -> alvo.daSerieTitulo
+                                else -> "biblioteca"
+                            },
                             aoBaixar = { arquivoId -> app.baixarArquivo(arquivoId, alvo.obraId) },
                             aoTocar = { arquivoId, titulo, ondeParou, duracao, capa ->
                                 indoAssistir = Onde.Assistindo(
@@ -712,6 +1017,11 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                                     ondeParou = ondeParou,
                                     capaUrl = capa,
                                     duracaoEmSegundos = duracao,
+                                    /// A origem segue viagem — ver
+                                    /// `Onde.Assistindo.daSerie`.
+                                    daSerie = alvo.daSerie,
+                                    daSerieTitulo = alvo.daSerieTitulo,
+                                    daTemporada = alvo.daTemporada,
                                 )
                             },
                         )
@@ -731,17 +1041,29 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                         key = "player:${alvo.arquivoId}",
                         factory = fabricaDoPlayer(app.odeon, alvo, app.barramento),
                     )
-                    val voltarPraFicha = {
+                    /// ⚠️ **Voltar devolve de onde se veio**, e não sempre à
+                    /// ficha. Quem entrou por um canal sai pro ao vivo: sair de um
+                    /// canal na ficha do filme que por acaso estava passando é o
+                    /// app contando outra história do que aconteceu. Ver
+                    /// `Onde.Assistindo.canalId`.
+                    val voltar = {
                         voltasDoPlayer++
-                        onde = Onde.Ficha(
-                            alvo.obraId,
-                            /// A posição que o player conhece **agora**, pra ficha
-                            /// não depender de ganhar a corrida contra a marca de
-                            /// `abandon`. Ver o campo em `Onde.Ficha`.
-                            dicaDeOndeParou = modelo.ultimaPosicaoNoFilmeMs?.let { it / 1000.0 },
-                        )
+                        onde = if (alvo.canalId != null) {
+                            Onde.AoVivo
+                        } else {
+                            Onde.Ficha(
+                                alvo.obraId,
+                                /// A posição que o player conhece **agora**, pra
+                                /// ficha não depender de ganhar a corrida contra a
+                                /// marca de `abandon`. Ver o campo em `Onde.Ficha`.
+                                dicaDeOndeParou = modelo.ultimaPosicaoNoFilmeMs?.let { it / 1000.0 },
+                                daSerie = alvo.daSerie,
+                                daSerieTitulo = alvo.daSerieTitulo,
+                                daTemporada = alvo.daTemporada,
+                            )
+                        }
                     }
-                    BackHandler(onBack = voltarPraFicha)
+                    BackHandler(onBack = voltar)
                     /// **Sem `safeDrawingPadding` aqui**, e é de propósito: o
                     /// vídeo usa a tela inteira, entalhe e barras incluídos.
                     /// Respeitar as áreas seguras num player é desenhar duas
@@ -750,10 +1072,59 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                     /// modelo é do escopo da atividade e sobrevive à saída, então
                     /// o que ele lembra tem a idade da primeira abertura. Ver
                     /// `ModeloDoPlayer.garantirPreparado`.
+                    /// ## ⚠️ O canal **continua** quando o arquivo acaba — 17/08/2026
+                    ///
+                    /// Sem isto, um canal no celular terminava numa tela parada:
+                    /// o filme acabava e o app ficava olhando o fim. A TV já
+                    /// tinha o caminho; o celular não, e o `oQueEstaNoArAgora`
+                    /// esperava no `:core` desde então.
+                    ///
+                    /// A prudência é a de lá, e cada linha dela custou um ciclo
+                    /// de teste na sala:
+                    ///
+                    ///   - **volta pro ao vivo primeiro**, e só então procura: a
+                    ///     pessoa vê a lista de canais em vez de um preto
+                    ///   - **desiste se saiu**, porque o laço roda por minutos e
+                    ///     sintonizar por cima seria arrancar alguém da tela em
+                    ///     que está
+                    ///   - **pula o mesmo arquivo**: se a faixa da grade for
+                    ///     maior que o filme, «o que está passando?» devolve o
+                    ///     que acabou de acabar, e re-sintonizá-lo além do fim o
+                    ///     faz terminar na hora, girando sozinho
+                    val escopo = rememberCoroutineScope()
                     TelaDoPlayer(
                         modelo = modelo,
                         ondeParou = alvo.ondeParou,
-                        aoVoltar = voltarPraFicha,
+                        aoVoltar = voltar,
+                        aoAcabar = {
+                            val canal = alvo.canalId ?: return@TelaDoPlayer
+                            val acabou = alvo.arquivoId
+                            onde = Onde.AoVivo
+                            escopo.launch {
+                                repeat(12) {
+                                    if (onde != Onde.AoVivo) return@launch
+                                    val proximo = dev.odeon.android.ui.aovivo
+                                        .oQueEstaNoArAgora(app.odeon, canal)
+                                    val quadro = proximo?.quadro
+                                    val obra = quadro?.obraId
+                                    val arquivo = quadro?.arquivoId
+                                    if (arquivo != null && arquivo != acabou && obra != null) {
+                                        onde = Onde.Assistindo(
+                                            obraId = obra,
+                                            arquivoId = arquivo,
+                                            titulo = quadro.titulo,
+                                            ondeParou = proximo.comecarEm,
+                                            capaUrl = app.odeon.urlDaArte(quadro.arte),
+                                            duracaoEmSegundos = null,
+                                            canalId = canal,
+                                            canalNome = quadro.canalNome,
+                                        )
+                                        return@launch
+                                    }
+                                    kotlinx.coroutines.delay(15_000)
+                                }
+                            }
+                        },
                     )
                 }
         }
@@ -875,6 +1246,8 @@ fun AppOdeon(abaPedida: androidx.compose.runtime.MutableState<String?>? = null) 
                                     perfil = estadoDoEu.perfil,
                                     rosto = eu.arte(estadoDoEu.perfil?.avatar?.arte),
                                     aoAbrirPerfil = { onde = Onde.Perfil },
+                                    aoAbrirMural = { onde = Onde.Mural },
+                                    aoAbrirParaVoce = { onde = Onde.ParaVoce },
                                     aoSair = { eu.sair() },
                                 )
                             },
@@ -1058,6 +1431,10 @@ private fun fabricaDosBaixados(app: OdeonApp) = viewModelFactory {
     initializer { ModeloDosBaixados(app.baixados, app.cofre, app.odeon) }
 }
 
+private fun fabricaAoVivo(odeon: RepositorioOdeon) = viewModelFactory {
+    initializer { ModeloAoVivo(odeon) }
+}
+
 private fun fabricaParaVoce(odeon: RepositorioOdeon) = viewModelFactory {
     initializer { ModeloParaVoce(odeon) }
 }
@@ -1085,6 +1462,14 @@ private fun fabricaDaObra(odeon: RepositorioOdeon, obraId: String) = viewModelFa
     initializer { ModeloDaObra(odeon, obraId) }
 }
 
+private fun fabricaDaSerie(
+    odeon: RepositorioOdeon,
+    serieId: String,
+    titulo: String,
+) = viewModelFactory {
+    initializer { dev.odeon.android.ui.serie.ModeloDaSerie(odeon, serieId, titulo) }
+}
+
 private fun fabricaDoPlayer(
     odeon: RepositorioOdeon,
     alvo: Onde.Assistindo,
@@ -1098,8 +1483,30 @@ private fun fabricaDoPlayer(
             titulo = alvo.titulo,
             ondeParou = alvo.ondeParou,
             duracaoEmSegundos = alvo.duracaoEmSegundos,
+            /// ⚠️ Quem veio de um canal **não registra nada**. Ver
+            /// `ModeloDoPlayer.doAoVivo`: o `canalId` já viajava pra saber pra
+            /// onde voltar, e agora diz também o que não gravar.
+            doAoVivo = alvo.canalId != null,
+            canalNome = alvo.canalNome,
             capaUrl = alvo.capaUrl,
             barramento = barramento,
         )
+    }
+}
+
+/// O «voltar» desenhado das duas telas da gaveta.
+///
+/// ⚠️ Ele existe porque **mural e «para você» não têm barra de baixo** — são
+/// telas empilhadas, e desde 18/08/2026 as duas moram na gaveta do canto. Sem
+/// uma âncora na tela, a única saída era o gesto do sistema, que numa tela cheia
+/// sem nenhuma marca é um beco.
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.BotaoDeVoltar(aoVoltar: () -> Unit) {
+    androidx.compose.material3.TextButton(
+        onClick = aoVoltar,
+        modifier = Modifier.align(androidx.compose.ui.Alignment.TopStart)
+
+    ) {
+        Text("‹ voltar", color = Cores.destaque)
     }
 }

@@ -189,3 +189,110 @@ struct TabuaDaPrateleira: View {
         .shadow(color: .black.opacity(0.6), radius: 6, y: 3)
     }
 }
+
+/// A nota do caixa — o resumo da loja, impresso, no fim da rolagem.
+///
+/// ## ⚠️ Por que ela mora no fim
+///
+/// O resumo de quem-está-com-o-quê ocupava o topo no Android, **antes** de a
+/// pessoa ver a loja. No desenho aprovado ele virou o fechamento: você anda pelas
+/// estantes e, na saída, o caixa te entrega a notinha — acervo, as pessoas, seu
+/// limite, o prazo da casa. É o mesmo dado com a ordem de uma visita de verdade.
+struct NotaDoCaixa: View {
+    let prateleira: Prateleira
+    let noAcervo: Int
+
+    private let tinta = Cores.tintaDoPapel
+    private func mono(_ tamanho: CGFloat, _ peso: Font.Weight = .bold) -> Font {
+        .system(size: tamanho, weight: peso, design: .monospaced)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("LOCADORA ODEON")
+                .font(mono(16)).tracking(2.2).foregroundStyle(tinta)
+                .frame(maxWidth: .infinity)
+            Text("— acervo da casa —")
+                .font(mono(8.5, .regular)).foregroundStyle(tinta.opacity(0.7))
+                .frame(maxWidth: .infinity)
+
+            tracejado
+            if noAcervo > 0 { linha("NO ACERVO", noAcervo.comMilhar) }
+            if let prazo = prateleira.opcoes?.prazoEmDias, prazo > 0 {
+                linha("PRAZO DA CASA", "\(prazo) DIAS")
+            }
+
+            /// ⚠️ Só quem tem fita ou fama — «quem não tem nada não é notícia».
+            let gente = prateleira.pessoas.filter(\.temOQueDizer)
+            if !gente.isEmpty {
+                tracejado
+                ForEach(gente) { pessoa in
+                    linha(pessoa.nome, [
+                        pessoa.naMao > 0 ? "\(pessoa.naMao) fora" : nil,
+                        pessoa.noMeio > 0 ? "\(pessoa.noMeio) no meio" : nil,
+                        pessoa.zoadas > 0 ? "✕\(pessoa.zoadas)" : nil,
+                        pessoa.rebobinou > 0 ? "⟲\(pessoa.rebobinou)" : nil,
+                    ].compactMap { $0 }.joined(separator: " · "))
+                }
+            }
+
+            tracejado
+            /// ⚠️ No limite a frase **vem com a saída junto**: «não dá» sem dizer o
+            /// que fazer é o §8b na forma mais fria.
+            if prateleira.possoPegar > 0 {
+                linha("VOCÊ PODE PEGAR", "+\(prateleira.possoPegar)")
+            } else {
+                linha("VOCÊ ESTÁ NO LIMITE", "")
+                Text("devolva uma pra pegar outra")
+                    .font(mono(9, .regular)).foregroundStyle(tinta.opacity(0.8))
+            }
+
+            /// O carimbo, torto como todo carimbo.
+            Text("VOLTE SEMPRE")
+                .font(mono(11)).tracking(0.9)
+                .foregroundStyle(Color(hex: 0xB22C2C).opacity(0.8))
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color(hex: 0xB22C2C).opacity(0.75), lineWidth: 2.5),
+                )
+                .rotationEffect(.degrees(-8))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, 10).padding(.trailing, 4)
+        }
+        .frame(width: 300, alignment: .leading)
+        .padding(.horizontal, 18).padding(.vertical, 16)
+        .background {
+            /// ⚠️ A **serrilha** é feita de círculos da cor do papel — recortes, e
+            /// não dentes pintados. Pintados por cima, eles ficariam da cor errada
+            /// no dia em que o fundo mudar.
+            VStack(spacing: 0) {
+                Cores.papel
+                HStack(spacing: 6) {
+                    ForEach(0 ..< 19, id: \.self) { _ in
+                        Circle().fill(Cores.papel).frame(width: 10, height: 10)
+                    }
+                }
+                .frame(height: 10)
+                .offset(y: -5)
+            }
+        }
+    }
+
+    private func linha(_ esquerda: String, _ direita: String) -> some View {
+        HStack {
+            Text(esquerda).font(mono(11)).foregroundStyle(tinta)
+            Spacer(minLength: 8)
+            Text(direita).font(mono(11)).foregroundStyle(tinta)
+        }
+    }
+
+    private var tracejado: some View {
+        Path { p in
+            p.move(to: .zero)
+            p.addLine(to: CGPoint(x: 264, y: 0))
+        }
+        .stroke(Color(hex: 0xB8AC8A), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+        .frame(height: 2)
+    }
+}

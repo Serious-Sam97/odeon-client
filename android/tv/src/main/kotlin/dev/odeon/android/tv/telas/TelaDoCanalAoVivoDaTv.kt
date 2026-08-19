@@ -174,34 +174,79 @@ fun TelaDoCanalAoVivoDaTv(
     }
 
     Box(modifier.fillMaxSize().background(Color.Black)) {
-        if (player != null) {
-            AndroidView(
-                factory = { ctx ->
-                    androidx.media3.ui.PlayerView(ctx).apply {
-                        useController = false
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    }
-                },
-                update = { it.player = player },
-                modifier = Modifier.fillMaxSize(),
-            )
+        /// ## ⚠️ A superfície nasce **com a tela**, e não quando o player chega
+        ///
+        /// Vinha daqui um `if (player != null)` em volta deste `AndroidView`, e é
+        /// a mesma forma que produziu no celular o defeito medido em 19/08/2026:
+        /// **17 de 17 canais de fora pretos**, com o vídeo decodificando e o áudio
+        /// tocando. Um `PlayerView` inserido numa tela que já foi desenhada sem
+        /// ele nasce com `SurfaceView` **sem superfície** — e não ganha uma depois.
+        /// O player segue tocando pra uma superfície-fantasma, e a sala vê preto.
+        ///
+        /// A folha do `TelaDoCanal` do `:app` tem a medição inteira, com o
+        /// `dumpsys SurfaceFlinger` sem camada nenhuma e os dois tamanhos que
+        /// separam os casos (1080×607 quando mediu o vídeo, 1080×2400 quando
+        /// nunca mediu). Aqui a superfície passa a ser sempre a primeira coisa do
+        /// `Box`, e o player entra nela quando houver.
+        ///
+        /// ⚠️ **Não foi exercitado nesta tela.** A TCL estava desligada em
+        /// 19/08/2026, e o que existe é o defeito medido no celular mais a leitura
+        /// de que o código daqui tinha a mesma forma. Quando a TV voltar, o teste
+        /// é o mesmo: entrar num canal de fora e ver se aparece imagem — se vier
+        /// som sem imagem, o conserto não pegou.
+        AndroidView(
+            factory = { ctx ->
+                androidx.media3.ui.PlayerView(ctx).apply {
+                    useController = false
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
+                }
+            },
+            update = { it.player = player },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        /// A tarja do canal — aparece na entrada e **some depois de 6 segundos**.
+        ///
+        /// ## ⚠️ Ela ficava pra sempre, e a decisão foi trocada — 17/08/2026
+        ///
+        /// A folha anterior defendia que ela nunca sumisse: «a tarja é a única
+        /// coisa que diz em que canal você está — e num canal sem guia, quem não
+        /// vê o nome não sabe onde caiu». O argumento é bom pra quem **acabou de
+        /// chegar**, e só pra esse.
+        ///
+        /// O dono relatou o custo do resto do tempo: «hj esse player do ao vivo
+        /// nao some». Uma tarja permanente sobre uma transmissão que dura horas
+        /// deixa de informar e passa a tapar — e a faixa preta de baixo de um
+        /// 16:9 não é garantida: num conteúdo 4:3 ou 2.39:1 ela cai sobre a
+        /// imagem.
+        ///
+        /// Seis segundos atendem os dois: quem chega lê o canal, e quem ficou
+        /// vê o filme. ⚠️ E ela **volta a qualquer toque ou tecla**, que é o que
+        /// separa «sumiu» de «foi embora»: a informação continua a um gesto de
+        /// distância.
+        var tarjaVisivel by androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf(true)
+        }
+        androidx.compose.runtime.LaunchedEffect(tarjaVisivel) {
+            if (tarjaVisivel) {
+                kotlinx.coroutines.delay(6_000)
+                tarjaVisivel = false
+            }
         }
 
-        /// A tarja do canal, que aparece na entrada e fica.
-        ///
-        /// ⚠️ Ela **não some sozinha**, e é diferente do cromo do player. Ali o
-        /// cromo tapa o filme e some pra sair da frente; aqui a tarja é a única
-        /// coisa que diz em que canal você está — e num canal sem guia, quem não
-        /// vê o nome não sabe onde caiu. Ocupa a faixa preta de baixo, que numa
-        /// transmissão de 16:9 quase sempre existe.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = tarjaVisivel,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.BottomStart),
+        ) {
         Column(
             Modifier
-                .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
@@ -238,6 +283,7 @@ fun TelaDoCanalAoVivoDaTv(
                 style = TipoDaSala.rotulo,
                 color = Cores.textoApagado,
             )
+        }
         }
     }
 }

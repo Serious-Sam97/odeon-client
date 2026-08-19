@@ -82,7 +82,14 @@ import kotlinx.coroutines.delay
 /// que nem sequer é o player não quebrou nada, trocar por um `CastPlayer` não
 /// vai quebrar também.
 @Composable
-fun TelaDoPlayer(modelo: ModeloDoPlayer, ondeParou: Double, aoVoltar: () -> Unit) {
+fun TelaDoPlayer(
+    modelo: ModeloDoPlayer,
+    ondeParou: Double,
+    aoVoltar: () -> Unit,
+    /// O arquivo **acabou**. Só interessa a quem veio de um canal: a TV já tinha
+    /// isto, e é o que separa «tocar um arquivo» de «ficar num canal».
+    aoAcabar: () -> Unit = {},
+) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
 
     /// ## ⚠️ As duas pontas do ciclo de vida da sessão moram aqui
@@ -167,6 +174,7 @@ fun TelaDoPlayer(modelo: ModeloDoPlayer, ondeParou: Double, aoVoltar: () -> Unit
                 legendaEscolhida = legendaEscolhida,
                 aoEscolherLegenda = { legendaEscolhida = it },
                 aoVoltar = aoVoltar,
+                aoAcabar = aoAcabar,
             )
         }
     }
@@ -219,7 +227,34 @@ private fun saltarPara(
     val antesDoComeco = alvo < estado.deslocamentoMs
     val depoisDoFim = gerado != null && naSessao > gerado - 10_000
 
-    if (estado.eHls && (antesDoComeco || depoisDoFim)) modelo.reabrirEm(alvo) else p.seekTo(naSessao)
+    android.util.Log.i(
+        "odeon-salto",
+        "alvo=${alvo}ms desloc=${estado.deslocamentoMs}ms hls=${estado.eHls} " +
+            "antes=$antesDoComeco depois=$depoisDoFim gerado=$gerado",
+    )
+
+    /// ## ⚠️ **Antes do começo reabre, com ou sem `eHls`** — 18/08/2026
+    ///
+    /// O `eHls` guardava as duas condições, e não devia guardar a primeira:
+    /// `antesDoComeco` **só pode ser verdade com `deslocamentoMs > 0`**, e
+    /// deslocamento maior que zero é, por definição, uma sessão que começou
+    /// adiante — não existe direct play com deslocamento. Ou seja: a guarda não
+    /// protegia nada e podia **impedir** o conserto se o `eHls` chegasse falso
+    /// por qualquer motivo.
+    ///
+    /// O sintoma era exatamente esse: arrastar a tira até a esquerda e o vídeo
+    /// não se mexer, porque `seekTo(tempoDeSessao(0, desloc))` é `seekTo(0)` —
+    /// o segundo zero **da sessão**, que é o minuto onde ela começou.
+    if (antesDoComeco || (estado.eHls && depoisDoFim)) {
+        modelo.reabrirEm(alvo)
+    } else {
+        p.seekTo(naSessao)
+    }
+    /// ⚠️ **O salto reancora o relógio na hora.** Quem arrastou pediu um ponto;
+    /// esperar o `currentPosition` concordar deixaria o número parado no lugar
+    /// antigo por até dois segundos — que é justamente o intervalo em que a
+    /// pessoa olha pra ver se o toque pegou. Ver o laço da posição.
+    modelo.anotarPosicao(alvo)
 }
 
 /// Apaga as luzes da casa enquanto o filme está na tela.
@@ -272,6 +307,24 @@ private fun ModoDeSala() {
         controlador?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         onDispose {
             controlador?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            /// ## ⚠️ **O comportamento volta junto** — relatado pelo dono, 18/08/2026
+            ///
+            /// > «tem hora que eu volto pra página inicial e o menu de baixo fica
+            /// > mega pra baixo, como se tivesse entrado em um modo full do nada»
+            ///
+            /// O `show()` devolvia as barras e **deixava o `systemBarsBehavior`
+            /// em `TRANSIENT_BARS_BY_SWIPE`** — que é o modo cheio: as barras
+            /// voltam a aparecer, mas **por cima** do conteúdo em vez de ocupar
+            /// espaço. A janela continua medindo como tela cheia, e a barra de
+            /// abas do app vai parar debaixo da barra do sistema.
+            ///
+            /// ⚠️ No tablet é onde dói: a barra de navegação é maior, e o menu
+            /// do app some atrás dela.
+            ///
+            /// A regra que fica: **quem muda um modo da janela restaura os dois
+            /// lados dele** — o que está visível e como ele se comporta.
+            controlador?.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             atividade?.requestedOrientation =
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -291,6 +344,8 @@ private fun Reprodutor(
     legendaEscolhida: String?,
     aoEscolherLegenda: (String?) -> Unit,
     aoVoltar: () -> Unit,
+    /// O arquivo acabou — repassado de cima; ver a folha no `TelaDoPlayer`.
+    aoAcabar: () -> Unit,
 ) {
     val contexto = LocalContext.current
     val app = contexto.applicationContext as dev.odeon.android.OdeonApp
@@ -333,7 +388,27 @@ private fun Reprodutor(
         val p = player ?: return@LaunchedEffect
         val agoraEmSegundos = tempoDeFilme(p.currentPosition, estado.deslocamentoMs) / 1000.0
         if (kotlin.math.abs(alvoEmSegundos - agoraEmSegundos) > 5.0) {
-            p.seekTo(tempoDeSessao((alvoEmSegundos * 1000).toLong(), estado.deslocamentoMs))
+            /// ## ⚠️ **Arrastar a tira não conseguia voltar ao zero** — 18/08/2026
+            ///
+            /// > «tô tentando o piloto de Abbott e não consigo arrastar a linha
+            /// > do tempo pro zero»
+            ///
+            /// Havia **dois caminhos de busca** nesta tela, e só um sabia de HLS.
+            /// O `saltarPara` (setas e capítulos) já tratava o caso: alvo antes
+            /// do `deslocamentoMs` **reabre a sessão** naquele ponto, porque uma
+            /// sessão de transcodificação começa onde foi pedida e não tem nada
+            /// atrás disso.
+            ///
+            /// O arrasto da tira chamava `seekTo` direto — e o `tempoDeSessao`
+            /// tem `coerceAtLeast(0)`, que **cala**: pedir o minuto 0 de um filme
+            /// cuja sessão começou aos 12 vira «segundo 0 da sessão», que é o
+            /// minuto 12 do filme. O dedo ia até a esquerda e o vídeo não se
+            /// mexia.
+            ///
+            /// ⚠️ Só morde com `deslocamentoMs > 0` — ou seja, **continuar** algo
+            /// por HLS. Quem abre do começo nunca viu, e é por isso que sobreviveu
+            /// até alguém arrastar pra trás num episódio retomado.
+            saltarPara((alvoEmSegundos * 1000).toLong(), p, estado, modelo)
         }
         modelo.jaPerseguiu()
     }
@@ -352,15 +427,86 @@ private fun Reprodutor(
     var duracao by remember { mutableLongStateOf(0L) }
     var tocando by remember { mutableStateOf(true) }
 
+    /// O player está esperando dado. Ver o rodinho lá embaixo.
+    var enchendo by remember { mutableStateOf(false) }
+
     /// ⚠️ O celular tem o mesmo defeito, e ninguém tinha notado porque ali o
     /// tempo de tela do sistema é curto e a pessoa costuma estar com o aparelho
     /// na mão. Num filme longo apoiado na mesa, dorme igual.
     ManterATelaAcesa(tocando)
 
 
+    /// ## ⚠️ O contador **saltava** em vez de andar — 18/08/2026
+    ///
+    /// > «o número que conta quanto tempo tá correndo fica pulando de 00:20 pra
+    /// > 1:10, aleatório»
+    ///
+    /// A causa não é a leitura de 200ms: é o que se lê. Numa sessão de
+    /// transcodificação a playlist **ainda está crescendo** — sem `ENDLIST`, o
+    /// ExoPlayer trata a janela como móvel e **reancora** a cada atualização.
+    /// O `currentPosition` então não anda: ele se recoloca, pra frente e pra
+    /// trás, conforme a janela muda debaixo dele.
+    ///
+    /// Medido junto: `gerado=744034` num episódio de `21:57` — o player conhecia
+    /// pouco mais da metade do que existe.
+    ///
+    /// ## O relógio passa a andar sozinho, e só **confere** com o player
+    ///
+    /// Entre duas leituras, o tempo que passou é `elapsedRealtime` — que não
+    /// depende de janela nenhuma. O player vira **árbitro**: quando a posição
+    /// dele está perto da nossa (até 2,5 s), reancoramos nela; quando está
+    /// longe, é a janela se remexendo e a nossa contagem continua.
+    ///
+    /// ⚠️ **Salto e pausa reancoram sempre.** Quem arrastou pediu um ponto, e o
+    /// relógio tem de obedecer na hora — desconfiar aí seria ignorar a pessoa.
+    ///
+    /// ⚠️ Isto é **remendo**, e está escrito como tal: a cura é a playlist VOD,
+    /// que está parada por decisão conjunta em `PEDIDOS-AO-SERVIDOR.md`. O que
+    /// isto compra é um número que não mente enquanto ela não vem.
+    var ancora by remember { mutableLongStateOf(-1L) }
+    var instanteDaAncora by remember { mutableLongStateOf(0L) }
+
+    /// O ponto que um salto pediu. O laço da posição consome e zera — é o único
+    /// caminho que tem o direito de reancorar o relógio.
+    var pedidoDeAncora by remember { mutableStateOf<Long?>(null) }
+
     LaunchedEffect(player) {
         while (true) {
-            posicao = tempoDeFilme(player?.currentPosition ?: 0L, estado.deslocamentoMs)
+            val doPlayer = tempoDeFilme(player?.currentPosition ?: 0L, estado.deslocamentoMs)
+            val agora = android.os.SystemClock.elapsedRealtime()
+            val andando = player?.isPlaying ?: false
+            /// ⚠️ **Pausar NÃO reancora** — 18/08/2026, segunda tentativa.
+            ///
+            /// > «quando eu pauso mesmo em 00:17 o contador volta pra 2:27»
+            ///
+            /// A primeira versão disto mandava a pausa adotar a posição do
+            /// player. Era incoerente com a própria premissa: se o
+            /// `currentPosition` é confiável, o remendo inteiro não precisava
+            /// existir; se não é, **pausar não o torna confiável**. Pausado, o
+            /// número **congela onde está** — que é o que a palavra pausa quer
+            /// dizer.
+            ///
+            /// Quem reancora é o **salto**, e só ele: ali a pessoa pediu um
+            /// ponto, e obedecer é o certo. Ver `pedidoDeAncora`.
+            pedidoDeAncora?.let { pedido ->
+                ancora = pedido
+                instanteDaAncora = agora
+                pedidoDeAncora = null
+            }
+            when {
+                ancora < 0L -> {
+                    ancora = doPlayer
+                    instanteDaAncora = agora
+                    posicao = doPlayer
+                }
+                !andando -> posicao = ancora
+                else -> {
+                    val nossa = ancora + (agora - instanteDaAncora)
+                    posicao = if (kotlin.math.abs(doPlayer - nossa) <= 2_500L) doPlayer else nossa
+                    ancora = posicao
+                    instanteDaAncora = agora
+                }
+            }
             /// A posição anotada no modelo é o que o `voltarPraFicha` leva como
             /// dica — ver `ModeloDoPlayer.ultimaPosicaoNoFilmeMs`.
             modelo.anotarPosicao(posicao)
@@ -370,7 +516,12 @@ private fun Reprodutor(
             /// desenhada contra esse número anda pra trás.
             duracao = estado.duracaoConhecidaMs.takeIf { it > 0 }
                 ?: player?.duration?.takeIf { it > 0 } ?: 0L
-            tocando = player?.isPlaying ?: false
+            tocando = andando
+            /// ⚠️ `STATE_BUFFERING` **e não «não está tocando»**: pausado também
+            /// não toca, e um rodinho sobre uma pausa diria que o app está
+            /// fazendo algo quando quem parou foi a pessoa.
+            enchendo = player?.playbackState ==
+                androidx.media3.common.Player.STATE_BUFFERING
             delay(200)
         }
     }
@@ -385,6 +536,28 @@ private fun Reprodutor(
             delay(10_000)
             val p = player ?: continue
             if (p.isPlaying) modelo.marcar(p.currentPosition, p.duration, "progress")
+        }
+    }
+
+    /// ## ⚠️ O fim do arquivo, pra quem está num canal
+    ///
+    /// A TV escuta isto desde o redesenho dela; o celular não escutava, e por
+    /// isso um canal aqui **acabava numa tela parada** quando o filme terminava.
+    ///
+    /// Quem decide o que fazer é a raiz, que sabe se havia canal — ver o
+    /// `aoAcabar` no `AppOdeon`. Esta tela só avisa: ela não sabe de grade.
+    LaunchedEffect(player) {
+        val p = player ?: return@LaunchedEffect
+        val ouvinte = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(estadoDoPlayer: Int) {
+                if (estadoDoPlayer == androidx.media3.common.Player.STATE_ENDED) aoAcabar()
+            }
+        }
+        p.addListener(ouvinte)
+        try {
+            kotlinx.coroutines.awaitCancellation()
+        } finally {
+            p.removeListener(ouvinte)
         }
     }
 
@@ -598,6 +771,33 @@ private fun Reprodutor(
 
         if (!cortinaAberta) return@Box
 
+        /// ## ⚠️ O rodinho de espera — 18/08/2026
+        ///
+        /// > «quando tu fica esperando o buffer ou algo assim, adiciona um
+        /// > indicador»
+        ///
+        /// Numa sessão de transcodificação o player espera de verdade: os
+        /// segmentos são produzidos enquanto se assiste, e **cada salto refaz a
+        /// sessão**. Sem marca nenhuma, esperar e travar são a mesma imagem — um
+        /// quadro parado.
+        ///
+        /// ⚠️ Ele mora **acima da cortina de abertura e abaixo do cromo**: a
+        /// cortina já diz «está começando» com o nome do filme, e repetir um
+        /// rodinho por cima dela seria dizer duas vezes. Depois que ela abre,
+        /// quem espera é isto.
+        ///
+        /// ⚠️ E não escurece o vídeo: o que está na tela continua sendo o filme.
+        /// Um véu por cima faria a espera parecer erro.
+        if (enchendo) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = Cores.destaqueQuente,
+                strokeWidth = 3.dp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(46.dp),
+            )
+        }
+
         Controles(
             player = player,
             naSala = naSala,
@@ -612,7 +812,10 @@ private fun Reprodutor(
             legendaEscolhida = legendaEscolhida,
             aoEscolherLegenda = aoEscolherLegenda,
             aoTrocarAudio = modelo::trocarFaixaDeAudio,
-            aoSaltar = { alvo -> saltarPara(alvo, player, estado, modelo) },
+            aoSaltar = { alvo ->
+                pedidoDeAncora = alvo
+                saltarPara(alvo, player, estado, modelo)
+            },
             aoEntrarNaJanelinha = { falhaDaJanelinha = entrarNaJanelinha(contexto) },
             aoMudarBrilho = { mudarBrilho(contexto, it) },
             aoMudarVolume = { mudarVolume(contexto, it, acumuladorDeVolume) },
@@ -949,6 +1152,7 @@ private fun Controles(
         /// era o segundo elemento mais gritante.
         CabecalhoDoPlayer(
             titulo = estado.titulo,
+            canalNome = estado.canalNome,
             plano = estado.plano?.let { plano ->
                 when (plano.mode) {
                     "direct_play" -> "direto"
@@ -1076,6 +1280,13 @@ private fun Controles(
                 )
             }
 
+            /// ## ⚠️ No canal **não há tira, nem transporte** — ver `EstadoDoPlayer.aoVivo`
+            ///
+            /// Uma tira de miniaturas é um mapa do filme pra escolher onde
+            /// entrar, e numa transmissão não se escolhe: ela já está onde está.
+            /// Desenhá-la convida a um gesto que só afasta a pessoa do que está
+            /// no ar.
+            if (!estado.aoVivo) {
             Tira(
                 fracao = if (duracao > 0) posicaoMostrada.toFloat() / duracao else 0f,
                 folha = estado.folha,
@@ -1096,7 +1307,29 @@ private fun Controles(
                     /// sessão. Sem esta conversão, tocar em 20% da tira de um
                     /// filme retomado em 1h19 pedia o minuto 28 **da sessão**, e
                     /// levava pra 1h47 do filme. Ver `tempoDeSessao`.
-                    if (duracao > 0) aoSaltar((posicaoDoArrasto * duracao).toLong())
+                    /// ## ⚠️ **Arrastar até a ponta esquerda quer dizer ZERO** — 18/08/2026
+                    ///
+                    /// > «eu movo pra 00, aí aparece 00:20»
+                    ///
+                    /// Medido: arrastando o dedo até a borda, a fração que chega
+                    /// aqui é **0,0095** — e não 0. A tira tem padding, o polegar
+                    /// tem raio, e o menor valor alcançável nunca é o começo.
+                    /// Num episódio de 22 minutos isso são 12 segundos; num
+                    /// filme de duas horas, mais de um minuto.
+                    ///
+                    /// ⚠️ O laço é **em tempo, não em fração**: 2% de 22 minutos
+                    /// são 26 segundos e 2% de duas horas são dois minutos e
+                    /// meio. Quem arrasta pro começo quer o começo nos dois
+                    /// casos, e um limiar em fração daria uma régua diferente
+                    /// para cada filme.
+                    ///
+                    /// Quinze segundos é o que separa «fui pro início» de «quis
+                    /// mesmo os primeiros vinte segundos» — e ninguém mira os
+                    /// primeiros quinze segundos arrastando uma tira.
+                    if (duracao > 0) {
+                        val pedido = (posicaoDoArrasto * duracao).toLong()
+                        aoSaltar(if (pedido < 15_000) 0L else pedido)
+                    }
                 },
             )
 
@@ -1116,6 +1349,13 @@ private fun Controles(
             /// `+30s` dizem **quanto** saltam. Trocá-los por setas com um número
             /// dentro seria desenhar o que a palavra já diz, e este app não tem
             /// jogo de ícones próprio — os cinco que existem são das abas.
+            }
+
+            /// ⚠️ O transporte inteiro — voltar 10s, pausar, adiantar 30s — sai no
+            /// canal. Os três são gestos sobre um tempo que **não é seu**: a
+            /// grade segue correndo, e pausar uma transmissão não a pausa, só
+            /// afasta você dela.
+            if (!estado.aoVivo) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = if (espremido) 0.dp else 2.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -1199,8 +1439,15 @@ private fun Controles(
                     }
                 }
             }
+            }
 
             if (espremido) return@Column
+
+            /// ⚠️ Os tempos também saem no canal: «faltam 1h29» é a promessa de
+            /// um fim, e uma transmissão não tem o seu — quem diz quanto falta do
+            /// **programa** é o herói da tela do ao vivo, que é onde essa conta
+            /// pertence.
+            if (estado.aoVivo) return@Column
 
             /// Os tempos ladeando a tira: onde você está, e **quanto falta**.
             ///

@@ -505,7 +505,7 @@ private fun FaixaDeEixos(
                         else Modifier.clickable { aoTocar(faixa) },
                     ),
             ) {
-                PilulaDeEtiqueta(namespace = faixa.rotulo, valor = "${faixa.obras}")
+                PilulaDeEtiqueta(rotulo = faixa.rotulo, valor = "${faixa.obras}")
             }
         }
     }

@@ -23,6 +23,22 @@ import Foundation
 struct Filtros: Equatable, Sendable {
     /// `namespace:valor` — `genre:Terror`. A mesma string que vai pro servidor,
     /// sem tradução no meio.
+    /// ## A prateleira: `format:série`, `format:filme`, ou nenhuma
+    ///
+    /// ⚠️ **Separada da [etiqueta] de propósito**, mesmo indo pro mesmo `?tags=`.
+    /// Misturá-las faria «limpar» apagar a prateleira junto — e prateleira não é
+    /// filtro: é em qual metade do acervo você está. Quem está nas séries e
+    /// limpa os filtros continua nas séries.
+    var prateleira: String?
+    /// ## As etiquetas que **tiram** — `?tags_not=` · 18/08/2026
+    ///
+    /// A aba dos filmes é «tudo que não é série». `?tags=` só soma, e fixar
+    /// `format:filme` deixaria de fora as 2.182 entradas que o scanner não
+    /// classifica.
+    ///
+    /// ⚠️ Semântica **`any`**, sem opção de trocar: sai quem tiver qualquer uma.
+    /// ⚠️ Lista vazia **não vira parâmetro** — ver o repositório.
+    var excluindo: [String] = []
     var etiqueta: String?
     var anoDe: Int?
     var anoAte: Int?
@@ -38,6 +54,8 @@ struct Filtros: Equatable, Sendable {
     /// string que o servidor nunca prometeu ser legível.
     var rotulo: String = ""
 
+    /// ⚠️ A prateleira **não conta** como filtro ligado — ver o comentário
+    /// dela. É o que faz o «limpar» aparecer só quando há o que limpar.
     var ligado: Bool { etiqueta != nil || anoDe != nil || tipo != nil }
 
     /// O filtro que um eixo do guia vira.

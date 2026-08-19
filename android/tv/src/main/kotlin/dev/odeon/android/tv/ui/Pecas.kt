@@ -298,6 +298,18 @@ fun Quadro(
     cor: String? = null,
     andado: Float = 0f,
     detalhe: String? = null,
+    /// ## ⚠️ **Já visto** — o episódio que acabou não some, mas se apaga
+    ///
+    /// Numa série de 84 episódios a pergunta não é «qual é este?», é «até onde
+    /// eu fui?». Sem essa marca a grade é uma parede uniforme, e a pessoa
+    /// responde a pergunta contando de cabeça.
+    ///
+    /// ⚠️ **Marca, e não sumiço**: rever é uma coisa que se faz, e um episódio
+    /// escondido por já ter sido visto é um episódio que não dá mais pra rever.
+    ///
+    /// ⚠️ Ela **não** convive com a barra de andamento — quem terminou não parou
+    /// no meio. Ver o corpo: a barra só entra quando não há visto.
+    visto: Boolean = false,
     /// Ver `Cartaz.saidaEsquerda`.
     saidaEsquerda: FocusRequester? = null,
 ) {
@@ -334,7 +346,26 @@ fun Quadro(
                     ),
             )
 
-            if (andado > 0f) {
+            /// ⚠️ Um **ou** outro. `finished` e `position_seconds` chegam os dois
+            /// preenchidos do servidor num episódio terminado — desenhar a barra
+            /// cheia embaixo do ✓ seria dizer duas vezes a mesma coisa, e a barra
+            /// cheia ainda leria como «quase acabando».
+            if (visto) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(22.dp)
+                        .background(Cores.fundoAfundado.copy(alpha = 0.72f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "✓",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Cores.destaque,
+                    )
+                }
+            } else if (andado > 0f) {
                 BarraDeAndamento(andado, Modifier.align(Alignment.BottomStart))
             }
             if (!focado) {
@@ -396,7 +427,7 @@ private fun FundoDoCartaz(titulo: String, arte: String?, cor: String?) {
 /// cantos, espaço em volta e uma animação de trilha que aqui atrapalha — o que
 /// se quer é uma régua colada na base da arte, como a de um player.
 @Composable
-private fun BarraDeAndamento(andado: Float, modifier: Modifier = Modifier) {
+internal fun BarraDeAndamento(andado: Float, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
@@ -525,5 +556,5 @@ fun Recado(
 ///
 /// O que funciona é pôr o desvio **no item** onde a enrolada acontece — o mais à
 /// esquerda de cada fileira. Ali ele curto-circuita a busca inteira.
-private fun Modifier.saidaPraEsquerda(destino: FocusRequester?): Modifier =
+internal fun Modifier.saidaPraEsquerda(destino: FocusRequester?): Modifier =
     if (destino == null) this else this.focusProperties { left = destino }

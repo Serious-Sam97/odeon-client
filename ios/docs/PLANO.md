@@ -983,3 +983,227 @@ tem obra.
 código morto — é o caminho de um canal que seja um fluxo de verdade, e a casa não
 tem nenhum hoje. Fica anotado como **não exercitado**, e não como «funciona»: a
 régua desta casa não deixa escrever a segunda coisa sem ter visto a primeira.
+
+## §17 · O menu do disco
+
+O último pedaço do `:cenario`. Abre **só pela locadora** e **só em DVD**: a caixa
+vai pra mão, a metade direita abre, o disco sai — e **tocar no disco é pôr o
+disco**. Não virou botão porque o gesto já existia no objeto; a dica de baixo
+troca pra «toque no disco pra pôr no aparelho», senão o gesto não existiria pra
+quem olha. Na fita, `aoPorNoAparelho` é `nil`: a fita não tem menu, tem rebobinar
+(§14.4).
+
+A tabela de climas veio **inteira** do Android — os doze índices, as cores e as
+quatro formas de vinheta. O índice é o contrato: é a posição na lista `ESTANTES`
+do servidor. A trilha sintetizada continua vetada, e o fundo é o backdrop com
+deriva em vez do filme rodando (uma sessão de HLS pra desenhar um enfeite).
+
+### Visto na tela, no iPad Pro 13"
+
+«A Serbian Film» (2010, clima 0 · Terror): a vinheta desenha o **risco** na cor
+do clima com o nome centrado, o menu abre com `2010 · Terror` na tinta, e os
+itens são `Continuar 3:49` · `Do começo` · `Capítulos 12`. **Sem «Legendas»** —
+esta cópia não tem nenhuma, e o item não existe em vez de existir vazio (§24). A
+grade diz «divididos pelo relógio», que é a verdade aqui: `capitulos` vem vazia e
+as cenas são `regular`. Tocado o capítulo de `35:59`, o filme abriu **naquele
+quadro** — o mesmo da miniatura.
+
+### Dois defeitos que só a tela mostrou
+
+**A vinheta anunciava o clima errado.** A primeira versão corria a busca e os
+2,5s em paralelo, pra a vinheta não custar espera — mas o clima vem **na
+resposta**. Ela começava no 11 (Drama, marrom, onda) e trocava no meio do
+caminho. Uma vinheta que anuncia o clima errado durante metade da própria duração
+não anuncia nada, e o clima é a única coisa que ela diz. Agora ela espera o disco,
+como um leitor espera o disco.
+
+**As molduras da grade saíram desiguais** — 185, 220, 225, 225 e 240pt numa mesma
+linha. Numa grade adaptativa as colunas são iguais por construção; quem as
+desigualou foi o conteúdo reivindicando a largura da imagem original. É o
+**quinto** lugar deste app onde escrevi este defeito: cartão dos baixados,
+fachada da ficha, polaroide do varal, capa da caixa, e aqui. A correção é sempre a
+mesma — `Color.clear` aceita qualquer proposta, e o que está atrás nunca decide o
+tamanho do que está na frente.
+
+⚠️ A vinheta não coube em nenhum screenshot pelo caminho normal: ela dura 2,5s e o
+ciclo tocar→fotografar é mais lento que isso. Pra não escrever «funciona» sem ter
+visto, subi a duração pra 20s numa compilação descartável, medi os pixels da cor
+do clima — faixa de 3px na meia-altura, indo de x=0 a x=1084 de 2064, ou seja o
+sweep pela metade — e devolvi os 2,5s. **86 testes em 23 suítes** passam, sonda de
+HLS incluída.
+
+## §18 · O ao vivo não conta
+
+Pedido do dono, e a história é a especificação:
+
+> «eu mesmo acabei dormindo no ao vivo e quando vi o app registrou que eu vi um
+> monte de filme»
+
+**Biblioteca e locadora registram; o ao vivo não.** O que se escolhe alimenta o
+«continuar», o histórico e o «para você»; o que a grade empurrou na frente de uma
+tela ligada, não. O critério é **por onde se entrou**: o mesmo filme, aberto pela
+biblioteca, conta normalmente.
+
+⚠️ O estrago passava da fileira: o mesmo registro alimenta a curadoria, e uma
+noite de sono no canal de terror ensina um gosto que ninguém tem.
+
+### Onde coube, aqui
+
+O `Alvo.doAoVivo` já existia e servia só pra **saber pra onde voltar** — foi o
+conserto de «sintonizei um canal e ao sair caí na ficha de um filme que eu não
+escolhi». Agora ele diz também o que **não** registrar.
+
+⚠️ A guarda virou uma propriedade, `ModeloDoPlayer.registraProgresso`, e não dois
+`if` iguais: esta tela marca em **dois** lugares distantes — o relógio de 20s e a
+saída — e guardas repetidas são a receita pra uma delas ser esquecida no dia em
+que aparecer a terceira.
+
+⚠️ A posição **local** continua sendo anotada; o que não sobe é o registro no
+servidor.
+
+### ⚠️ E as pílulas da ficha estavam em inglês aqui
+
+O double check pegou de carona um defeito que não era deste assunto: a ficha do
+iOS mostrava `country Reino Unido`, `format filme`, `genre Ação`, `lang inglês`.
+
+É o mesmo defeito que o Android corrigiu em 16/08 — e ele **não atravessou**. A
+`Etiqueta.rotulo` de lá virou `EtiquetaDaObra.rotulo` aqui, com a tabela igual
+entrada por entrada: divergir significaria a mesma etiqueta lida de dois jeitos em
+dois aparelhos da mesma casa. Namespace desconhecido devolve `nil` e a pílula
+omite o qualificador em vez de imprimir a chave.
+
+Visto na tela: `país Reino Unido` · `formato filme` · `gênero Ação` ·
+`idioma inglês`.
+
+### ⚠️ A web já fazia certo, e isso diz o que aconteceu
+
+O `PlayerAoVivo` da web nunca chamou `api.progress`. Os dois clientes nativos
+**copiaram o player de filme para o canal** e levaram junto o que não devia ir —
+inclusive este, que tinha a informação em mãos desde o dia em que o `doAoVivo`
+nasceu.
+
+### Conferido nos dois clientes, nos dois sentidos
+
+No **Android**: canal com ~2min tocando não entra no «continuar»; filme aberto
+pela biblioteca entra («007 Contra Octopussy · faltam 129min»).
+
+No **iOS**, medido com dois `print` temporários no próprio caminho:
+
+```
+biblioteca  relogio: posicao=280.0  doAoVivo=false  registra=true
+biblioteca  saida:                  doAoVivo=false  registra=true
+canal       relogio: posicao=0.0    doAoVivo=true   registra=false
+canal       relogio: posicao=20.0   doAoVivo=true   registra=false
+```
+
+E na tela: depois de tocar «007 Contra GoldenEye» pela biblioteca, a ficha passou
+a oferecer **«continuar · 5min»**.
+
+### ⚠️ A fileira «continuar» **não serve de prova** neste cliente
+
+Quase escrevi que o conserto tinha quebrado o registro da biblioteca. O raciocínio
+era: toquei um filme, o filme não apareceu na fileira, logo não gravou.
+
+Ele não apareceu porque **a fileira do iOS não ordena por recência** — são 29
+itens num carrossel e eu estava olhando os cinco primeiros. O filme estava lá
+atrás, e a ficha provou com o «continuar · 5min».
+
+É a terceira vez nesta rodada em que o instrumento apontou pro lugar errado, e a
+regra vale de novo: **medida que acusa defeito pede uma segunda fonte antes de
+virar conserto**. Aqui a segunda fonte foi instrumentar o caminho em vez de ler o
+sintoma.
+
+## §19 · A locadora do iOS passou a agir
+
+Ela «contava e não agia», e a folha dizia por quê: devolver e pedir escrevem no
+acervo de três pessoas, e o §11 pede quem confirme na tela. A confirmação chegou.
+
+| ação | gesto | por quê |
+|---|---|---|
+| **devolver** | dois toques | escreve, e desfazer custa pegar de novo |
+| **pedir de volta** | um toque | ⚠️ **não encurta prazo de ninguém** — põe um recado na caixa de quem está com a fita. O efeito é um aviso, não uma perda, e confirmar pra avisar é cerimônia |
+| **levar pra casa** | dois toques | escreve, e cria empréstimo no perfil de alguém |
+
+### O «levar pra casa» voltou aos dois clientes
+
+Ele esteve fora do produto inteiro por causa do §53 — o servidor recusava com 403
+imprevisível. A causa saiu da investigação de lá e **não era permissão**: o mesmo
+filme existe duas vezes (44 casos), e a locadora trancava por `work_id` enquanto a
+biblioteca desenhava um cartão por grupo.
+
+Com `caixa_ids` a conta virou local:
+
+| situação | na tela |
+|---|---|
+| livre | botão «levar pra casa · N restam» |
+| já é sua | «esta já está com você» |
+| com outro | «está com o serious-sam» |
+| no limite | «você está no limite de fitas» |
+
+⚠️ **Só a primeira é botão.** As outras três são respostas, e um botão
+desabilitado convida ao toque que não responde (§8b). Os quatro casos têm os
+mesmos nomes do Android — divergir faria a mesma caixa dizer coisas diferentes em
+dois aparelhos da mesma casa.
+
+### ⚠️ O que ele desfez, e vale contar
+
+Verificar o «levar» no Android criou um empréstimo real («Independence Day»), e lá
+devolver é **gesto de segurar** — que o `adb` não reproduz. O empréstimo ficou.
+
+O «devolver» que este arquivo acabou de ganhar é **botão**, e foi por ele que a
+fita voltou: COMIGO de 2 pra 1, prateleira de 38 pra 40. A funcionalidade nova
+desfez o efeito que a verificação da outra tinha deixado.
+
+### O que continua faltando: o painel de filtros
+
+O `filtros ▾` **não é defeito**: ele não existe aqui porque o painel não existe, e
+isso está declarado desde sempre — «um chip que abre nada é o §8b». Construí-lo é
+funcionalidade nova, do tamanho da `BarraDeFiltros` do Android (doze espaços de
+etiqueta, faixa de ano, duração, identificação), e não cabia no fim deste turno
+sem virar meia-entrega.
+
+## §20 · O painel de filtros — construído, **não visto**
+
+O `filtros ▾` era a última ausência declarada: «um chip que abre nada é o §8b».
+O painel existe agora, e com ele o chip.
+
+### Como ele é
+
+⚠️ **Os grupos vêm do servidor.** `GET /api/tag-namespaces` manda o rótulo
+(«Gênero») e a posição; `GET /api/tags` manda as etiquetas com quantas obras cada
+uma alcança. A tela não traduz `genre` nem decide a ordem — um namespace novo
+nasce sozinho, com o nome que o servidor deu. É a mesma lição do `country` cru na
+ficha, do lado certo.
+
+⚠️ **Namespace sem rótulo não some**: cai num grupo com o próprio namespace de
+título. Descartá-lo seria o app decidir que uma etiqueta do acervo não existe
+porque a tabela do servidor está incompleta.
+
+⚠️ **Década e formato são montados aqui**, e não são etiquetas: o servidor filtra
+ano por `anoDe`/`anoAte`, não por `decade:1980`. É a mesma decisão que o guia já
+tomava.
+
+⚠️ **Trinta por grupo**, e a razão é o país: são 40 e a cauda tem uma obra cada.
+Uma lista que rola dez telas até «África do Sul · 1» não é filtro, é censo — e a
+ordem por quantidade põe no começo o que se procura.
+
+⚠️ **O painel empurra a grade**, não flutua por cima: quem filtra quer ver o
+resultado mudando, e uma folha cobrindo a grade esconde justamente o que o toque
+acabou de fazer.
+
+⚠️ E o painel oferece **só o que este modelo sabe carregar** — etiqueta, década,
+tipo. As doze faixas do Android incluem campos que a busca daqui ignora, e um chip
+que ligasse um deles seria o §8b outra vez, com outra cara.
+
+### ⚠️ O que **não** foi verificado, e por quê
+
+Não vi o painel abrir. O mapeamento de toque do simulador ficou não confiável no
+fim desta sessão: dois toques bem mirados no chip não fizeram nada, o mesmo toque
+no «em destaque ▾» também não, e um terceiro — na coordenada que deveria ser o
+chip — abriu a **ficha de um filme**. Ou seja, o instrumento está entregando
+toques noutro lugar.
+
+Compila, está ligado (`painelAberto` na tela, o chip que alterna, o painel abaixo
+dele) e **não foi visto na tela**. Pela régua desta casa isso é «não exercitado», e
+é o que fica escrito — a primeira coisa a fazer no próximo turno é abrir esse
+painel com o dedo e olhar.

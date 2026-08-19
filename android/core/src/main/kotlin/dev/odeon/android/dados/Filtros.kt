@@ -19,6 +19,31 @@ data class Filtros(
     /// `movie`, `episode`, `standup`… Vem do guia (§7 da referência), que filtra
     /// por gênero **só em filmes**.
     val tipo: String? = null,
+    /// ## A prateleira: `format:série`, `format:filme`, ou nenhuma
+    ///
+    /// ⚠️ Ela é **separada** das [etiquetas] de propósito, mesmo indo pro mesmo
+    /// `?tags=`. Misturá-las faria «limpar filtros» apagar a prateleira junto —
+    /// e prateleira não é filtro: é em qual metade do acervo você está. Quem
+    /// está nas séries e limpa os filtros continua nas séries.
+    ///
+    /// ⚠️ A chave **não é escrita à mão** em lugar nenhum: ela vem da etiqueta
+    /// que o servidor declarou no espaço `format`. Se ele renomear o valor, a
+    /// prateleira segue junto.
+    val prateleira: String? = null,
+    /// ## As etiquetas que **tiram** — `?tags_not=` · 18/08/2026
+    ///
+    /// A aba dos filmes é «tudo que não é série». Não dava pra escrever isso
+    /// antes: `?tags=` só soma, e fixar `format:filme` deixaria de fora as 2.182
+    /// entradas que o scanner não classifica.
+    ///
+    /// ⚠️ A semântica é **`any`**, e o servidor não deixa trocar: sai quem tiver
+    /// **qualquer uma** delas. «Tudo menos série e menos anime» é a leitura útil;
+    /// a outra («só sai quem for série *e* anime») não tem caso de uso.
+    ///
+    /// ⚠️ **Lista vazia é ausência, não filtro impossível** — o servidor lê
+    /// `?tags_not=` vazio como «não filtre». O `takeIf` abaixo garante que a
+    /// gente nem mande o parâmetro.
+    val excluindo: List<String> = emptyList(),
     /// Cada uma é `namespace:valor` — `genre:Terror`. A mesma string que vai pro
     /// servidor, sem tradução no meio: a tela mostra `Terror`, o filtro carrega
     /// `genre:Terror`, e o `namespace` é o que agrupa os chips.
@@ -43,11 +68,19 @@ data class Filtros(
     val ordem: String = "featured",
 ) {
     /// As tags como o servidor as quer: separadas por vírgula.
-    val etiquetasEmTexto: String? get() = etiquetas.takeIf { it.isNotEmpty() }?.joinToString(",")
+    /// ⚠️ A prateleira entra aqui junto com as etiquetas — pro servidor as duas
+    /// são a mesma coisa. A separação existe **do lado de cá**, e é o `limpar`
+    /// que a cobra.
+    val excluindoEmTexto: String?
+        get() = excluindo.takeIf { it.isNotEmpty() }?.joinToString(",")
+
+    val etiquetasEmTexto: String?
+        get() = (listOfNotNull(prateleira) + etiquetas).takeIf { it.isNotEmpty() }?.joinToString(",")
 
     /// O `tag_mode` só é mandado quando há tag — mandar o modo de uma lista
     /// vazia é dizer ao servidor como combinar nada.
-    val modoParaMandar: String? get() = modoDasEtiquetas.takeIf { etiquetas.isNotEmpty() }
+    val modoParaMandar: String?
+        get() = modoDasEtiquetas.takeIf { etiquetas.isNotEmpty() || prateleira != null }
 
     /// Quantos filtros estão ligados. É o número da pílula do botão `filtros`, e
     /// **não conta a busca nem a ordem**: as duas têm controle próprio na tela, e

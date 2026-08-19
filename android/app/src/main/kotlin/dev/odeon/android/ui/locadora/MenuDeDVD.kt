@@ -228,8 +228,26 @@ fun MenuDeDVD(
             }
 
             Box(Modifier.height(12.dp))
+            /// ## ⚠️ A saída em `texto`, e não em `textoApagado` — 17/08/2026
+            ///
+            /// Medido nos pixels desta tela: o «‹ guardar o disco» dava **3,67:1**
+            /// contra o fundo atrás dele, abaixo dos 4,5:1 que o tamanho dele
+            /// pede. O resto do menu passava folgado — título 12,97:1, «Tocar»
+            /// 11,98:1, o clima 5,73:1 — porque tudo isso é branco ou tinta viva.
+            ///
+            /// A causa é o **backdrop**: `textoApagado` (#8B8D9A) rende ~7:1 sobre
+            /// o preto da casa, e este é o único texto do app desenhado sobre uma
+            /// área lavada de arte, que aqui chegou a (71, 49, 39). O cinza que
+            /// serve em toda tela não serve nesta.
+            ///
+            /// ⚠️ E o que está ilegível é **a saída**: fora o gesto do sistema,
+            /// esta é a única porta de uma tela cheia. Um menu de disco de onde
+            /// não se enxerga como sair é a §8b na peça mais cara de errar.
+            ///
+            /// `Cores.texto` resolve sem mexer na lavagem — ele continua pequeno e
+            /// sem cromo de botão, que é o que o mantém secundário.
             TextButton(onClick = aoFechar) {
-                Text("‹ guardar o disco", color = Cores.textoApagado)
+                Text("‹ guardar o disco", color = Cores.texto)
             }
         }
     }

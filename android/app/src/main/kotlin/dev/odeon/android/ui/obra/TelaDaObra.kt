@@ -82,6 +82,9 @@ fun TelaDaObra(
     /// não há releitura mais fresca que isso.
     dicaDeOndeParou: Double? = null,
     aoVoltar: () -> Unit,
+    /// Como se chama o lugar de onde se veio — «biblioteca», «Temporada 1»…
+    /// Ver o rótulo do botão lá embaixo.
+    voltaPara: String = "biblioteca",
     aoTocar: (arquivoId: String, titulo: String, ondeParou: Double, duracao: Double?, capa: String?) -> Unit,
     aoBaixar: (arquivoId: String) -> Unit = {},
     /// A outra ponta da transição compartilhada — ver `MolduraDoCartaz`.
@@ -220,7 +223,11 @@ fun TelaDaObra(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
         TextButton(onClick = aoVoltar, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-            Text("‹ biblioteca", color = Cores.destaque)
+            /// ⚠️ O rótulo diz **pra onde volta**, e não «biblioteca» sempre.
+            /// Vindo de uma temporada, o botão levava à temporada e escrevia
+            /// «biblioteca»: o texto contando uma história e o toque outra —
+            /// visto no emulador em 18/08/2026.
+            Text("‹ $voltaPara", color = Cores.destaque)
         }
 
         /// ## A fachada: a marquise, e o varal pendurado nela
@@ -296,7 +303,7 @@ fun TelaDaObra(
             ) {
                 obra.tags.forEach { etiqueta ->
                     PilulaDeEtiqueta(
-                        namespace = etiqueta.namespace,
+                        rotulo = etiqueta.rotulo,
                         valor = etiqueta.value,
                         cor = corDeHex(etiqueta.color),
                     )

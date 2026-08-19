@@ -36,6 +36,8 @@ import {
   WORK_KINDS,
   type LibraryEntry,
   type Filters,
+  type Tag,
+  type Collection,
   type MatchStatus,
   type Sala,
   type ScanStatus,
@@ -57,6 +59,11 @@ import {
 type Tab =
   | "foryou"
   | "library"
+  /// ⚠️ **As séries viraram aba** — 18/08/2026. Elas eram uma prateleira dentro
+  /// da biblioteca, escolhida por uma pílula, e o dono disse o que estava
+  /// errado: a separação parecia um filtro. Duas bibliotecas separadas, como o
+  /// Jellyfin faz. Ver `docs/SERIES.md §13`.
+  | "series"
   | "collections"
   | "locadora"
   | "guia"
@@ -77,7 +84,8 @@ type Tab =
 /// endereço nenhum cai na tela que responde *"o que eu assisto agora"*.
 const CAMINHO_DE: Record<Tab, string> = {
   foryou: "/",
-  library: "/biblioteca",
+  library: "/filmes",
+  series: "/series",
   collections: "/colecoes",
   locadora: "/locadora",
   guia: "/guia",
@@ -97,7 +105,8 @@ const ABA_DE: Record<string, Tab> = Object.fromEntries(
 /// pra "onde você vai depois".
 const ABAS: { chave: Tab; rotulo: string }[] = [
   { chave: "foryou", rotulo: "para você" },
-  { chave: "library", rotulo: "biblioteca" },
+  { chave: "library", rotulo: "filmes" },
+  { chave: "series", rotulo: "séries" },
   { chave: "collections", rotulo: "coleções" },
   { chave: "locadora", rotulo: "locadora" },
   { chave: "guia", rotulo: "guia" },
@@ -474,6 +483,12 @@ export default function App() {
   /// precisa que o vídeo abra sozinho.
   const [sala, setSala] = useState<Sala | null>(null);
   const [detailsOf, setDetailsOf] = useState<string | null>(null);
+  /// Qual temporada está aberta dentro da série. `null` é a ficha da série.
+  ///
+  /// ⚠️ Ele é zerado sempre que a coleção muda — ver o `useEffect` abaixo. Sem
+  /// isso, sair de uma série e entrar noutra abriria a temporada de número igual
+  /// da série nova, que é uma tela que ninguém pediu.
+  const [temporadaAberta, setTemporadaAberta] = useState<number | null>(null);
   const [managing, setManaging] = useState<string | null>(null);
   /// A entrada cuja escolha de versão está aberta — ver `EscolhaDeVersao`.
   /// Guarda a **entrada** e não o id: as versões já vieram dentro dela.
@@ -545,6 +560,43 @@ export default function App() {
   /// A locadora não perdeu nada — ela nunca usou este caminho. Os botões dela
   /// decidem com `comigo`, que é o estado da caixa na sua mão.
   const tocar = useCallback((w: WorkListItem) => setPlaying(w), []);
+
+  /// ## ⚠️ As duas bibliotecas — 18/08/2026
+  ///
+  /// `filmes` é «tudo que não é série»; `séries` é a prateleira `format:série`.
+  /// As chaves vêm do espaço `format` que o **servidor** declara, e não de uma
+  /// lista escrita aqui.
+  ///
+  /// ⚠️ O anime entra na exclusão dos filmes: `tags_not=format:série` sozinho
+  /// deixa passar o `Beyblade` — 43 episódios que carregam `format:anime` e não
+  /// `format:série`. Medido pelo servidor.
+  const [formatos, setFormatos] = useState<Tag[]>([]);
+  useEffect(() => {
+    api
+      .tags()
+      .then((t) => setFormatos(t.filter((x) => x.namespace === "format" && x.work_count > 0)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!formatos.length) return;
+    const serie = formatos.find((t) => t.value.startsWith("série"));
+    const anime = formatos.find((t) => t.value.startsWith("anime"));
+    const chaveDe = (t?: Tag) => (t ? `${t.namespace}:${t.value}` : undefined);
+    if (tab === "series") {
+      setFilters((f) => ({ ...f, shelf: chaveDe(serie), tagsNot: undefined }));
+    } else if (tab === "library") {
+      setFilters((f) => ({
+        ...f,
+        shelf: undefined,
+        tagsNot: [chaveDe(serie), chaveDe(anime)].filter(Boolean) as string[],
+      }));
+    }
+  }, [tab, formatos]);
+
+  useEffect(() => {
+    setTemporadaAberta(null);
+  }, [filters.collection]);
 
   useEffect(() => {
     if (!auth.token()) {
@@ -810,7 +862,7 @@ export default function App() {
 
         {tab === "live" && <AoVivo isAdmin={isAdmin} onDetails={setDetailsOf} />}
 
-        {tab === "library" && (
+        {(tab === "library" || tab === "series") && (
           <>
             {/* Entrou numa série pelo cartão. Reaproveita o filtro de coleção,
                 que o backend já resolve pela subárvore inteira (§8c). */}
@@ -841,6 +893,8 @@ export default function App() {
               </div>
             )}
 
+            {/* ⚠️ A fileira de prateleiras saiu daqui — 18/08/2026. Ela parecia
+                o que não era: uma segunda barra de filtros. Séries virou aba. */}
             <FilterBar
               filters={filters}
               onChange={setFilters}
@@ -863,7 +917,7 @@ export default function App() {
 
             <section>
               <h2 className="section-title">
-                {filters.collection ? "Episódios" : "Biblioteca"}{" "}
+                {filters.collection ? "Episódios" : tab === "series" ? "Séries" : "Filmes"}{" "}
                 {/* O número diz o que é: quantas estão na tela DE quantas existem.
                     Antes dizia "300" com 17.498 no banco. */}
                 <span className="count">
@@ -883,28 +937,38 @@ export default function App() {
                   {/* Dentro da série, a temporada volta a ser um nível. Uma
                       grade de 77 cartões é uma parede; em Malcolm, de 151. */}
                   {filters.collection ? (
-                    porTemporada(works).map((t) => (
-                      <section key={t.chave} className="temporada">
-                        <div className="strip">
-                          <h2>{t.titulo}</h2>
-                          <span className="rule" />
-                          <span className="strip-meta">
-                            {t.itens.length} ep
-                            {t.vistos > 0 && ` · ${t.vistos} vistos`}
-                          </span>
-                        </div>
-                        <div className="grid larga">
-                          {t.itens.map((w) => (
-                            <EpisodeCard
-                              key={w.id}
-                              work={w}
-                              onDetails={setDetailsOf}
-                              onManage={setManaging}
-                            />
-                          ))}
-                        </div>
-                      </section>
-                    ))
+                    /* Dois níveis, e não sete blocos empilhados: a série
+                       apresenta e oferece continuar; a temporada lista. */
+                    temporadaAberta === null ? (
+                      <FichaDaSerie
+                        id={filters.collection}
+                        titulo={filters.collectionName ?? "esta série"}
+                        works={works}
+                        onAbrirTemporada={setTemporadaAberta}
+                        onPlay={tocar}
+                      />
+                    ) : (
+                      (() => {
+                        const t = porTemporada(works).find((x) => x.chave === temporadaAberta);
+                        /* A temporada some se a lista mudar debaixo dela — outro
+                           filtro, outra série. Volta pra ficha em vez de sumir. */
+                        if (!t) return <FichaDaSerie
+                          id={filters.collection}
+                          titulo={filters.collectionName ?? "esta série"}
+                          works={works}
+                          onAbrirTemporada={setTemporadaAberta}
+                          onPlay={tocar}
+                        />;
+                        return (
+                          <ListaDaTemporada
+                            serie={filters.collectionName ?? "a série"}
+                            temporada={t}
+                            onVoltar={() => setTemporadaAberta(null)}
+                            onDetails={setDetailsOf}
+                          />
+                        );
+                      })()
+                    )
                   ) : (
                     <div className="grid">
                       {entries.map((e) => (
@@ -1015,79 +1079,6 @@ export default function App() {
   );
 }
 
-/// O cartão de episódio, dentro da série.
-///
-/// Usa o **`still`** — o quadro daquele episódio — em vez do pôster da série.
-/// Com o pôster, uma temporada de 21 episódios eram 21 cópias da mesma imagem:
-/// a arte ocupava a tela inteira sem distinguir nada. O `still` está baixado
-/// desde o M1 e passou a sair na API na R1; 7.258 dos 14.657 episódios têm um,
-/// e nesta série a cobertura é 77 de 77.
-///
-/// Daí o formato ser 16:9 e não 2:3: os stills são 780×439. Enfiar isso numa
-/// moldura de pôster cortaria dois terços do quadro.
-function EpisodeCard({
-  work,
-  onDetails,
-  onManage,
-}: {
-  work: WorkListItem;
-  onDetails: (id: string) => void;
-  onManage: (id: string) => void;
-}) {
-  const hue = hueFromTitle(work.title);
-  const progress =
-    work.position_seconds && work.duration_seconds
-      ? Math.min(100, (work.position_seconds / work.duration_seconds) * 100)
-      : 0;
-
-  // Sem o quadro do episódio, o pôster da série ainda é melhor que nada — e
-  // sem nenhum dos dois sobra o gradiente, que ao menos carrega o título.
-  const arte = work.still ?? work.poster;
-  const episodio =
-    work.episode_number != null ? `E${String(work.episode_number).padStart(2, "0")}` : null;
-
-  return (
-    <div
-      className="card-wrap"
-      style={
-        {
-          "--hue": hue,
-          ...(work.dominant_color ? { "--accent-work": work.dominant_color } : {}),
-        } as CSSProperties
-      }
-    >
-      <button
-        className="card"
-        // Clicar no cartão abre a FICHA, não o player. Começar um filme é
-        // decisão, e a decisão precisa da sinopse na frente — o botão de
-        // assistir mora no cartaz, a um clique de distância.
-        onClick={() => onDetails(work.id)}
-      >
-        <div className={arte ? "thumb has-art" : "thumb"}>
-          {arte ? (
-            <img src={api.artworkUrl(arte)} alt="" loading="lazy" />
-          ) : (
-            <span className="poster-title">{work.title}</span>
-          )}
-          {episodio && <span className="badge episodio">{episodio}</span>}
-          {work.match_state === "unmatched" && <span className="badge">sem metadata</span>}
-          {progress > 0 && <div className="progress" style={{ width: `${progress}%` }} />}
-        </div>
-        <div className="card-body">
-          <h3>{work.title}</h3>
-          <p className="muted small">
-            {[formatDuration(work.duration_seconds), work.height ? `${work.height}p` : null]
-              .filter((parte) => parte && parte !== "—")
-              .join(" · ")}
-          </p>
-        </div>
-      </button>
-      <button className="card-info" title="gerenciar" onClick={() => onManage(work.id)}>
-        ⋯
-      </button>
-    </div>
-  );
-}
 
 /// Quebra os episódios de uma série em temporadas.
 ///
@@ -1119,6 +1110,259 @@ function porTemporada(works: WorkListItem[]) {
       itens,
       vistos: itens.filter((w) => w.finished).length,
     }));
+}
+
+/// Onde a pessoa parou dentro da série — o que o botão principal vai oferecer.
+///
+/// O **começado** ganha do primeiro não visto: ele é onde a pessoa estava, e o
+/// não visto é só onde ela chegaria. Havendo os dois, volta-se pro meio do que
+/// se estava assistindo, que é o que um "continuar" promete.
+///
+/// ⚠️ Série inteira vista NÃO fica sem botão — volta o primeiro episódio, como
+/// "começar". Um `null` aqui apagaria a única ação da tela justamente de quem
+/// mais gostou dela.
+///
+/// Mesma regra do Android e do iOS. Ver `ondeParar` nos dois.
+
+function ondeParar(works: WorkListItem[]): { ep: WorkListItem; comecado: boolean } | null {
+  const comecado = works.find((w) => (w.position_seconds ?? 0) > 0 && !w.finished);
+  if (comecado) return { ep: comecado, comecado: true };
+  const proximo = works.find((w) => !w.finished);
+  if (proximo) return { ep: proximo, comecado: false };
+  return works[0] ? { ep: works[0], comecado: false } : null;
+}
+
+/// `S01E04`. ⚠️ `null` quando falta um dos dois — meio código é pior que nenhum.
+function codigoDoEpisodio(w: WorkListItem): string | null {
+  if (w.season_number != null && w.episode_number != null) {
+    return `S${String(w.season_number).padStart(2, "0")}E${String(w.episode_number).padStart(2, "0")}`;
+  }
+  return w.episode_number != null ? `ep ${w.episode_number}` : null;
+}
+
+/// A ficha de uma série — o desenho aprovado pelo dono em 18/08/2026.
+///
+/// ## ⚠️ Ela substitui a pilha de temporadas
+///
+/// A web já navegava série → temporada → episódio desde a R3, e era a única que
+/// não estava quebrada. O que ela fazia era empilhar TODAS as temporadas na
+/// mesma rolagem, cada uma com sua grade: em Malcolm são 151 cartões em sete
+/// blocos. O desenho novo separa os dois níveis — a série apresenta e oferece
+/// continuar; a temporada lista.
+///
+/// ⚠️ A arte de cada temporada é o `still` do primeiro episódio dela: o servidor
+/// ainda não manda pôster de temporada. Ver `PEDIDOS-AO-SERVIDOR.md, «já entregue» 10`.
+function FichaDaSerie({
+  id,
+  titulo,
+  works,
+  onAbrirTemporada,
+  onPlay,
+}: {
+  id?: string;
+  titulo: string;
+  works: WorkListItem[];
+  onAbrirTemporada: (chave: number) => void;
+  onPlay: (w: WorkListItem) => void;
+}) {
+  /// ## ⚠️ A coleção **enriquece e não bloqueia** — 18/08/2026
+  ///
+  /// Pôster de temporada, sinopse e backdrop da série vieram do servidor. Campo
+  /// a campo, sempre com reserva: 12 temporadas não têm pôster e 5 séries não
+  /// têm sinopse, e nenhuma delas pode piorar por causa disso.
+  const [colecao, setColecao] = useState<{
+    collection: Collection;
+    children: Collection[];
+  } | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!id) return;
+    api
+      .collection(id)
+      .then((r) => {
+        if (vivo) setColecao(r);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [id]);
+
+  const porPosicao = new Map(
+    (colecao?.children ?? []).filter((c) => c.position != null).map((c) => [c.position!, c]),
+  );
+
+  const temporadas = porTemporada(works);
+  const onde = ondeParar(works);
+  const vistos = works.filter((w) => w.finished).length;
+  const ano = works.find((w) => w.year)?.year;
+  const primeiro = works[0];
+  const fundo =
+    colecao?.collection.backdrop ?? primeiro?.backdrop ?? primeiro?.still ?? primeiro?.poster ?? null;
+  const sinopse = colecao?.collection.overview ?? null;
+
+  const conta = [
+    ano ? String(ano) : null,
+    temporadas.length > 0 ? `${temporadas.length} temporada${temporadas.length > 1 ? "s" : ""}` : null,
+    works.length > 0 ? `${works.length} episódio${works.length > 1 ? "s" : ""}` : null,
+    // §24: nada visto não escreve "0 vistos" — simplesmente não fala do assunto.
+    vistos > 0 ? `${vistos} visto${vistos > 1 ? "s" : ""}` : null,
+  ].filter(Boolean).join("  ·  ");
+
+  return (
+    <div className="ficha-serie">
+      {fundo && (
+        <div className="ficha-serie-pano">
+          <img src={api.artworkUrl(fundo)} alt="" />
+        </div>
+      )}
+      <h1 className="ficha-serie-titulo">{titulo}</h1>
+      <p className="ficha-serie-conta">{conta}</p>
+      {/* ⚠️ 115 das 120 têm sinopse. As 5 que não têm não ganham parágrafo. */}
+      {sinopse && <p className="ficha-serie-sinopse">{sinopse}</p>}
+
+      {onde && (
+        <div className="ficha-serie-acoes">
+          <button className="chip principal" onClick={() => onPlay(onde.ep)}>
+            ▸ {onde.comecado ? "continuar" : "começar"}
+            {"  "}
+            {[codigoDoEpisodio(onde.ep), onde.ep.title].filter(Boolean).join(" · ")}
+          </button>
+          {/* §24: "do começo" só existe havendo meio. */}
+          {onde.comecado && (
+            <button
+              className="chip"
+              onClick={() => onPlay({ ...onde.ep, position_seconds: 0 })}
+            >
+              do começo
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="strip">
+        <h2>Temporadas</h2>
+        <span className="rule" />
+        <span className="strip-meta">{temporadas.length}</span>
+      </div>
+
+      <div className="fileira-temporadas">
+        {temporadas.map((t) => {
+          const doServidor = porPosicao.get(t.chave);
+          const arte = t.itens.find((w) => w.still ?? w.backdrop ?? w.poster);
+          /* ⚠️ O pôster da temporada ganha do still — e a moldura vira retrato
+             junto, porque pôster é 2:3. Ver `.cartao-temporada`. */
+          const capa =
+            doServidor?.poster ?? (arte ? (arte.still ?? arte.backdrop ?? arte.poster) : null);
+          const nome = doServidor?.title && doServidor.title !== t.titulo ? doServidor.title : t.titulo;
+          const andado = t.itens.length > 0 ? (t.vistos / t.itens.length) * 100 : 0;
+          return (
+            <button
+              key={t.chave}
+              className="cartao-temporada"
+              onClick={() => onAbrirTemporada(t.chave)}
+            >
+              <div className="thumb has-art retrato">
+                {capa && <img src={api.artworkUrl(capa)} alt="" loading="lazy" />}
+                {/* Barra só havendo visto — uma barra vazia afirma "começou". */}
+                {andado > 0 && <div className="progress" style={{ width: `${andado}%` }} />}
+              </div>
+              <h3>{nome}</h3>
+              <p className="muted small">
+                {t.itens.length} ep{t.vistos > 0 && ` · ${t.vistos} vistos`}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/// Os episódios de uma temporada, em LISTA.
+///
+/// ⚠️ Lista e não grade, e é o ponto do desenho: um episódio não se escolhe pela
+/// imagem — a capa é a mesma nos dezoito. Escolhe-se pelo número e pelo que já
+/// aconteceu com ele.
+///
+/// ⚠️ Falta a sinopse por episódio, e é falta do servidor: `WorkListItem` não
+/// traz `overview`. Ver `PEDIDOS-AO-SERVIDOR.md, «já entregue» 10`.
+function ListaDaTemporada({
+  serie,
+  temporada,
+  onVoltar,
+  onDetails,
+}: {
+  serie: string;
+  temporada: { chave: number; titulo: string; itens: WorkListItem[]; vistos: number };
+  onVoltar: () => void;
+  onDetails: (id: string) => void;
+}) {
+  return (
+    <div className="lista-temporada">
+      <button className="chip voltar" onClick={onVoltar}>
+        ‹ {serie}
+      </button>
+      <h1 className="ficha-serie-titulo">{temporada.titulo}</h1>
+      <p className="ficha-serie-conta">
+        {temporada.itens.length} episódio{temporada.itens.length > 1 ? "s" : ""}
+        {temporada.vistos > 0 && `  ·  ${temporada.vistos} visto${temporada.vistos > 1 ? "s" : ""}`}
+      </p>
+
+      <ul className="episodios">
+        {temporada.itens.map((w) => {
+          const arte = w.still ?? w.backdrop ?? w.poster;
+          const andado =
+            w.position_seconds && w.duration_seconds
+              ? Math.min(100, (w.position_seconds / w.duration_seconds) * 100)
+              : 0;
+          const faltam =
+            andado > 0 && !w.finished && w.duration_seconds
+              ? Math.round((w.duration_seconds - (w.position_seconds ?? 0)) / 60)
+              : 0;
+          const sub = [
+            codigoDoEpisodio(w),
+            w.duration_seconds ? `${Math.round(w.duration_seconds / 60)}min` : null,
+            faltam > 0 ? `faltam ${faltam}min` : null,
+          ].filter(Boolean).join("  ·  ");
+
+          return (
+            <li key={w.id}>
+              <button
+                className={w.finished ? "episodio visto" : "episodio"}
+                onClick={() => onDetails(w.id)}
+              >
+                <span className="episodio-quadro thumb has-art">
+                  {arte && <img src={api.artworkUrl(arte)} alt="" loading="lazy" />}
+                  {/* Um OU outro: quem terminou não parou no meio. */}
+                  {w.finished ? (
+                    <span className="marca-visto">✓</span>
+                  ) : (
+                    andado > 0 && <div className="progress" style={{ width: `${andado}%` }} />
+                  )}
+                </span>
+                <span className="episodio-corpo">
+                  <span className="episodio-linha">
+                    {w.episode_number != null && (
+                      <span className="episodio-numero">{w.episode_number}</span>
+                    )}
+                    <span className="episodio-titulo">{w.title}</span>
+                  </span>
+                  <span className={andado > 0 && !w.finished ? "episodio-sub aqui" : "episodio-sub"}>
+                    {sub}
+                  </span>
+                  {/* ⚠️ A sinopse chegou em 18/08/2026 — era "falta do servidor,
+                      não desenho". Metade não tem, e aí a linha não existe. */}
+                  {w.overview && <span className="episodio-sinopse">{w.overview}</span>}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 /// Uma entrada da biblioteca. Série abre; obra avulsa toca.

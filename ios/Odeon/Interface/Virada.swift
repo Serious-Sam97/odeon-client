@@ -88,3 +88,25 @@ private func escrito(_ formato: String, _ quando: Date, _ fuso: TimeZone) -> Str
     f.dateFormat = formato
     return f.string(from: quando)
 }
+
+/// O prazo de um empréstimo, em palavra — `3 dias`, `vence amanhã`, `venceu`.
+///
+/// ## ⚠️ Ela some quando não há data, e é o §24
+///
+/// `vence_em` nulo é empréstimo sem prazo, e escrever «sem prazo» na cinta seria
+/// ocupar o papel com uma não-informação.
+///
+/// ⚠️ E os dias voltam junto **porque cor é assunto de quem desenha**: a web pinta
+/// «vence hoje» e «vence amanhã» de vermelho, e esta função não conhece a paleta.
+/// Devolver só a frase obrigaria quem chama a reparsear o texto pra decidir a cor.
+func prazoDoEmprestimo(_ iso: String?, agora: Date = .now) -> (frase: String, dias: Int)? {
+    guard let quando = instanteISO(iso) else { return nil }
+    let dias = Int(ceil(quando.timeIntervalSince(agora) / 86_400))
+    let frase = switch dias {
+    case ..<0: "venceu"
+    case 0: "vence hoje"
+    case 1: "vence amanhã"
+    default: "\(dias) dias"
+    }
+    return (frase, dias)
+}

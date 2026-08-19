@@ -67,8 +67,59 @@ object CapacidadesDoAparelho {
 
     val containers: String get() = CONTEINERES.joinToString(",")
 
+    /// ## ⚠️ HEVC diz a **profundidade** — 18/08/2026
+    ///
+    /// Este arquivo perguntava «existe decodificador de `video/hevc`?» e nunca
+    /// **qual perfil**. O emulador tem HEVC Main (8 bits) e responde que sim; o
+    /// acervo é Main 10. O servidor copiou o vídeo confiando na resposta, e o
+    /// player parou com `format_supported=NO_EXCEEDS_CAPABILITIES` — tela preta.
+    ///
+    /// ⚠️ **A primeira correção daqui estava errada**, e o servidor mediu por
+    /// quê: eu ia fazer `hevc` significar «8 bits» e sumir com ele quando não
+    /// houvesse Main 10. Só que `hevc` já está no ar em três clientes — iOS, TV
+    /// e web —, e o AVPlayer e a TCL decodificam Main 10 sem problema. Estreitar
+    /// o sentido da palavra viraria 5.319 arquivos de cópia em recodificação, da
+    /// noite pro dia, em aparelhos que não precisavam.
+    ///
+    /// Então a precisão entra por **palavra nova**:
+    ///
+    /// | o cliente diz | 8 bits | 10 bits |
+    /// |---|---|---|
+    /// | `hevc` | copia | copia |
+    /// | `hevc10` | copia | copia |
+    /// | `hevc8` | copia | **recodifica** |
+    ///
+    /// ⚠️ Este cliente **nunca manda `hevc` puro**: ele é o token ambíguo, o que
+    /// promete tudo. Quem faz os dois diz `hevc10`; quem só faz 8 bits diz
+    /// `hevc8` e ganha a proteção. Dizer a verdade custa uma palavra.
     val codecsDeVideo: String
-        get() = VIDEO.filterKeys { it in decodificadores }.values.joinToString(",")
+        get() = VIDEO
+            .filterKeys { it in decodificadores }
+            .map { (mime, nome) ->
+                if (mime == "video/hevc") if (fazHevc10) "hevc10" else "hevc8" else nome
+            }
+            .joinToString(",")
+
+    /// O aparelho decodifica **HEVC Main 10**?
+    ///
+    /// ⚠️ `Main10` e não `Main`: é o perfil que carrega 10 bits, e é o do acervo.
+    /// A pergunta é feita pelo `CodecCapabilities`, que é o único lugar onde o
+    /// Android diz o perfil — o `supportedTypes` só diz o MIME.
+    private val fazHevc10: Boolean by lazy {
+        runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS)
+                .codecInfos
+                .filterNot { it.isEncoder }
+                .filter { "video/hevc" in it.supportedTypes.map(String::lowercase) }
+                .any { info ->
+                    info.getCapabilitiesForType("video/hevc").profileLevels.any {
+                        it.profile == android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+                            it.profile ==
+                            android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10
+                    }
+                }
+        }.getOrDefault(false)
+    }
 
     val codecsDeAudio: String
         get() = AUDIO.filterKeys { it in decodificadores }.values.joinToString(",")

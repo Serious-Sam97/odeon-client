@@ -31,7 +31,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.odeon.android.tv.ui.Focavel
+import androidx.compose.foundation.background
+import dev.odeon.android.tv.ui.saidaPraEsquerda
+import dev.odeon.android.dados.EtiquetaDoAcervo
 import dev.odeon.android.dados.ItemDaBiblioteca
+import dev.odeon.android.dados.ObraDaLista
 import dev.odeon.android.tv.ui.BotaoDaSala
 import dev.odeon.android.tv.ui.Cartaz
 import dev.odeon.android.tv.ui.FileiraFantasma
@@ -41,9 +49,11 @@ import dev.odeon.android.tv.ui.RotuloDeSecao
 import dev.odeon.android.tv.ui.Sala
 import dev.odeon.android.ui.Cores
 import dev.odeon.android.ui.biblioteca.ModeloDaBiblioteca
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -69,15 +79,51 @@ import dev.odeon.android.tv.ui.EscolhaDeVersaoDaSala
 fun TelaDaBibliotecaDaTv(
     modelo: ModeloDaBiblioteca,
     aoAbrirObra: (String) -> Unit,
+    /// ⚠️ Série **sai desta tela** — 18/08/2026. Ela era um modo daqui
+    /// (`entrarNaSerie` trocava a grade no lugar) e agora é destino próprio, com
+    /// ficha e temporadas. Ver `Onde.Serie` e `docs/SERIES.md`.
+    aoAbrirSerie: (id: String, titulo: String) -> Unit,
     aoTocar: (ItemDaBiblioteca) -> Unit,
+    /// ⚠️ A biblioteca da TV é a dos **filmes**: muda o título e liga o
+    /// `semSéries()`. Quem tira as séries é o servidor (`?tags_not=`).
+    escondendoSeries: Boolean = false,
     modifier: Modifier = Modifier,
     /// O trilho. Todo item da **primeira coluna** manda a seta ◀ pra cá — ver
     /// `saidaPraEsquerda` em `ui/Pecas.kt` pro defeito que isso conserta.
     saidaEsquerda: FocusRequester? = null,
 ) {
     val estado by modelo.estado.collectAsStateWithLifecycle()
+    LaunchedEffect(escondendoSeries) { if (escondendoSeries) modelo.semSéries() }
     val grade = rememberLazyGridState()
     val primeiroItem = remember { FocusRequester() }
+
+    /// ## ⚠️ A série abria **no meio da temporada 3** — visto na TCL, 17/08/2026
+    ///
+    /// A biblioteca e a lista de episódios são a **mesma** `LazyVerticalGrid`, e
+    /// portanto o mesmo `rememberLazyGridState`. Trocar o conteúdo não mexe na
+    /// rolagem: eu havia descido 16 fileiras no acervo, entrei no `Arrested
+    /// Development` e caí na fileira 16 **dele** — em `S03E11`, com o cabeçalho
+    /// e o nome da série fora da tela.
+    ///
+    /// É pior do que parece porque o cabeçalho da série mora **dentro** da
+    /// grade: quem cai no meio não tem, na tela, nada que diga onde está nem
+    /// como sair.
+    ///
+    /// ⚠️ **Sair devolve a posição de antes**, e não o topo. A pessoa não pediu
+    /// pra voltar ao começo do acervo: ela pediu pra sair da série, e o lugar de
+    /// onde ela veio é onde estava a série que ela escolheu. Mandar pro topo
+    /// trocaria um lugar arbitrário por outro.
+    var ondeEstavaOAcervo by remember { mutableStateOf(0 to 0) }
+    val serieAberta = estado.serie?.id
+    LaunchedEffect(serieAberta) {
+        if (serieAberta != null) {
+            ondeEstavaOAcervo = grade.firstVisibleItemIndex to grade.firstVisibleItemScrollOffset
+            grade.scrollToItem(0)
+        } else {
+            val (indice, deslocamento) = ondeEstavaOAcervo
+            grade.scrollToItem(indice, deslocamento)
+        }
+    }
 
     /// ## A paginação escuta a rolagem, e não o último item desenhado
     ///
@@ -96,13 +142,9 @@ fun TelaDaBibliotecaDaTv(
             .collect { modelo.maisUmaPagina() }
     }
 
-    /// Dentro de uma série, «voltar» sai da série — e **não** do app.
-    ///
-    /// Ele é o mais interno dos três `BackHandler` desta pilha, e por isso ganha:
-    /// o Compose entrega a tecla ao mais recente que estiver ligado. A ordem
-    /// resultante é a que se espera de fora — episódios ▸ biblioteca ▸ aba
-    /// biblioteca ▸ sair.
-    BackHandler(enabled = estado.dentroDaSerie) { modelo.sairDaSerie() }
+    /// ⚠️ **O `BackHandler` da série saiu daqui** — 18/08/2026. Ele existia
+    /// porque «dentro de uma série» era um estado desta tela; agora é destino
+    /// próprio (`Onde.Serie`), e quem trata a tecla é a tela de lá.
 
     /// O item cuja escolha de versão está aberta. `null` é a modal fechada.
     ///
@@ -115,7 +157,27 @@ fun TelaDaBibliotecaDaTv(
         derivedStateOf { estado.itens.isNotEmpty() || estado.episodios.isNotEmpty() }
     }
     LaunchedEffect(temFoco) {
-        if (temFoco) runCatching { primeiroItem.requestFocus() }
+        if (temFoco) primeiroItem.insista()
+    }
+
+    /// ## ⚠️ Entrar numa série **não** redisparava o efeito acima — 17/08/2026
+    ///
+    /// `temFoco` é «há itens **ou** episódios». Entrando numa série ele já era
+    /// `true` por causa dos itens e **continua** `true` por causa dos episódios:
+    /// nunca muda, e um `LaunchedEffect` que não vê a chave mudar não roda de
+    /// novo. Só que o cartão que tinha o foco — a série escolhida — sumiu da
+    /// composição no meio do caminho.
+    ///
+    /// Foco sem dono sobe: ia parar no trilho, que **abre quando tem foco** e
+    /// fica por cima dos episódios. A série abria com o menu na frente dela.
+    ///
+    /// ⚠️ Espera a primeira página chegar antes de pedir o foco. Pedir na hora
+    /// da troca é pedir a um nó que ainda não existe — o mesmo jeito calado de
+    /// falhar que este arquivo já pagou duas vezes hoje.
+    LaunchedEffect(serieAberta) {
+        if (serieAberta == null) return@LaunchedEffect
+        snapshotFlow { estado.episodios.isNotEmpty() }.first { it }
+        primeiroItem.insista()
     }
 
     when {
@@ -159,9 +221,26 @@ fun TelaDaBibliotecaDaTv(
             /// e não é: o `Adaptive` não diz quantas colunas escolheu, e sem esse
             /// número não dá pra saber **qual item está na primeira coluna** —
             /// que é exatamente quem precisa do desvio pro trilho.
+            /// ## ⚠️ Dentro de uma série o cartão é **deitado** — 17/08/2026
+            ///
+            /// Um episódio não é um cartaz. A capa de `Arrested Development` é a
+            /// mesma nos 84, então ela não distingue nada; o que distingue é o
+            /// **quadro** — e o `ObraDaLista.arte` já prefere o `still`, que é
+            /// 16:9. Espremê-lo num cartaz de 2:3 jogava fora ~45% da largura no
+            /// corte central: visto na TCL, o `S01E03` do `Arrested` virou uma
+            /// roda de bicicleta.
+            ///
+            /// A peça certa já existia e já dizia isto na própria folha: «quem
+            /// parou no meio já sabe **que** filme é, e quer saber **onde
+            /// estava**. Uma capa não diz isso; um quadro diz.» Faltava a grade
+            /// de episódios usá-la.
+            ///
+            /// ⚠️ Sete colunas viram três, e **é a intenção**: 84 miniaturas
+            /// ilegíveis não são um índice, são um mosaico.
+            val larguraDoCartao = if (estado.dentroDaSerie) Sala.quadroL else Sala.cartazL
             val colunas = maxOf(
                 1,
-                ((maxWidth + Sala.vaoEntreCartazes) / (Sala.cartazL + Sala.vaoEntreCartazes))
+                ((maxWidth + Sala.vaoEntreCartazes) / (larguraDoCartao + Sala.vaoEntreCartazes))
                     .toInt(),
             )
 
@@ -259,9 +338,31 @@ fun TelaDaBibliotecaDaTv(
 
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Cabecalho(
-                    titulo = estado.serie?.titulo ?: "biblioteca",
-                    conta = estado.serie
-                        ?.let { "${estado.episodios.size} de ${it.quantosEpisodios}" },
+                    titulo = estado.serie?.titulo
+                        ?: if (escondendoSeries) "filmes" else "biblioteca",
+                    /// ## ⚠️ **`18 de 1`** — o total só entra se ele se sustentar
+                    ///
+                    /// Visto na TCL: `Arcane` aberta pela busca escreveu `18 de
+                    /// 0`, e depois `18 de 1`. Os dois números vieram do
+                    /// servidor: o `work_count` de `/api/library?q=` devolve **1**
+                    /// pra essa série, enquanto o da grade devolve **84** pro
+                    /// `Arrested Development` — que é o certo.
+                    ///
+                    /// Não dá pra escolher qual dos dois é o bom daqui. O que dá
+                    /// pra fazer é **não afirmar o que não se sustenta**: um
+                    /// total menor do que a quantidade já carregada é falso por
+                    /// construção, e aí a tela conta só o que tem na mão.
+                    ///
+                    /// É o §18 na forma mais literal — omitir o número em vez de
+                    /// inventar um. Ver `PEDIDOS-AO-SERVIDOR.md` §8.
+                    conta = estado.serie?.let { serie ->
+                        val quantos = estado.episodios.size
+                        if (serie.quantosEpisodios >= quantos && quantos > 0) {
+                            "$quantos de ${serie.quantosEpisodios}"
+                        } else {
+                            quantos.takeIf { n -> n > 0 }?.let { n -> "$n episódios" }
+                        }
+                    },
                     /// Só a biblioteca ganha as contagens douradas: dentro de uma
                     /// série o `conta` acima já diz «3 de 21», e ali o total é o
                     /// da temporada, não do acervo.
@@ -271,13 +372,46 @@ fun TelaDaBibliotecaDaTv(
                 )
             }
 
+            /// ⚠️ **A fileira de prateleiras saiu daqui** — 18/08/2026. Ela
+            /// era `tudo · série · filme · anime` e parecia o que não era: uma
+            /// segunda barra de filtros. Séries virou destino da trilha; esta
+            /// tela é a dos **filmes**. Ver `TelaDasSeriesDaTv`.
             if (estado.dentroDaSerie) {
                 itemsIndexed(estado.episodios, key = { _, e -> e.id }) { indice, episodio ->
-                    Cartaz(
+                    Quadro(
                         titulo = episodio.title,
                         arte = modelo.arte(episodio),
+                        cor = episodio.corDominante,
                         detalhe = episodio.codigo,
+                        /// ⚠️ Os dois campos **já chegavam** e eram jogados fora:
+                        /// a grade de filmes passava `andado`, a de episódios
+                        /// não. Numa série é onde eles mais valem — «até onde eu
+                        /// fui» é a pergunta que se faz diante de 84 cartões.
+                        andado = andadoDoEpisodio(episodio),
+                        visto = episodio.finished == true,
                         saidaEsquerda = if (indice % colunas == 0) saidaEsquerda else null,
+                        /// ## ⚠️ O `primeiroItem` **não estava amarrado aqui** —
+                        /// 17/08/2026
+                        ///
+                        /// O `temFoco` acima acende com `episodios.isNotEmpty()`
+                        /// e chama `primeiroItem.requestFocus()`, mas o
+                        /// `FocusRequester` só era pendurado no ramo dos filmes.
+                        /// Dentro de uma série ele apontava pro vazio, o
+                        /// `runCatching` engolia, e o foco ficava onde estivesse —
+                        /// **no trilho**, que fica aberto por cima dos episódios.
+                        ///
+                        /// Só apareceu agora porque até hoje só se entrava numa
+                        /// série pela própria grade, onde o foco já estava no
+                        /// conteúdo. Vindo da busca, a tela troca inteira — e a
+                        /// série abria com o menu na frente dela.
+                        ///
+                        /// ⚠️ É o mesmo defeito do ◀ do teclado da busca, na
+                        /// mesma semana: **um requester sem nó falha calado**.
+                        modifier = if (indice == 0) {
+                            Modifier.focusRequester(primeiroItem)
+                        } else {
+                            Modifier
+                        },
                         aoEscolher = { aoAbrirObra(episodio.id) },
                     )
                 }
@@ -305,7 +439,7 @@ fun TelaDaBibliotecaDaTv(
                         /// ficha, como sempre — ver `temEscolhaDeVersao`.
                         aoEscolher = {
                             when {
-                                item.eSerie -> modelo.entrarNaSerie(item)
+                                item.eSerie -> aoAbrirSerie(item.id, item.title)
                                 item.temEscolhaDeVersao -> escolhendoVersao = item
                                 else -> aoTocar(item)
                             }
@@ -446,6 +580,18 @@ private fun detalheDoItem(item: ItemDaBiblioteca): String? = buildList {
     }
 }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
+/// A barrinha de um **episódio**. Mesma conta do `andadoDoItem`, noutro tipo:
+/// `ObraDaLista` traz `position_seconds` e `duration_seconds` como a
+/// `ItemDaBiblioteca`, e é o servidor que já sabe onde a pessoa parou.
+///
+/// ⚠️ Zero quando não há duração — dividir por ela daria uma barra cheia num
+/// episódio nunca aberto, que é a mentira mais cara desta tela.
+private fun andadoDoEpisodio(episodio: ObraDaLista): Float {
+    val onde = episodio.ondeParou ?: return 0f
+    val total = episodio.duracaoEmSegundos?.takeIf { it > 0 } ?: return 0f
+    return (onde / total).toFloat().coerceIn(0f, 1f)
+}
+
 /// A barrinha do cartaz. Só há dado pra ela numa obra solta que foi começada.
 private fun andadoDoItem(item: ItemDaBiblioteca): Float {
     val onde = item.ondeParou ?: return 0f
@@ -461,3 +607,39 @@ private fun andadoDoItem(item: ItemDaBiblioteca): Float {
 /// como `8,316`, que em português é oito vírgula três.
 private fun comMilhar(n: Int): String =
     String.format(java.util.Locale.forLanguageTag("pt-BR"), "%,d", n)
+
+/// Pede o foco **até o nó existir**.
+///
+/// ## ⚠️ `isNotEmpty()` não quer dizer «já está na tela»
+///
+/// A lista chegar e o item estar **composto e anexado** são dois momentos, e o
+/// segundo é o que um `FocusRequester` precisa. Pedir no primeiro é o mesmo jeito
+/// calado de falhar que este arquivo já pagou três vezes esta semana: o
+/// `requestFocus` lança, alguém engole com `runCatching`, e o foco fica onde
+/// estava — no trilho, que **abre quando tem foco** e cobre a tela inteira.
+///
+/// Medido na TCL: entrando numa série pela busca, a tela nascia com o menu por
+/// cima dos episódios. Uma tentativa só nunca pegava; com as tentativas, pega na
+/// segunda ou terceira.
+///
+/// ## ⚠️ E **não** dá pra sair no primeiro «deu certo»
+///
+/// Foi a primeira tentativa de conserto, e ela não funcionou: `requestFocus()`
+/// num nó ainda não anexado **não lança** — ele volta normal e não faz nada. O
+/// `runCatching(...).isSuccess` dava `true` na primeira volta, o laço parava, e o
+/// foco continuava no trilho. Medido na TCL: a tela abriu com o menu por cima
+/// exatamente igual a antes do conserto.
+///
+/// Então ele pede as N vezes, sem perguntar. Quando o item aparece, um dos
+/// pedidos pega; os anteriores não custam nada.
+///
+/// ⚠️ Seis tentativas de 70ms é ~0,4s de teto, e ele **termina**. É curto de
+/// propósito: enquanto o laço roda, ele ganha de quem mexer no controle — e
+/// meio segundo é o que dura a troca de tela, não o que dura a paciência de
+/// alguém.
+private suspend fun FocusRequester.insista(vezes: Int = 6, pausa: Long = 70) {
+    repeat(vezes) {
+        runCatching { requestFocus() }
+        delay(pausa)
+    }
+}

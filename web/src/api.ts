@@ -351,6 +351,11 @@ export interface WorkListItem {
   backdrop: string | null;
   /** Quadro do episódio, quando existe — mais específico que o backdrop. */
   still: string | null;
+  /**
+   * A sinopse do episódio — chegou em 18/08/2026, em 7.628 dos 14.844.
+   * ⚠️ Quem não tem manda nulo, e aí a linha não é desenhada.
+   */
+  overview?: string | null;
   series_title: string | null;
   media_file_id: string | null;
   duration_seconds: number | null;
@@ -566,6 +571,15 @@ export interface Collection {
   item_count: number;
   /** Até quatro pôsteres da subárvore, pra capa empilhada do cartão. */
   posters: string[] | null;
+  /**
+   * ⚠️ Chegaram em 18/08/2026: o pôster próprio da temporada (461 de 473,
+   * buscados do TMDB), o backdrop e a sinopse da série (118 e 115 das 120), e a
+   * contagem de vistos. Ver `PEDIDOS-AO-SERVIDOR.md, «já entregue» 10`.
+   */
+  poster?: string | null;
+  backdrop?: string | null;
+  dominant_color?: string | null;
+  finished_count?: number;
 }
 
 export interface CollectionNode extends Collection {
@@ -993,6 +1007,26 @@ export interface Filters {
   q?: string;
   kind?: string;
   tags?: string[];
+  /**
+   * A prateleira: `format:série`, `format:filme`, ou nada.
+   *
+   * ⚠️ **Separada de `tags` de propósito**, mesmo indo pro mesmo `?tags=`.
+   * Misturá-las faria "limpar filtros" apagar a prateleira junto — e prateleira
+   * não é filtro: é em qual metade do acervo você está. Quem está nas séries e
+   * limpa os filtros continua nas séries.
+   */
+  shelf?: string;
+  /**
+   * As etiquetas que **tiram** — `?tags_not=`, entregue em 18/08/2026.
+   *
+   * A aba dos filmes é "tudo que não é série". `?tags=` só soma, e fixar
+   * `format:filme` deixaria de fora as 2.182 entradas que o scanner não
+   * classifica.
+   *
+   * ⚠️ Semântica `any`, sem opção de trocar: sai quem tiver qualquer uma.
+   * ⚠️ Lista vazia NÃO vira parâmetro — ver `queryString`.
+   */
+  tagsNot?: string[];
   tagMode?: "all" | "any";
   yearFrom?: number;
   yearTo?: number;
@@ -1255,8 +1289,16 @@ function queryString(filters: Filters, limit = PAGE_SIZE, offset = 0): string {
   if (offset > 0) p.set("offset", String(offset));
   if (filters.q?.trim()) p.set("q", filters.q.trim());
   if (filters.kind) p.set("kind", filters.kind);
-  if (filters.tags?.length) {
-    p.set("tags", filters.tags.join(","));
+  // A prateleira e as tags viajam no mesmo parâmetro — pro servidor as duas são
+  // a mesma coisa. A separação existe do lado de cá.
+  // ⚠️ Vazio não vira parâmetro: o servidor lê `?tags_not=` vazio como "não
+  // filtre", e mandar à toa é pedir pra alguém mudar essa leitura um dia.
+  if (filters.tagsNot?.length) {
+    p.set("tags_not", filters.tagsNot.join(","));
+  }
+  const marcas = [...(filters.shelf ? [filters.shelf] : []), ...(filters.tags ?? [])];
+  if (marcas.length) {
+    p.set("tags", marcas.join(","));
     p.set("tag_mode", filters.tagMode ?? "all");
   }
   if (filters.yearFrom) p.set("year_from", String(filters.yearFrom));
@@ -1268,6 +1310,37 @@ function queryString(filters: Filters, limit = PAGE_SIZE, offset = 0): string {
   if (filters.state) p.set("state", filters.state);
   if (filters.sort) p.set("sort", filters.sort);
   return p.toString();
+}
+
+/// A fileira de "continuar", com **uma linha por série**.
+///
+/// ## ⚠️ Três episódios da mesma série eram três cartões — 18/08/2026
+///
+/// A fileira vem do servidor por OBRA, e episódio é obra. Quem parou no meio de
+/// três episódios de Arcane recebia três cartões, os três escritos "Arcane" —
+/// porque toda tela desenha `series_title ?? title`. Lado a lado eles não dizem
+/// três coisas: dizem a mesma coisa três vezes, e empurram pra fora da fileira
+/// as obras que de fato são outras.
+///
+/// ## A regra: o primeiro de cada série sobrevive
+///
+/// A rota devolve por RECÊNCIA, e é o que faz "o primeiro" ser a resposta certa:
+/// o episódio mais recente daquela série é onde a pessoa estava. Manter o de
+/// menor season/episode daria o começo da série a quem está no fim dela.
+///
+/// ⚠️ **Filme não é tocado** — sem `series_title` não há o que agrupar.
+///
+/// ⚠️ A chave é o TÍTULO: `WorkListItem` não traz id de coleção nesta rota.
+/// Mesma fraqueza declarada nos outros três clientes, e mesmo conserto no dia em
+/// que o servidor mandar o id.
+export function colapsarPorSerie(itens: WorkListItem[]): WorkListItem[] {
+  const jaVistas = new Set<string>();
+  return itens.filter((w) => {
+    if (!w.series_title) return true;
+    if (jaVistas.has(w.series_title)) return false;
+    jaVistas.add(w.series_title);
+    return true;
+  });
 }
 
 export const api = {
@@ -1283,7 +1356,10 @@ export const api = {
   library: (filters: Filters = {}, offset = 0, limit = PAGE_SIZE) =>
     json<LibraryEntry[]>(`/api/library?${queryString(filters, limit, offset)}`),
 
-  continueWatching: () => json<WorkListItem[]>("/api/continue"),
+  /// ⚠️ **Colapsa por série aqui**, e não em cada tela que desenha a fileira.
+  /// Ver `colapsarPorSerie` logo abaixo.
+  continueWatching: async () =>
+    colapsarPorSerie(await json<WorkListItem[]>("/api/continue")),
 
   // --- R6: canais ao vivo ---
   liveChannels: () => json<CanalNoAr[]>("/api/live/channels"),

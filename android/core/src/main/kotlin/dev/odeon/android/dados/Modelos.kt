@@ -275,6 +275,13 @@ data class ObraDaLista(
     val year: Int? = null,
     @SerialName("season_number") val temporada: Int? = null,
     @SerialName("episode_number") val episodio: Int? = null,
+    /// A sinopse do episódio — chegou em 18/08/2026, e era o campo que a lista de
+    /// temporada mais sentia falta.
+    ///
+    /// ⚠️ Existe em **7.628 dos 14.844** episódios. Quem não tem manda nulo, e
+    /// aí a linha simplesmente não é desenhada — não se inventa sinopse a partir
+    /// do título (§18).
+    val overview: String? = null,
     @SerialName("match_state") val estadoDaIdentificacao: String? = null,
     @SerialName("dominant_color") val corDominante: String? = null,
     val poster: String? = null,
@@ -484,7 +491,44 @@ data class Etiqueta(
     val value: String,
     val color: String? = null,
     val source: String? = null,
-)
+) {
+    /// O qualificador em português — `country` vira «país».
+    ///
+    /// ## ⚠️ Ele existe porque a tela estava mostrando **chave de banco**
+    ///
+    /// Visto na ficha de «Sr. Ninguém»: nove pílulas, e quatro delas começando
+    /// com a palavra `country`. Também `format filme`, `genre Drama`,
+    /// `lang inglês`. O desenho da [dev.odeon.android.ui.PilulaDeEtiqueta] está
+    /// certo e vem da web — o namespace apagado diz *de que tipo* é a etiqueta —,
+    /// mas ele assumia que o namespace chegava em português, como chegava quando
+    /// aquela folha foi escrita (`genero/Crime`, `pais/Estados Unidos`).
+    ///
+    /// Não chega mais. E dá pra ver de onde vem: no painel de filtros o servidor
+    /// manda `FORMATO` e `GÊNERO` traduzidos, e **`COUNTRY` cru** — ele tem
+    /// rótulo pra uns namespaces e não pra outros. A ficha, que não recebe esses
+    /// rótulos, mostrava a chave em todos.
+    ///
+    /// Traduzir código em nome é **desenho**, e mora no cliente por decisão já
+    /// escrita — ver [dev.odeon.android.ui.nomeDoIdioma] e `Revista.rotuloDoEixo`,
+    /// que existem pelo mesmo motivo.
+    ///
+    /// ⚠️ Namespace desconhecido devolve `null`, e a pílula **omite o
+    /// qualificador** em vez de imprimir a chave. Mostrar `collection` numa
+    /// pílula é mostrar à pessoa um nome de coluna com cara de categoria (§18) —
+    /// e o valor sozinho continua legível, que é o pior caso aceitável.
+    val rotulo: String?
+        get() = when (namespace.lowercase()) {
+            "country", "pais", "país" -> "país"
+            "genre", "genero", "gênero" -> "gênero"
+            "format", "formato", "tipo" -> "formato"
+            "lang", "language", "idioma" -> "idioma"
+            "decade", "decada", "década" -> "década"
+            "director", "diretor" -> "direção"
+            "studio", "estudio", "estúdio" -> "estúdio"
+            "collection", "saga" -> "saga"
+            else -> null
+        }
+}
 
 /// Uma caixa **exposta na vitrine** — `CaixaExposta` na web.
 ///
@@ -634,6 +678,20 @@ data class PlanoDeReproducao(
     /// Todas as faixas de áudio do arquivo. Vazia em arquivo sem probe guardada
     /// — e o servidor trata esse caso caindo pro codec do banco, com teste.
     @SerialName("audio_tracks") val faixasDeAudio: List<FaixaDeAudio> = emptyList(),
+    /// A duração do arquivo, **medida pelo servidor** — 17/08/2026.
+    ///
+    /// ## ⚠️ Ela é a resposta ao pedido da playlist `VOD`, e é melhor que ele
+    ///
+    /// O pedido era declarar a playlist como `VOD` pra a barra nascer certa. A
+    /// resposta do servidor recusou com medida: declarar `VOD` exige saber o
+    /// tamanho de cada segmento antes de produzi-lo, e no caminho `video=copy`
+    /// isso são os keyframes da fonte — **1m33s por arquivo** contra 25s de
+    /// espera da playlist. Metade dos filmes ficaria certa e metade errada, sem
+    /// ninguém saber qual.
+    ///
+    /// Em vez disso veio o número, aqui e na sessão. É o suficiente: quem desenha
+    /// a barra e o «faltam» é o cliente, e o que faltava era só o denominador.
+    @SerialName("duration_seconds") val duracaoEmSegundos: Double? = null,
     /// **Qual** faixa este plano está falando. Sem pedido, o servidor usa a 0 —
     /// e não a marcada `default`, que mudaria em silêncio o que toca em milhares
     /// de arquivos que ninguém pediu pra mudar.
@@ -727,6 +785,23 @@ data class Emprestada(
     val id: Int,
     /// O mesmo id que `/api/library` devolve — é por ele que a estante casa.
     @SerialName("caixa_id") val caixaId: String,
+    /// **Todos** os ids que abrem esta caixa — 17/08/2026.
+    ///
+    /// ## ⚠️ Ela é a peça que devolve o «pegar a fita» ao app
+    ///
+    /// O botão não existia porque o 403 era imprevisível, e o §53 proíbe oferecer
+    /// o que a validação vai negar. A causa do 403 saiu na investigação do
+    /// servidor, e não era permissão: **o mesmo filme existe duas vezes** neste
+    /// acervo (44 casos). Desde a R47 a biblioteca desenha **um** cartão pro
+    /// grupo; a locadora trancava por `work_id`. Daí as duas metades: a
+    /// prateleira dizia o id do rip que estava fora e o cartão conhecia o outro,
+    /// então o app não tinha como prever — e a escassez não escasseava, porque
+    /// duas pessoas podiam levar «o mesmo filme».
+    ///
+    /// Com a lista, a conta fica trivial: se o id que estou olhando está em
+    /// `caixaIds` de algum empréstimo, aquela caixa **está fora** — e o `meu` diz
+    /// se está comigo. Ver `EstadoDaLocadora.situacaoDaCaixa`.
+    @SerialName("caixa_ids") val caixaIds: List<String> = emptyList(),
     val serie: Boolean = false,
     val titulo: String,
     @SerialName("quem_nome") val quemNome: String,
@@ -1047,6 +1122,11 @@ data class SessaoDeTranscodificacao(
     val mode: String,
     val reasons: List<String> = emptyList(),
     @SerialName("playlist_url") val urlDaPlaylist: String,
+    /// A duração do arquivo — ver a folha do mesmo campo em `PlanoDeReproducao`.
+    ///
+    /// ⚠️ Ela vem **nas duas** respostas de propósito: o caminho direto não abre
+    /// sessão, e o caminho de sessão pode ser retomado sem passar pelo plano.
+    @SerialName("duration_seconds") val duracaoEmSegundos: Double? = null,
 )
 
 // ------------------------------------------------------------------ o mural
@@ -1530,3 +1610,47 @@ data class CanalAberto(
 
 @Serializable
 data class CanalMinimo(val id: String, val name: String)
+
+/// Uma **coleção** — a série, e cada temporada dela.
+///
+/// ## ⚠️ Ela chegou em 18/08/2026, e substitui um monte de reserva
+///
+/// Até esta tarde a ficha da série montava tudo dos episódios: a arte de
+/// temporada era o `still` do primeiro, a sinopse não existia e o pano de fundo
+/// era o backdrop de um episódio. Eram reservas declaradas, escritas pra sumir —
+/// e o `PEDIDOS-AO-SERVIDOR.md, «já entregue» 10` foi atendido:
+///
+/// | | |
+/// |---|---|
+/// | pôster de temporada | **461 de 473**, buscados do TMDB |
+/// | sinopse de temporada | 232 |
+/// | nome próprio de temporada | 26 |
+/// | sinopse e backdrop da série | 115 e 118 das 120 |
+///
+/// ⚠️ As 12 temporadas sem pôster são as que o TMDB não descreve — a temporada 0
+/// de especiais, na maioria. A reserva **fica no lugar** por causa delas: quem
+/// não tem pôster continua usando o `still` do primeiro episódio.
+@Serializable
+data class Colecao(
+    val id: String,
+    val kind: String = "",
+    val title: String = "",
+    val year: Int? = null,
+    val overview: String? = null,
+    /// O número da temporada. ⚠️ É `position`, e não um campo `season_number`:
+    /// numa coleção genérica ele é a ordem, e numa temporada ele **é** o número.
+    val position: Int? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    @SerialName("dominant_color") val corDominante: String? = null,
+    @SerialName("item_count") val quantosItens: Int = 0,
+    @SerialName("finished_count") val quantosVistos: Int = 0,
+)
+
+/// A resposta de `GET /api/collections/{id}`: a série e as temporadas dela.
+@Serializable
+data class ColecaoComFilhos(
+    val collection: Colecao,
+    /// As temporadas, cada uma com `position`, `poster`, `overview` e contagens.
+    val children: List<Colecao> = emptyList(),
+)

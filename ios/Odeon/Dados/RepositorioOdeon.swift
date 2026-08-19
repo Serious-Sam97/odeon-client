@@ -155,7 +155,20 @@ struct RepositorioOdeon: Sendable {
         /// `?limit=60` quando não há filtro, em vez de `?q=&kind=` que o servidor
         /// teria que aprender a ignorar.
         if let busca, !busca.isEmpty { itens.append(URLQueryItem(name: "q", value: busca)) }
-        if let e = filtros.etiqueta { itens.append(URLQueryItem(name: "tags", value: e)) }
+        /// ⚠️ A prateleira e a etiqueta viajam **no mesmo `tags`** — pro
+        /// servidor as duas são a mesma coisa. A separação existe do lado de cá,
+        /// e é o «limpar» que a cobra. Ver `Filtros.prateleira`.
+        let marcas = [filtros.prateleira, filtros.etiqueta].compactMap { $0 }
+        if !marcas.isEmpty {
+            itens.append(URLQueryItem(name: "tags", value: marcas.joined(separator: ",")))
+        }
+        /// ⚠️ Vazio **não vira parâmetro**: o servidor lê `?tags_not=` vazio como
+        /// «não filtre», e mandar à toa é pedir pra alguém mudar essa leitura um
+        /// dia e varrer o acervo inteiro pra fora.
+        if !filtros.excluindo.isEmpty {
+            itens.append(URLQueryItem(name: "tags_not",
+                                      value: filtros.excluindo.joined(separator: ",")))
+        }
         if let a = filtros.anoDe { itens.append(URLQueryItem(name: "year_from", value: String(a))) }
         if let a = filtros.anoAte { itens.append(URLQueryItem(name: "year_to", value: String(a))) }
         if let t = filtros.tipo { itens.append(URLQueryItem(name: "kind", value: t)) }
@@ -163,11 +176,107 @@ struct RepositorioOdeon: Sendable {
         return try await pedir("/api/library", query: itens)
     }
 
+    /// A coleção e as temporadas dela.
+    ///
+    /// ⚠️ **Não lança**: a ficha da série funciona sem ela — as reservas
+    /// montadas dos episódios continuam lá. Uma série que o servidor não conheça
+    /// abre como abria ontem, em vez de abrir com um erro.
+    func colecao(_ id: String) async -> ColecaoComFilhos? {
+        try? await pedir("/api/collections/\(id)")
+    }
+
+    /// `GET /api/works?collection=…` — a listagem **plana**: os episódios de uma
+    /// série.
+    ///
+    /// ⚠️ É outra rota que a `biblioteca`, e não a mesma com um filtro. A
+    /// `/api/library` **agrupa** — pedir uma série ali devolveria a série de
+    /// volta, não os episódios dela.
+    func obras(colecao: String, pulando: Int = 0, limite: Int = 60) async throws -> [ObraDaLista] {
+        try await pedir("/api/works", query: [
+            URLQueryItem(name: "collection", value: colecao),
+            URLQueryItem(name: "limit", value: String(limite)),
+            URLQueryItem(name: "offset", value: String(pulando)),
+        ])
+    }
+
     /// ⚠️ **Custa ~4 s na primeira vez** — doze extrações de ffmpeg no servidor
     /// de casa. Por isso ela é uma chamada à parte e nunca bloqueia a ficha: o
     /// varal aparece quando chega.
+    /// `GET /api/works/{obra}/menu` — o menu do disco.
+    ///
+    /// ⚠️ Ela **custa**: o servidor abre o arquivo pra ler os capítulos. Por isso
+    /// só a locadora a chama, e só em DVD — o `▸ assistir` da biblioteca continua
+    /// indo direto pro filme. O menu é o objeto encenando o que ele é, não um
+    /// pedágio no caminho de quem só quer assistir.
+    func menuDoDisco(obra: String) async throws -> MenuDoDisco {
+        try await pedir("/api/works/\(obra)/menu")
+    }
+
     func cenas(obra: String) async throws -> [Cena] {
         try await pedir("/api/works/\(obra)/cenas")
+    }
+
+    /// ⚠️ Ela **não** devolve o estado das 866 caixas — devolve as poucas que
+    /// estão em mãos, mais a régua do formato. Quem cruza com a estante é a tela,
+    /// que já tem as caixas carregadas.
+    /// O catálogo de etiquetas e os grupos delas — o que enche o painel.
+    ///
+    /// ⚠️ Pedida **uma vez**, na primeira abertura do painel: são centenas de
+    /// linhas que mudam quando a identificação roda, ou seja quase nunca. Pedi-las
+    /// no arranque atrasaria a grade por um painel que talvez ninguém abra.
+    ///
+    /// ⚠️ As duas falham **separado**: sem os grupos o painel ainda agrupa pelo
+    /// próprio namespace; sem as etiquetas não há painel.
+    func etiquetasDoAcervo() async -> ([EtiquetaDoAcervo], [EspacoDeEtiqueta]) {
+        let etiquetas: [EtiquetaDoAcervo] = (try? await pedir("/api/tags")) ?? []
+        let espacos: [EspacoDeEtiqueta] = (try? await pedir("/api/tag-namespaces")) ?? []
+        return (etiquetas, espacos)
+    }
+
+    func prateleira() async throws -> Prateleira {
+        try await pedir("/api/locadora/prateleira")
+    }
+
+    /// Levar a caixa pra casa. **Escreve no acervo de três pessoas.**
+    ///
+    /// ## ⚠️ A rota é `alugar`, e `pegar` **não existe**
+    ///
+    /// O app tinha registrado um pedido ao servidor sobre «`/api/locadora/pegar`
+    /// devolve 403», e a investigação de lá desfez a premissa inteira: aquela
+    /// rota dá **404** — ela nunca existiu. A que existe é esta, e ela aceita
+    /// qualquer obra.
+    ///
+    /// ⚠️ Quem decide se **pode** levar é a tela, com o `caixaIds` da prateleira
+    /// (ver `Emprestada.caixaIds`). Aqui não há checagem nenhuma de propósito: o
+    /// repositório fala com o servidor, e a regra de escassez é da locadora.
+    func alugar(obra: String) async throws {
+        struct Alvo: Encodable { let work_id: String }
+        struct Resposta: Decodable { let ok: Bool? }
+        let corpo = try JSONEncoder().encode(Alvo(work_id: obra))
+        _ = try await pedir(
+            "/api/locadora/alugar", metodo: "POST", corpo: corpo,
+        ) as Resposta
+    }
+
+    /// Devolver uma fita **sua**.
+    func devolver(emprestimo: Int) async throws {
+        struct Resposta: Decodable { let ok: Bool? }
+        _ = try await pedir(
+            "/api/locadora/devolver/\(emprestimo)", metodo: "POST",
+        ) as Resposta
+    }
+
+    /// Pedir de volta uma fita que está com outra pessoa.
+    ///
+    /// ⚠️ **Não encurta o prazo de ninguém** — dar a um morador poder sobre o
+    /// prazo do outro transformaria a locadora em disputa. O que ela faz é pôr um
+    /// recado na caixa de quem está com ela, e é por isso que ela **não pede
+    /// confirmação**: o efeito é um aviso, não uma perda.
+    func pedirDeVolta(emprestimo: Int) async throws {
+        struct Resposta: Decodable { let ok: Bool? }
+        _ = try await pedir(
+            "/api/locadora/pedir/\(emprestimo)", metodo: "POST",
+        ) as Resposta
     }
 
     // MARK: - Ao vivo
@@ -202,8 +311,11 @@ struct RepositorioOdeon: Sendable {
         try await pedir("/api/guia/revista")
     }
 
+    /// ⚠️ **Colapsa por série aqui**, e não na tela — ver `colapsarPorSerie`.
+    /// Um ponto só, como no Android: a regra escrita em cada tela é a regra
+    /// divergindo em cada tela.
     func paraContinuar() async throws -> [ItemPraContinuar] {
-        try await pedir("/api/continue")
+        colapsarPorSerie(try await pedir("/api/continue"))
     }
 
     // MARK: - O perfil

@@ -13,6 +13,23 @@ primeiros somam menos de uma hora e apagam defeito visível em três telas.
 
 ---
 
+## ⚠️ Pendente de aparelho: a TV, quando a TCL ligar — 19/08/2026
+
+Três coisas foram feitas no `:tv` **sem ninguém ver rodando**. Elas compilam, e é
+tudo que se pode dizer delas. Quando a TCL voltar, é isto que precisa ser olhado,
+nesta ordem:
+
+| | o que testar | como saber que falhou |
+|---|---|---|
+| 1 | entrar num **canal de fora** (Tela Quente, Videoteca, Sessão Seriado) | **som sem imagem**. A superfície de vídeo deixou de nascer dentro de `if (player != null)`; no celular essa mesma forma dava 17 de 17 canais pretos |
+| 2 | derrubar a rede no meio de um canal e usar os dois recados | «não deu pra sintonizar» agora tem `tentar de novo`, e o «a transmissão parou» **re-sintoniza** em vez de `prepare()` — que falhava na hora quando a sessão do servidor tinha morrido |
+| 3 | decidir se a sala quer o que o celular e o web ganharam no dia 19 | a ponte do `collection_id` (bloco de série → ficha da série) e o cartão de **próximo episódio** não existem na TV |
+
+As medições que justificam cada um estão em `REDESENHO.md` §23, §24 e §25. A regra
+da casa vale aqui como em tudo: **ver na tela antes de escrever que funciona.**
+
+---
+
 ## Antes de começar: o que dá pra conferir sem sair do lugar
 
 Três dos itens se conferem **na mesma tela** — o painel de filtros da biblioteca,
